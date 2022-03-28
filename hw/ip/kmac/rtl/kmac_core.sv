@@ -172,6 +172,7 @@ module kmac_core
   );
 
   // Next state and output logic
+  // SEC_CM: FSM.SPARSE
   always_comb begin
     st_d = StKmacIdle;
 
@@ -244,6 +245,7 @@ module kmac_core
       end
     endcase
 
+    // SEC_CM: FSM.GLOBAL_ESC, FSM.LOCAL_ESC
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
     if (lc_escalate_en_i != lc_ctrl_pkg::Off) begin
@@ -257,10 +259,10 @@ module kmac_core
 
   // DATA Mux depending on kmac_en
   // When Key write happens, hold the FIFO request. so fifo_ready_o is tied to 0
-  assign msg_valid_o  = (kmac_en_i && en_kmac_datapath) ? kmac_valid : fifo_valid_i;
-  assign msg_data_o   = (kmac_en_i && en_kmac_datapath) ? kmac_data  : fifo_data_i ;
-  assign msg_strb_o   = (kmac_en_i && en_kmac_datapath) ? kmac_strb  : fifo_strb_i ;
-  assign fifo_ready_o = (kmac_en_i && en_kmac_datapath) ? 1'b 0      : msg_ready_i ;
+  assign msg_valid_o  = (en_kmac_datapath) ? kmac_valid : fifo_valid_i;
+  assign msg_data_o   = (en_kmac_datapath) ? kmac_data  : fifo_data_i ;
+  assign msg_strb_o   = (en_kmac_datapath) ? kmac_strb  : fifo_strb_i ;
+  assign fifo_ready_o = (en_kmac_datapath) ? 1'b 0      : msg_ready_i ;
 
   // secret key write request to SHA3 hashing engine is always full width write.
   // KeyMgr is fixed 256 bit output. So `right_encode(256)` is 0x020100 --> strb 3
@@ -402,6 +404,7 @@ module kmac_core
   assign inc_keyidx = kmac_valid & msg_ready_i ;
 
   // This primitive is used to place a hardened counter
+  // SEC_CM: CTR.REDUN
   prim_count #(
     .Width(sha3_pkg::KeccakMsgAddrW),
     .OutSelDnCnt(1'b0), // 0 selects up count
@@ -460,11 +463,11 @@ module kmac_core
           st == StKmacMsg && process_latched |=> !process_latched)
 
   // Assume configuration is stable during the operation
-  `ASSUME(KmacEnStable_M, $changed(kmac_en_i) |-> st == StKmacIdle)
-  `ASSUME(ModeStable_M, $changed(mode_i) |-> st == StKmacIdle)
-  `ASSUME(StrengthStable_M, $changed(strength_i) |-> st == StKmacIdle)
-  `ASSUME(KeyLengthStable_M, $changed(key_len_i) |-> st == StKmacIdle)
-  `ASSUME(KeyDataStable_M, $changed(key_data_i) |-> st == StKmacIdle)
+  `ASSUME(KmacEnStable_M, $changed(kmac_en_i) |-> st inside {StKmacIdle, StTerminalError})
+  `ASSUME(ModeStable_M, $changed(mode_i) |-> st inside {StKmacIdle, StTerminalError})
+  `ASSUME(StrengthStable_M, $changed(strength_i) |-> st inside {StKmacIdle, StTerminalError})
+  `ASSUME(KeyLengthStable_M, $changed(key_len_i) |-> st inside {StKmacIdle, StTerminalError})
+  `ASSUME(KeyDataStable_M, $changed(key_data_i) |-> st inside {StKmacIdle, StTerminalError})
 
   // no acked to MsgFIFO in StKmacMsg
   `ASSERT(AckOnlyInMessageState_A,

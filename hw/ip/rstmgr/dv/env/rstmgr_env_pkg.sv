@@ -21,21 +21,23 @@ package rstmgr_env_pkg;
   import rstmgr_reg_pkg::NumHwResets;
   import rstmgr_reg_pkg::NumSwResets;
 
+  import alert_pkg::alert_crashdump_t;
+  import rv_core_ibex_pkg::cpu_crash_dump_t;
+
+  import sec_cm_pkg::*;
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
 
   // parameters
   // TODO: add the names of alerts in order
-  parameter string LIST_OF_ALERTS[] = {"fatal_fault"};
-  parameter uint NUM_ALERTS = 1;
+  parameter string LIST_OF_ALERTS[] = {"fatal_fault", "fatal_cnsty_fault"};
+  parameter uint NUM_ALERTS = 2;
 
   // types
   typedef logic [NumSwResets-1:0] sw_rst_t;
 
-  typedef logic [$bits(alert_pkg::alert_crashdump_t)-1:0] linearized_alert_dump_t;
-
-  typedef virtual pwrmgr_rstmgr_sva_if #(.CHECK_RSTREQS(0)) parameterized_pwrmgr_rstmgr_sva_vif;
+  typedef logic [$bits(alert_crashdump_t)-1:0] linearized_alert_dump_t;
 
   // functions
 

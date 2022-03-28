@@ -100,7 +100,7 @@
       swaccess: "rw",
       hwaccess: "hro",
       regwen: "REGWEN",
-      tags: [// Internal HW can modify status register
+      tags: [// Keep HW from affecting other registers.
                 "excl:CsrAllTests:CsrExclWrite"]
      fields: [
         { bits: "3:0",
@@ -143,8 +143,8 @@
           name: "CMD_FIFO_RST",
           mubi: true,
           desc: '''
-                Setting this field to kMultiBitBool4True clears the three command FIFOs: the
-                SW_CMD_REQ FIFO, the RESEED_CMD FIFO, and the GENERATE_CMD FIFO. This field must be
+                Setting this field to kMultiBitBool4True clears the two command FIFOs: the
+                RESEED_CMD FIFO and the GENERATE_CMD FIFO. This field must be
                 set to the reset state by software before any further commands can be issued to
                 these FIFOs.
                 '''
@@ -152,41 +152,11 @@
         },
       ]
     },
-    { name: "SUM_STS",
-      desc: "EDN summary status register",
-      swaccess: "rw",
-      hwaccess: "hwo",
-      tags: [ // EDN internal HW can modify status register
-              "excl:CsrAllTests:CsrExclCheck"]
-      fields: [
-        { bits: "0",
-          name: "REQ_MODE_SM_STS",
-          desc: '''
-                This bit reflects the status of the EDN command state machine. This bit is asserted
-                whenever the the state machine is actively managing commands in either auto
-                request mode, or boot-time request mode.  After the state machine has
-                been suspended, this status bit will reflect that the hardware operations are
-                completed. At this point it is safe to issue custom
-                commands via the software command forwarding interface. A value of zero indicates
-                that all commands have completed, and the state machine is idle.
-                '''
-        }
-        { bits: "1",
-          name: "BOOT_INST_ACK",
-          desc: '''
-                This bit indicates that the EDN state machine has started the instantiation
-                process. If this bit is asserted it means the state machine has started in
-                boot-time request mode and that the CSRNG has confirmed that this
-                EDN will be the next application to receive a seed from the entropy_src IP.
-                '''
-        }
-      ]
-    },
     { name: "BOOT_INS_CMD",
       desc: "EDN boot instantiate command register",
       swaccess: "rw",
       hwaccess: "hro",
-      tags: [// Internal HW can modify status register
+      tags: [// Keep HW from affecting other registers.
                 "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "31:0",
@@ -202,7 +172,7 @@
       desc: "EDN boot generate command register",
       swaccess: "rw",
       hwaccess: "hro",
-      tags: [// Internal HW can modify status register
+      tags: [// Keep HW from affecting other registers.
                 "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "31:0",
@@ -328,7 +298,7 @@
       desc: "Recoverable alert status register",
       swaccess: "rw0c",
       hwaccess: "hwo",
-          tags: [// Internal HW can modify status register
+          tags: [ // The internal HW can modify the error code registers
                  "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "0",
@@ -378,8 +348,6 @@
       desc: "Hardware detection of error conditions status register",
       swaccess: "ro",
       hwaccess: "hwo",
-      tags: [ // The internal HW can modify the error code registers
-              "excl:CsrAllTests:CsrExclCheck"],
       fields: [
         { bits: "0",
           name: "SFIFO_RESCMD_ERR",
@@ -457,8 +425,8 @@
       swaccess: "rw",
       hwaccess: "hro",
       hwqe: "true",
-      tags: [// Setting this register will force an unwanted fatal alert.
-                 "excl:CsrAllTests:CsrExclWrite"]
+      tags: [// Keep HW from affecting other registers.
+                "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         {
             bits: "4:0",
@@ -472,6 +440,20 @@
                   an interrupt or an alert.
                   '''
         },
+      ]
+    },
+    { name: "MAIN_SM_STATE",
+      desc: "Main state machine state debug register",
+      swaccess: "ro",
+      hwaccess: "hwo",
+      fields: [
+        { bits: "8:0",
+          name: "MAIN_SM_STATE",
+          desc: '''This is the state of the EDN main state machine.
+                See the RTL file `edn_main_sm` for the meaning of the values.
+                '''
+          resval: 0x185
+        }
       ]
     },
   ]

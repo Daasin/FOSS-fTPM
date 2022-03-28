@@ -10,7 +10,6 @@
  */
 
 OUTPUT_ARCH(riscv)
-GROUP(-lgcc)
 
 /**
  * Indicate that there are no dynamic libraries, whatsoever.
@@ -182,6 +181,9 @@ SECTIONS {
   .debug_ranges 0x0 : { *(.debug_ranges) }
   .debug_str 0x0 : { *(.debug_str) }
   .debug_frame 0x0 : { *(.debug_frame) }
+  .debug_line_str 0x0 : { *(.debug_line_str) }
+  .debug_loclists 0x0 : { *(.debug_loclists) }
+  .debug_rnglists 0x0 : { *(.debug_rnglists) }
 
   /* Discarded Sections (Not needed in device images). */
   /DISCARD/ : {

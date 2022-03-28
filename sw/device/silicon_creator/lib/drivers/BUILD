@@ -2,9 +2,9 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-package(default_visibility = ["//visibility:public"])
+load("//rules:opentitan.bzl", "OPENTITAN_CPU", "opentitan_functest", "verilator_params")
 
-load("//rules:opentitan.bzl", "OPENTITAN_CPU", "opentitan_binary", "opentitan_functest", "verilator_params")
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "alert",
@@ -28,6 +28,7 @@ cc_library(
         "mock_alert.h",
     ],
     deps = [
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -36,8 +37,8 @@ cc_library(
 cc_test(
     name = "alert_unittest",
     srcs = [
-        "alert.h",
         "alert.c",
+        "alert.h",
         "alert_unittest.cc",
     ],
     deps = [
@@ -99,9 +100,9 @@ cc_test(
         "//hw/ip/otp_ctrl/data:otp_ctrl_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
-        "//sw/device/lib/base/testing",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
+        "//sw/device/lib/base/testing:mock_mmio",
         "//sw/device/silicon_creator/lib:error",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
         "//sw/device/silicon_creator/lib/base:mock_sec_mmio",
         "//sw/device/silicon_creator/lib/drivers:mock_otp",
         "@googletest//:gtest_main",
@@ -127,6 +128,7 @@ cc_library(
     hdrs = ["mock_hmac.h"],
     deps = [
         ":hmac",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -139,8 +141,9 @@ cc_test(
         ":hmac",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
         "//sw/device/silicon_creator/lib:error",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -176,18 +179,19 @@ cc_library(
 cc_test(
     name = "keymgr_unittest",
     srcs = [
-        "keymgr.h",
         "keymgr.c",
-        "keymgr_unittest.cc"
+        "keymgr.h",
+        "keymgr_unittest.cc",
     ],
     deps = [
         "//hw/ip/keymgr/data:keymgr_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base/freestanding",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
         "//sw/device/silicon_creator/lib:error",
         "//sw/device/silicon_creator/lib:keymgr_binding",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
         "//sw/device/silicon_creator/lib/base:mock_sec_mmio",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -235,6 +239,7 @@ cc_library(
         "mock_lifecycle.h",
     ],
     deps = [
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -280,7 +285,7 @@ cc_test(
     srcs = [
         "otbn.c",
         "otbn.h",
-        "otbn_unittest.cc"
+        "otbn_unittest.cc",
     ],
     defines = [
         "OT_OFF_TARGET_TEST",
@@ -289,8 +294,8 @@ cc_test(
         "//hw/ip/otbn/data:otbn_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
         "//sw/device/silicon_creator/lib:error",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
@@ -318,6 +323,7 @@ cc_library(
         "otp.h",
     ],
     deps = [
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -326,14 +332,15 @@ cc_library(
 cc_test(
     name = "otp_unittest",
     srcs = [
-        "otp.h",
         "otp.c",
+        "otp.h",
         "otp_unittest.cc",
     ],
     deps = [
         "//hw/ip/otp_ctrl/data:otp_ctrl_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/lib:error",
         "//sw/device/silicon_creator/lib/base:mock_sec_mmio",
         "//sw/device/silicon_creator/testing:mask_rom_test",
@@ -360,7 +367,8 @@ cc_test(
         ":pinmux",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -385,7 +393,8 @@ cc_test(
         ":retention_sram",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -424,6 +433,7 @@ cc_library(
         "rnd.h",
     ],
     deps = [
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -468,8 +478,9 @@ cc_test(
         "//hw/top_earlgrey/ip/rstmgr/data/autogen:rstmgr_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
         "//sw/device/silicon_creator/lib:error",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -495,7 +506,8 @@ cc_test(
         ":uart",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -522,8 +534,8 @@ cc_library(
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base:abs_mmio",
         "//sw/device/silicon_creator/lib/base:sec_mmio",
-        "//sw/device/silicon_creator/lib/drivers:otp",
         "//sw/device/silicon_creator/lib/drivers:lifecycle",
+        "//sw/device/silicon_creator/lib/drivers:otp",
     ],
 )
 
@@ -539,9 +551,10 @@ cc_test(
         "//hw/ip/otp_ctrl/data:otp_ctrl_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
         "//sw/device/silicon_creator/lib/base:mock_sec_mmio",
         "//sw/device/silicon_creator/lib/drivers:mock_otp",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
 )
@@ -561,5 +574,33 @@ opentitan_functest(
         "//sw/device/silicon_creator/lib:error",
         "//sw/device/silicon_creator/lib:test_main",
         "//sw/device/silicon_creator/lib/base:sec_mmio",
+    ],
+)
+
+cc_library(
+    name = "spi_device",
+    srcs = ["spi_device.c"],
+    hdrs = ["spi_device.h"],
+    deps = [
+        "//hw/ip/spi_device/data:spi_device_regs",
+        "//hw/top_earlgrey/sw/autogen:top_earlgrey",
+        "//sw/device/lib/base:abs_mmio",
+        "//sw/device/silicon_creator/lib:error",
+    ],
+)
+
+cc_test(
+    name = "spi_device_unittest",
+    srcs = [
+        "spi_device_unittest.cc",
+    ],
+    deps = [
+        ":spi_device",
+        "//hw/ip/spi_device/data:spi_device_regs",
+        "//hw/top_earlgrey/sw/autogen:top_earlgrey",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
+        "//sw/device/silicon_creator/lib:error",
+        "//sw/device/silicon_creator/testing:mask_rom_test",
+        "@googletest//:gtest_main",
     ],
 )

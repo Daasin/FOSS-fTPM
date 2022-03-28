@@ -5,6 +5,7 @@
 #include "hw/top_earlgrey/sw/autogen/top_earlgrey_memory.h"
 #include "sw/device/lib/base/multibits_asm.h"
 #include "ast_regs.h"
+#include "clkmgr_regs.h"
 #include "csrng_regs.h"
 #include "edn_regs.h"
 #include "entropy_src_regs.h"
@@ -138,10 +139,17 @@ _reset_start:
 _start:
   .globl _start
 
+  // Re-enable all SW gateable clocks in case the clkmgr was not reset.
+  li   a0, TOP_EARLGREY_CLKMGR_AON_BASE_ADDR
+  li   t0, CLKMGR_CLK_ENABLES_REG_RESVAL
+  sw   t0, CLKMGR_CLK_ENABLES_REG_OFFSET(a0)
+  li   t0, CLKMGR_CLK_HINTS_REG_RESVAL
+  sw   t0, CLKMGR_CLK_HINTS_REG_OFFSET(a0)
+
   // Check if AST initialization should be skipped.
-  li   t0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
-            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
-            OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET)
+  li   a0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
+            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET)
+  lw   t0, OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET(a0)
   li   t1, MULTIBIT_ASM_BOOL4_TRUE
   bne  t0, t1, .L_ast_init_skip
 
@@ -164,7 +172,7 @@ _start:
 .L_ast_init_skip:
   // Enable entropy complex - this is not the full enable
   li   a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
-  li   t0, 0x55505a
+  li   t0, 0x555055
   sw   t0, ENTROPY_SRC_CONF_REG_OFFSET(a0)
 
   li   a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
@@ -178,6 +186,17 @@ _start:
   li   a0, TOP_EARLGREY_EDN0_BASE_ADDR
   li   t0, 0x55aa
   sw   t0, EDN_CTRL_REG_OFFSET(a0)
+
+  // Remove address space protections by configuring entry 15 as
+  // read-write-execute for the entire address space and then clearing
+  // all other entries.
+  li   t0, (0x9f << 24) // Locked NAPOT read-write-execute.
+  csrw pmpcfg3, t0
+  li   t0, -1           // NAPOT encoded region covering entire 32-bit address space.
+  csrw pmpaddr15, t0
+  csrw pmpcfg0, zero
+  csrw pmpcfg1, zero
+  csrw pmpcfg2, zero
 
   // Zero out the `.bss` segment.
   la   a0, _bss_start

@@ -36,17 +36,20 @@ class otbn_imem_err_vseq extends otbn_base_vseq;
     `uvm_info(`gfn, "Injecting IMEM errors", UVM_MEDIUM)
 
     for (int i = 0; i < otbn_reg_pkg::OTBN_IMEM_SIZE / 4; i++) begin
-      bit [38:0] good_data = cfg.read_imem_word(i, key, nonce);
-      bit [38:0] bad_data = good_data ^ mask;
+      bit [BaseIntgWidth-1:0] old_data = cfg.read_imem_word(i, key, nonce);
+      bit [BaseIntgWidth-1:0] good_data = cfg.fix_integrity_32(old_data);
+      bit [BaseIntgWidth-1:0] bad_data = good_data ^ mask;
       cfg.write_imem_word(i, bad_data, key, nonce);
     end
 
     cfg.model_agent_cfg.vif.invalidate_imem();
 
     // If we were unlucky, we might have injected the errors while OTBN was executing an instruction
-    // that was already causing it to stop. To allow for this specific case, we wait exactly one
-    // cycle.
-    @(cfg.clk_rst_vif.cbn);
+    // that was already causing it to stop. To allow for this specific case, we wait three cycles to
+    // let that instruction flush through. We need this much time to handle things like branches
+    // that might take until the second cycle before realising that something failed and then one
+    // more cycle to clean up.
+    repeat (3) @(cfg.clk_rst_vif.cbn);
     // If OTBN is now idle, we hit this exact window and the test didn't do anything useful. Ho
     // hum... Note that we don't need to apply a reset in this case.
     if (cfg.model_agent_cfg.vif.status == otbn_pkg::StatusIdle) begin

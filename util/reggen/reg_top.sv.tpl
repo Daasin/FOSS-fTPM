@@ -127,11 +127,18 @@ module ${mod_name} (
 ## registers, only one window and isn't marked asynchronous. In that case, add
 ## an unused_ signal to avoid lint warnings.
 % if not rb.all_regs and num_wins == 1 and not rb.async_if:
-  // Because we have no registers and only one window, this block is purely
-  // combinatorial. Mark the clk and reset inputs as unused.
-  logic unused_clk, unused_rst_n;
-  assign unused_clk = clk_i;
-  assign unused_rst_n = rst_ni;
+  // Add an unloaded flop to make use of clock / reset
+  // This is done to specifically address lint complaints of unused clocks/resets
+  // Since the flop is unloaded it will be removed during synthesis
+  logic unused_reg;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      unused_reg <= '0;
+    end else begin
+      unused_reg <= tl_i.a_valid;
+    end
+  end
+
 
 % endif
 % if rb.async_if:
@@ -369,12 +376,12 @@ ${field_sig_decl(f, sig_name, r.hwext, r.shadowed, r.async_clk)}\
 %>
       % if len(r.fields) > 1:
         % for f in r.fields:
-	  % if f.swaccess.allows_read():
+          % if f.swaccess.allows_read():
   logic ${str_arr_sv(f.bits)} ${base_name}_${r_name}_${f.name.lower()}_qs_int;
           % endif
         % endfor
       % else:
-	% if r.fields[0].swaccess.allows_read():
+        % if r.fields[0].swaccess.allows_read():
   logic ${str_arr_sv(r.fields[0].bits)} ${base_name}_${r_name}_qs_int;
         % endif
       % endif
@@ -395,14 +402,14 @@ ${field_sig_decl(f, sig_name, r.hwext, r.shadowed, r.async_clk)}\
     ${base_name}_${r_name}_d = '0;
       % if len(r.fields) > 1:
         % for f in r.fields:
-	  % if f.swaccess.allows_read():
+          % if f.swaccess.allows_read():
     ${base_name}_${r_name}_d[${str_bits_sv(f.bits)}] = ${base_name}_${r_name}_${f.name.lower()}_qs_int;
-	  % endif
+          % endif
         % endfor
       % else:
-	  % if f.swaccess.allows_read():
+          % if f.swaccess.allows_read():
     ${base_name}_${r_name}_d = ${base_name}_${r_name}_qs_int;
-	  % endif
+          % endif
       % endif
   end
 
@@ -457,9 +464,28 @@ ${field_sig_decl(f, sig_name, r.hwext, r.shadowed, r.async_clk)}\
                      f'  // R[{sr_name}]: V({sr.hwext})')
         else:
           reg_hdr = (f'  // R[{sr_name}]: V({sr.hwext})')
+        clk_expr = sr.async_clk.clock if sr.async_clk else reg_clk_expr
+        rst_expr = sr.async_clk.reset if sr.async_clk else reg_rst_expr
 %>\
 ${reg_hdr}
-      % for field in sr.fields:
+      % if sr.needs_qe():
+  logic ${sr_name}_qe;
+  logic [${len(sr.fields)-1}:0] ${sr_name}_flds_we;
+        % if sr.hwext:
+  assign ${sr_name}_qe = &${sr_name}_flds_we;
+        % else:
+  prim_flop #(
+    .Width(1),
+    .ResetValue(0)
+  ) u_${reg_name}${sr_idx}_qe (
+    .clk_i(${clk_expr}),
+    .rst_ni(${rst_expr}),
+    .d_i(&${sr_name}_flds_we),
+    .q_o(${sr_name}_qe)
+  );
+        % endif
+      % endif
+      % for fidx, field in enumerate(sr.fields):
 <%
           if isinstance(r, MultiRegister):
             sig_idx = fld_count if r.is_homogeneous() else sr_idx
@@ -486,7 +512,7 @@ ${reg_hdr}
         % if len(sr.fields) > 1:
   //   F[${fld_name}]: ${field.bits.msb}:${field.bits.lsb}
         % endif
-${finst_gen(sr, field, finst_name, fsig_name)}
+${finst_gen(sr, field, finst_name, fsig_name, fidx)}
       % endfor
 
     % endfor
@@ -677,7 +703,7 @@ ${bits.msb}\
   logic ${str_arr_sv(field.bits)}${sig_name}_wd;
   % endif
 </%def>\
-<%def name="finst_gen(reg, field, finst_name, fsig_name)">\
+<%def name="finst_gen(reg, field, finst_name, fsig_name, fidx)">\
 <%
 
     clk_base_name = f"{reg.async_clk.clock_base_name}_" if reg.async_clk else ""
@@ -725,7 +751,8 @@ ${bits.msb}\
     qre_expr = f'reg2hw.{fsig_name}.re' if reg.hwre or reg.shadowed else ""
 
     if field.hwaccess.allows_read():
-      qe_expr = f'reg2hw.{fsig_name}.qe' if reg.hwqe else ''
+      qe_expr = f'{reg_name}_flds_we[{fidx}]' if reg.needs_qe() else ''
+      qe_reg_expr = f'reg2hw.{fsig_name}.qe'
       q_expr = f'reg2hw.{fsig_name}.q'
     else:
       qe_expr = ''
@@ -841,6 +868,9 @@ ${bits.msb}\
       % endif
   );
     % endif  ## end non-constant prim_subreg
+  % endif
+  % if field.hwaccess.allows_read() and field.hwqe:
+  assign ${qe_reg_expr} = ${reg_name}_qe;
   % endif
 </%def>\
 <%def name="reg_enable_gen(reg, idx)">\

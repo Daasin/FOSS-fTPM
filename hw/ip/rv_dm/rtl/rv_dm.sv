@@ -21,6 +21,7 @@ module rv_dm
   input  logic                clk_i,       // clock
   input  logic                rst_ni,      // asynchronous reset active low, connect PoR
                                            // here, not the system reset
+  // SEC_CM: LC_HW_DEBUG_EN.INTERSIG.MUBI
   input  lc_ctrl_pkg::lc_tx_t lc_hw_debug_en_i, // Debug module lifecycle enable/disable
   input  prim_mubi_pkg::mubi4_t scanmode_i,
   input                       scan_rst_ni,
@@ -49,6 +50,10 @@ module rv_dm
   input  jtag_pkg::jtag_req_t jtag_i,
   output jtag_pkg::jtag_rsp_t jtag_o
 );
+
+  import prim_mubi_pkg::mubi4_bool_to_mubi;
+  import prim_mubi_pkg::mubi4_test_true_strict;
+  import lc_ctrl_pkg::lc_tx_test_true_strict;
 
   `ASSERT_INIT(paramCheckNrHarts, NrHarts > 0)
 
@@ -112,13 +117,15 @@ module rv_dm
   end
 
   // debug enable gating
-  typedef enum logic [2:0] {
+  typedef enum logic [3:0] {
     EnFetch,
     EnRom,
     EnSba,
     EnDebugReq,
     EnResetReq,
     EnDmiReq,
+    EnJtagIn,
+    EnJtagOut,
     EnLastPos
   } rv_dm_en_e;
 
@@ -177,7 +184,7 @@ module rv_dm
   logic testmode;
 
   // Decode multibit scanmode enable
-  assign testmode = prim_mubi_pkg::mubi4_test_true_strict(scanmode_i);
+  assign testmode = mubi4_test_true_strict(scanmode_i);
 
   // static debug hartinfo
   localparam dm::hartinfo_t DebugHartInfo = '{
@@ -194,11 +201,13 @@ module rv_dm
 
   logic reset_req_en;
   logic ndmreset_req;
-  assign reset_req_en = (lc_hw_debug_en[EnResetReq] == lc_ctrl_pkg::On);
+  // SEC_CM: DM_EN.CTRL.LC_GATED
+  assign reset_req_en = lc_tx_test_true_strict(lc_hw_debug_en[EnResetReq]);
   assign ndmreset_req_o = ndmreset_req & reset_req_en;
 
   logic dmi_en;
-  assign dmi_en = (lc_hw_debug_en[EnDmiReq] == lc_ctrl_pkg::On);
+  // SEC_CM: DM_EN.CTRL.LC_GATED
+  assign dmi_en = lc_tx_test_true_strict(lc_hw_debug_en[EnDmiReq]);
 
   dm_csrs #(
     .NrHarts(NrHarts),
@@ -292,17 +301,20 @@ module rv_dm
     .sberror_o               ( sberror               )
   );
 
-  logic sba_en;
+  // SEC_CM: DM_EN.CTRL.LC_GATED
   tlul_pkg::tl_h2d_t  sba_tl_h_o_int;
   tlul_pkg::tl_d2h_t  sba_tl_h_i_int;
-  assign sba_en = (lc_hw_debug_en[EnSba] == lc_ctrl_pkg::On);
-
-  always_comb begin
-    sba_tl_h_o = sba_tl_h_o_int;
-    sba_tl_h_i_int = sba_tl_h_i;
-    sba_tl_h_o.a_valid = sba_tl_h_o_int.a_valid & sba_en;
-    sba_tl_h_i_int.d_valid = sba_tl_h_i.d_valid & sba_en;
-  end
+  tlul_lc_gate #(
+    .NumGatesPerDirection(2)
+  ) u_tlul_lc_gate_sba (
+    .clk_i,
+    .rst_ni,
+    .tl_h2d_i(sba_tl_h_o_int),
+    .tl_d2h_o(sba_tl_h_i_int),
+    .tl_h2d_o(sba_tl_h_o),
+    .tl_d2h_i(sba_tl_h_i),
+    .lc_en_i (lc_hw_debug_en[EnSba])
+  );
 
   tlul_adapter_host #(
     .EnableDataIntgGen(1),
@@ -322,13 +334,17 @@ module rv_dm
     .rdata_o      (host_r_rdata),
     .rdata_intg_o (),
     .err_o        (host_r_err),
+    // Note: This bus integrity error is not connected to the alert due to a few reasons:
+    // 1) the SBA module is not active in production life cycle states.
+    // 2) there may be value in being able to accept incoming transactions with integrity
+    //    errors during test / debug life cycle states so that the system can be debugged
+    //    without triggering alerts.
     .intg_err_o   (),
     .tl_o         (sba_tl_h_o_int),
     .tl_i         (sba_tl_h_i_int)
   );
 
-  // DBG doesn't handle error responses so raise assertion if we see one
-  `ASSERT(dbgNoErrorResponse, host_r_valid |-> !host_r_err)
+  // DBG doesn't handle error responses - we silently drop it.
 
   logic unused_host_r_err;
   assign unused_host_r_err = host_r_err;
@@ -338,6 +354,7 @@ module rv_dm
   logic                         req;
   logic                         we;
   logic [BusWidth/8-1:0]        be;
+  logic   [BusWidth-1:0]        wmask;
   logic   [BusWidth-1:0]        wdata;
   logic   [BusWidth-1:0]        rdata;
   logic                         rvalid;
@@ -345,16 +362,17 @@ module rv_dm
   logic [BusWidth-1:0]          addr_b;
   logic [AddressWidthWords-1:0] addr_w;
 
-  // TODO: The tlul_adapter_sram give us a bitwise write mask currently,
-  // but dm_mem only supports byte write masks. Disable sub-word access in the
-  // adapter for now until we figure out a good strategy to deal with this.
-  assign be = {BusWidth/8{1'b1}};
+  // Bit-write masks are byte-aligned, so we can reduce them to byte-write enables here.
+  for (genvar k = 0; k < BusWidth/8; k++) begin : gen_byte_write
+    assign be[k] = &wmask[8*k +: 8];
+  end
 
   assign addr_b = {addr_w, {$clog2(BusWidth/8){1'b0}}};
 
   logic debug_req_en;
   logic debug_req;
-  assign debug_req_en = (lc_hw_debug_en[EnDebugReq] == lc_ctrl_pkg::On);
+  // SEC_CM: DM_EN.CTRL.LC_GATED
+  assign debug_req_en = lc_tx_test_true_strict(lc_hw_debug_en[EnDebugReq]);
   assign debug_req_o = debug_req & debug_req_en;
 
 
@@ -395,6 +413,13 @@ module rv_dm
     .rdata_o                 ( rdata                 )
   );
 
+  // Gating of JTAG signals
+  jtag_pkg::jtag_req_t jtag_in_int;
+  jtag_pkg::jtag_rsp_t jtag_out_int;
+
+  assign jtag_in_int = (lc_tx_test_true_strict(lc_hw_debug_en[EnJtagIn]))  ? jtag_i       : '0;
+  assign jtag_o      = (lc_tx_test_true_strict(lc_hw_debug_en[EnJtagOut])) ? jtag_out_int : '0;
+
   // Bound-in DPI module replaces the TAP
 `ifndef DMIDirectTAP
 
@@ -403,7 +428,7 @@ module rv_dm
   prim_clock_mux2 #(
     .NoFpgaBufG(1'b1)
   ) u_prim_clock_mux2 (
-    .clk0_i(jtag_i.tck),
+    .clk0_i(jtag_in_int.tck),
     .clk1_i(clk_i),
     .sel_i (testmode),
     .clk_o (tck_muxed)
@@ -412,7 +437,7 @@ module rv_dm
   prim_clock_mux2 #(
     .NoFpgaBufG(1'b1)
   ) u_prim_rst_n_mux2 (
-    .clk0_i(jtag_i.trst_n),
+    .clk0_i(jtag_in_int.trst_n),
     .clk1_i(scan_rst_ni),
     .sel_i (testmode),
     .clk_o (trst_n_muxed)
@@ -437,48 +462,60 @@ module rv_dm
 
     //JTAG
     .tck_i            (tck_muxed),
-    .tms_i            (jtag_i.tms),
+    .tms_i            (jtag_in_int.tms),
     .trst_ni          (trst_n_muxed),
-    .td_i             (jtag_i.tdi),
-    .td_o             (jtag_o.tdo),
-    .tdo_oe_o         (jtag_o.tdo_oe)
+    .td_i             (jtag_in_int.tdi),
+    .td_o             (jtag_out_int.tdo),
+    .tdo_oe_o         (jtag_out_int.tdo_oe)
   );
 `endif
 
-  prim_mubi_pkg::mubi4_t en_ifetch;
-  assign en_ifetch = (lc_hw_debug_en[EnFetch] == lc_ctrl_pkg::On) ?
-                     prim_mubi_pkg::MuBi4True :
-                     prim_mubi_pkg::MuBi4False;
+  // SEC_CM: DM_EN.CTRL.LC_GATED
+  tlul_pkg::tl_h2d_t rom_tl_win_h2d_gated;
+  tlul_pkg::tl_d2h_t rom_tl_win_d2h_gated;
+  tlul_lc_gate #(
+    .NumGatesPerDirection(2)
+  ) u_tlul_lc_gate_rom (
+    .clk_i,
+    .rst_ni,
+    .tl_h2d_i(rom_tl_win_h2d),
+    .tl_d2h_o(rom_tl_win_d2h),
+    .tl_h2d_o(rom_tl_win_h2d_gated),
+    .tl_d2h_i(rom_tl_win_d2h_gated),
+    .lc_en_i (lc_hw_debug_en[EnRom])
+  );
 
-  logic rom_en;
-  assign rom_en = (lc_hw_debug_en[EnRom] == lc_ctrl_pkg::On);
+  prim_mubi_pkg::mubi4_t en_ifetch;
+  // SEC_CM: DM_EN.CTRL.LC_GATED, EXEC.CTRL.MUBI
+  assign en_ifetch = mubi4_bool_to_mubi(lc_tx_test_true_strict(lc_hw_debug_en[EnFetch]));
 
   tlul_adapter_sram #(
     .SramAw(AddressWidthWords),
     .SramDw(BusWidth),
     .Outstanding(1),
-    .ByteAccess(0),
+    .ByteAccess(1),
     .CmdIntgCheck(1),
     .EnableRspIntgGen(1)
   ) tl_adapter_device_mem (
     .clk_i,
     .rst_ni,
+    // SEC_CM: EXEC.CTRL.MUBI
     .en_ifetch_i (en_ifetch),
     .req_o       (req),
     .req_type_o  (),
-    .gnt_i       (rom_en),
+    .gnt_i       (1'b1),
     .we_o        (we),
     .addr_o      (addr_w),
     .wdata_o     (wdata),
-    .wmask_o     (),
+    .wmask_o     (wmask),
     // SEC_CM: BUS.INTEGRITY
     .intg_error_o(rom_intg_error),
-    .rdata_i     (rdata & {BusWidth{rom_en}}),
-    .rvalid_i    (rvalid & rom_en),
-    .rerror_i    ({2{~rom_en}}),
+    .rdata_i     (rdata),
+    .rvalid_i    (rvalid),
+    .rerror_i    ('0),
 
-    .tl_o        (rom_tl_win_d2h),
-    .tl_i        (rom_tl_win_h2d)
+    .tl_o        (rom_tl_win_d2h_gated),
+    .tl_i        (rom_tl_win_h2d_gated)
   );
 
   always_ff @(posedge clk_i or negedge rst_ni) begin

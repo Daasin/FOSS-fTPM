@@ -32,6 +32,7 @@ class aes_base_vseq extends cip_base_vseq #(
 
   virtual task dut_init(string reset_kind = "HARD");
     super.dut_init();
+
     if (do_aes_init) aes_init();
     aes_item = new();
     aes_message_init();
@@ -205,6 +206,7 @@ class aes_base_vseq extends cip_base_vseq #(
       ral.ctrl_shadowed.key_len.set(item.key_len);
       ral.ctrl_shadowed.sideload.set(item.sideload_en);
       ral.ctrl_shadowed.manual_operation.set(item.manual_op);
+      ral.ctrl_shadowed.prng_reseed_rate.set(item.reseed_rate);
       csr_update(.csr(ral.ctrl_shadowed), .en_shadow_wr(1'b1), .blocking(1));
     end
   endtask
@@ -327,6 +329,17 @@ class aes_base_vseq extends cip_base_vseq #(
       endcase // case interleave_queue[i]
 
       if (wait_on_reseed == 0) begin
+        // inject write to reg if enabled 25% of the time
+        if (cfg.error_types.mal_inject && $urandom(3)==0 && !manual_operation) begin
+          int wr_reg = $urandom_range(3,1);
+          case (wr_reg)
+            1: csr_wr(.ptr(ral.key_share0[$urandom(7)]), .value($urandom()),
+                      .blocking(is_blocking));
+            2: csr_wr(.ptr(ral.iv[$urandom(3)]), .value($urandom()), .blocking(is_blocking));
+            3: csr_wr(.ptr(ral.data_in[$urandom(3)]), .value($urandom()), .blocking(is_blocking));
+            default: `uvm_fatal(`gfn, $sformatf("UNREACHABLE BUT NEEDED DUE TO SYNTAX CHECK"))
+          endcase
+        end
         status_fsm(item, data_item, new_msg,
                    manual_operation, sideload_en, return_on_idle, read_output, status, rst_set);
         wait_on_reseed = 16;
@@ -344,7 +357,7 @@ class aes_base_vseq extends cip_base_vseq #(
   // enable sideload sequence
   // and get it to generate a key a random times
   task start_sideload_seq();
-    sideload_seq = key_sideload_set_seq::type_id::create("sideload_seq");
+    sideload_seq = key_sideload_set_seq#(keymgr_pkg::hw_key_req_t)::type_id::create("sideload_seq");
     `DV_CHECK_RANDOMIZE_FATAL(sideload_seq)
     sideload_seq.start(p_sequencer.key_sideload_sequencer_h);
     forever begin
@@ -356,7 +369,7 @@ class aes_base_vseq extends cip_base_vseq #(
   endtask
 
   task req_sideload_key();
-    req_key_seq = key_sideload_set_seq::type_id::create("req_key_seq");
+    req_key_seq = key_sideload_set_seq#(keymgr_pkg::hw_key_req_t)::type_id::create("req_key_seq");
     `DV_CHECK_RANDOMIZE_WITH_FATAL(req_key_seq, sideload_key.valid == 1;)
     req_key_seq.start(p_sequencer.key_sideload_sequencer_h);
     while (!key_used) begin
@@ -498,6 +511,16 @@ class aes_base_vseq extends cip_base_vseq #(
                    manual_operation, sideload_en, 0, rst_set);
     end else begin
       add_data(data_item.data_in, cfg_item.do_b2b);
+      // sometimes randomly write a reg while busy
+      if (!manual_operation && cfg.error_types.mal_inject && ($urandom(3) == 1)) begin
+        int wr_reg = $urandom_range(3,1);
+        case (wr_reg)
+          1: csr_wr(.ptr(ral.key_share0[$urandom(7)]), .value($urandom()), .blocking(is_blocking));
+          2: csr_wr(.ptr(ral.iv[$urandom(3)]), .value($urandom()), .blocking(is_blocking));
+          3: csr_wr(.ptr(ral.data_in[$urandom(3)]), .value($urandom()), .blocking(is_blocking));
+          default: `uvm_fatal(`gfn, $sformatf("UNREACHABLE BUT NEEDED DUE TO SYNTAX CHECK"))
+        endcase
+      end
     end
     if (manual_operation && !rst_set) trigger();
     if (read_output && !rst_set) begin
@@ -555,7 +578,7 @@ class aes_base_vseq extends cip_base_vseq #(
       // check status and act accordingly //
       if (status.alert_fatal_fault) begin
         // stuck pull reset //
-        if (cfg.error_types[1]) begin
+        if (cfg.error_types.mal_inject || cfg.error_types.lc_esc) begin
           `uvm_info(`gfn,
                   $sformatf("\n\t ----| Saw expected Fatal alert - trying to recover \n\t ----| %s",
                               status2string(status)), UVM_MEDIUM)
@@ -644,6 +667,7 @@ class aes_base_vseq extends cip_base_vseq #(
       end // else: !if(status.alert_fatal_fault)
     end // while (!done)
 
+
     if (global_reset) begin
       rst_set = 1;
     end
@@ -731,7 +755,6 @@ class aes_base_vseq extends cip_base_vseq #(
         // stay in for until a valid key is ready
         wait(key_rdy);
       join_any
-
       send_msg(my_message.manual_operation, my_message.sideload_en,
                unbalanced, read_prob, write_prob, rst_set);
       if (my_message.sideload_en) begin
@@ -786,6 +809,7 @@ class aes_base_vseq extends cip_base_vseq #(
     aes_item.manual_op        = message_item.manual_operation;
     aes_item.key_mask         = message_item.keymask;
     aes_item.sideload_en      = message_item.sideload_en;
+    aes_item.reseed_rate      = message_item.reseed_rate;
     aes_item.clear_reg_pct    = cfg.clear_reg_pct;
     aes_item.clear_reg_w_rand = cfg.clear_reg_w_rand;
   endfunction // aes_item_init
@@ -820,6 +844,7 @@ class aes_base_vseq extends cip_base_vseq #(
     aes_message.message_len_min      = cfg.message_len_min;
     aes_message.config_error_pct     = cfg.config_error_pct;
     aes_message.error_types          = cfg.error_types;
+    aes_message.config_error_type_en = cfg.config_error_type;
     aes_message.manual_operation_pct = cfg.manual_operation_pct;
     aes_message.keymask              = cfg.key_mask;
     aes_message.fixed_key_en         = cfg.fixed_key_en;
@@ -830,6 +855,9 @@ class aes_base_vseq extends cip_base_vseq #(
     aes_message.fixed_keylen         = cfg.fixed_keylen;
     aes_message.fixed_iv_en          = cfg.fixed_iv_en;
     aes_message.sideload_pct         = cfg.sideload_pct;
+    aes_message.per8_weight          = cfg.per8_weight;
+    aes_message.per64_weight         = cfg.per64_weight;
+    aes_message.per8k_weight         = cfg.per8k_weight;
   endfunction
 
 
@@ -837,7 +865,7 @@ class aes_base_vseq extends cip_base_vseq #(
     aes_message_item cloned_message;
     for (int i=0; i < cfg.num_messages; i++) begin
       `DV_CHECK_RANDOMIZE_FATAL(aes_message)
-      if (aes_message.cfg_error_type[0] == 1'b1) cfg.num_corrupt_messages += 1;
+      if (aes_message.cfg_error_type[1] == 1'b1) cfg.num_corrupt_messages += 1;
       `downcast(cloned_message, aes_message.clone());
       message_queue.push_front(cloned_message);
       `uvm_info(`gfn, $sformatf("\n\t ----| MESSAGE # %d \n %s",i, cloned_message.convert2string())

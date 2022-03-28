@@ -7,5 +7,11 @@
 
 ,NAME,SRC BLOCK,SRC SIGNAL,DEST BLOCK,DEST SIGNAL,,,,,,
 
-# clkmgr ast connectivity
-CONNECTION,CLKMGR_JITTER_AST,top_earlgrey.u_clkmgr_aon,jitter_en_o,u_ast,clk_src_sys_jen_i
+# ast -> clkmgr connectivity
+CONNECTION, AST_SYS_CLK_CLKMGR, u_ast, clk_src_sys_o, top_earlgrey.u_clkmgr_aon, clk_main_i
+CONNECTION, AST_IO_CLK_CLKMGR,  u_ast, clk_src_io_o,  top_earlgrey.u_clkmgr_aon, clk_io_i
+CONNECTION, AST_USB_CLK_CLKMGR, u_ast, clk_src_usb_o, top_earlgrey.u_clkmgr_aon, clk_usb_i
+CONNECTION, AST_AON_CLK_CLKMGR, u_ast, clk_src_aon_o, top_earlgrey.u_clkmgr_aon, clk_aon_i
+
+# clkmgr -> ast connectivity
+CONNECTION, CLKMGR_JITTER_AST, top_earlgrey.u_clkmgr_aon, jitter_en_o, u_ast, clk_src_sys_jen_i

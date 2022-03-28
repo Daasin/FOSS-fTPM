@@ -13,6 +13,7 @@ interface sysrst_ctrl_if (
   logic pwrb_in;
   logic ac_present;
   logic ec_rst_l_in;
+  logic flash_wp_l_in;
   logic lid_open;
   logic bat_disable;
   logic flash_wp_l;
@@ -22,10 +23,9 @@ interface sysrst_ctrl_if (
   logic key2_out;
   logic pwrb_out;
   logic z3_wakeup;
-  logic z3_wakeup_in;
-  logic bat_disable_in;
-  logic ac_present_out;
-  logic lid_open_out;
+  logic sysrst_ctrl_rst_req;
+
+  logic [6:0] sysrst_ctrl_inputs;
 
   // reset value of input signals
   function automatic void reset_signals();
@@ -36,21 +36,27 @@ interface sysrst_ctrl_if (
     pwrb_in <= 0;
     lid_open <= 0;
     ec_rst_l_in <= 1;
-    z3_wakeup_in <= 0;
-    bat_disable_in <= 0;
+    flash_wp_l_in <= 1;
   endfunction
+
 
   task automatic randomize_input();
     // VCS doesn't support randomizing logic variable
     // so declare bit variable, randomize it and assigned it to logic
-    bit pwrb, key0, key1, key2, ec_rst_l;
-    `DV_CHECK_FATAL(std::randomize(pwrb, key0, key1, key2, ec_rst_l), ,
+    bit pwrb, key0, key1, key2, ec_rst_l, ac_prst, ld_op, flash_wp;
+    `DV_CHECK_FATAL(std::randomize(pwrb, key0, key1, key2, ec_rst_l, ac_prst, ld_op, flash_wp), ,
        "sysrst_ctrl_if")
     pwrb_in = pwrb;
     key0_in = key0;
     key1_in = key1;
     key2_in = key2;
+    ac_present = ac_prst;
+    lid_open = ld_op;
     ec_rst_l_in = ec_rst_l;
+    flash_wp_l_in = flash_wp;
   endtask
+
+  assign sysrst_ctrl_inputs = {flash_wp_l_in, ec_rst_l_in, ac_present, key2_in, key1_in, key0_in,
+                               pwrb_in};
 
 endinterface : sysrst_ctrl_if

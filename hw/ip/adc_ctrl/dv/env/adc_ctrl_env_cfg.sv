@@ -15,8 +15,20 @@ class adc_ctrl_env_cfg extends cip_base_env_cfg #(
 
   // Test configuration
 
+  // If set use the same filter configuration each iteration
+  bit filters_fixed = 0;
+
   // Basic testing mode
   adc_ctrl_testmode_e testmode;
+  // Model in low power mode
+  bit lp_mode;
+
+  // Interrupt control bits
+  bit [ADC_CTRL_NUM_FILTERS:0] adc_intr_ctl = 0;
+
+  // Wakeup control bits
+  bit [ADC_CTRL_NUM_FILTERS-1:0] adc_wakeup_ctl = 0;
+
 
   // Power up / wake up time
   rand int pwrup_time;
@@ -31,6 +43,7 @@ class adc_ctrl_env_cfg extends cip_base_env_cfg #(
 
   `uvm_object_utils_begin(adc_ctrl_env_cfg)
     `uvm_field_enum(adc_ctrl_testmode_e, testmode, UVM_DEFAULT)
+    `uvm_field_int(filters_fixed, UVM_DEFAULT)
     `uvm_field_int(pwrup_time, UVM_DEFAULT)
     `uvm_field_int(wakeup_time, UVM_DEFAULT)
     `uvm_field_int(np_sample_cnt, UVM_DEFAULT)

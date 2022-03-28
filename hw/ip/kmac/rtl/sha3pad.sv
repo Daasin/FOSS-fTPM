@@ -187,6 +187,7 @@ module sha3pad
   logic inc_sentmsg, clr_sentmsg;
 
   // This primitive is used to place a hardened counter
+  // SEC_CM: CTR.REDUN
   prim_count #(
     .Width(KeccakCountW),
     .OutSelDnCnt(1'b0), // 0 selects up count
@@ -495,6 +496,7 @@ module sha3pad
       end
     endcase
 
+    // SEC_CM: FSM.GLOBAL_ESC, FSM.LOCAL_ESC
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
     if (lc_escalate_en_i != lc_ctrl_pkg::Off) begin
@@ -821,9 +823,11 @@ module sha3pad
   // If it is end of the message, the state moves to StPad and send the request
   `ASSERT(CompleteBlockWhenProcess_A,
     $rose(process_latched) && (!end_of_block && !sent_blocksize )
-    && !(st inside {StPrefixWait, StMessageWait}) |-> ##[1:5] keccak_valid_o)
+    && !(st inside {StPrefixWait, StMessageWait}) |-> ##[1:5] keccak_valid_o,
+    clk_i, !rst_ni || lc_escalate_en_i != lc_ctrl_pkg::Off)
   // If `process_i` is asserted, eventually sha3pad trigger run signal
-  `ASSERT(ProcessToRun_A, process_i |-> strong(##[2:$] keccak_run_o))
+  `ASSERT(ProcessToRun_A, process_i |-> strong(##[2:$] keccak_run_o),
+    clk_i, !rst_ni || lc_escalate_en_i != lc_ctrl_pkg::Off)
 
   // If process_i asserted, completion shall be asserted shall be asserted
   //`ASSERT(ProcessToAbsorbed_A, process_i |=> strong(##[24*Share:$] absorbed_o))
@@ -841,7 +845,8 @@ module sha3pad
   // Keccak control interface
   // Keccak run triggered -> completion should come
   `ASSUME(RunThenComplete_M,
-    keccak_run_o |-> strong(##[24*Share:$] keccak_complete_i))
+    keccak_run_o |-> strong(##[24*Share:$] keccak_complete_i),
+    clk_i, !rst_ni || lc_escalate_en_i != lc_ctrl_pkg::Off)
 
   // No partial write is allowed for Message FIFO interface
   `ASSUME(NoPartialMsgFifo_M,

@@ -5,6 +5,7 @@
 package clkmgr_env_pkg;
   // dep packages
   import uvm_pkg::*;
+  import sec_cm_pkg::*;
   import top_pkg::*;
   import dv_utils_pkg::*;
   import dv_lib_pkg::*;
@@ -30,10 +31,12 @@ package clkmgr_env_pkg;
 
   // parameters
   parameter int NUM_PERI = 4;
-  parameter int NUM_TRANS = 5;
+  parameter int NUM_TRANS = 4;
 
   typedef logic [NUM_PERI-1:0] peri_enables_t;
   typedef logic [NUM_TRANS-1:0] hintables_t;
+  typedef mubi4_t [NUM_TRANS-1:0] mubi_hintables_t;
+  parameter mubi_hintables_t IdleAllBusy = {NUM_TRANS{prim_mubi_pkg::MuBi4False}};
 
   parameter int MainClkHz = 100_000_000;
   parameter int IoClkHz = 96_000_000;
@@ -68,12 +71,10 @@ package clkmgr_env_pkg;
     TransAes,
     TransHmac,
     TransKmac,
-    TransOtbnIoDiv4,
-    TransOtbnMain
+    TransOtbn
   } trans_e;
   typedef struct packed {
     logic otbn_main;
-    logic otbn_io_div4;
     logic kmac;
     logic hmac;
     logic aes;
@@ -93,6 +94,16 @@ package clkmgr_env_pkg;
     ClkMesrMain,
     ClkMesrUsb
   } clk_mesr_e;
+
+  // Mubi test mode
+  typedef enum int {
+    ClkmgrMubiNone = 0,
+    ClkmgrMubiIdle = 1,
+    ClkmgrMubiLcCtrl = 2,
+    ClkmgrMubiLcHand = 3,
+    ClkmgrMubiHand = 4,
+    ClkmgrMubiDiv = 5
+  } clkmgr_mubi_e;
 
   // This is to examine separately the measurement and timeout recoverable error bits.
   typedef logic [ClkMesrUsb:0] recov_bits_t;

@@ -130,6 +130,7 @@ volatile uintptr_t exception_pc = 0;
  *
  * For all other exceptions hang (could also shutdown) so as not to hide them.
  */
+void mask_rom_exception_handler(void) __attribute__((interrupt));
 void mask_rom_exception_handler(void) {
   uint32_t mcause = get_mcause();
   if (mcause == kExceptionInstructionAccessFault ||
@@ -370,6 +371,9 @@ void mask_rom_main(void) {
   // Initialize sec_mmio.
   sec_mmio_init();
 
+  // Configure debug ROM ePMP entry.
+  mask_rom_epmp_config_debug_rom(kLcStateProd);
+
   // Initialize pinmux configuration so we can use the UART.
   pinmux_init();
 
@@ -390,7 +394,7 @@ void mask_rom_main(void) {
 
   // Initialize shadow copy of the ePMP register configuration.
   epmp_state_t epmp;
-  mask_rom_epmp_state_init(&epmp);
+  mask_rom_epmp_state_init(&epmp, kLcStateProd);
   CHECK(epmp_state_check(&epmp) == kErrorOk);
 
   // Test that execution outside the ROM text is blocked by default.

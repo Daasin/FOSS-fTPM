@@ -13,13 +13,14 @@
 module flash_phy
   import flash_ctrl_pkg::*;
   import prim_mubi_pkg::mubi4_t;
-
+#(
+  parameter bit SecScrambleEn = 1'b1
+)
 (
   input clk_i,
   input rst_ni,
   input host_req_i,
   input host_intg_err_i,
-  input mubi4_t host_instr_type_i,
   input [BusAddrW-1:0] host_addr_i,
   output logic host_req_rdy_o,
   output logic host_req_done_o,
@@ -38,6 +39,8 @@ module flash_phy
   inout flash_test_voltage_h_io,
   input prim_mubi_pkg::mubi4_t flash_bist_enable_i,
   input lc_ctrl_pkg::lc_tx_t lc_nvm_debug_en_i,
+  input ast_pkg::ast_obs_ctrl_t obs_ctrl_i,
+  output logic [7:0] fla_obs_o,
   output ast_pkg::ast_dif_t flash_alert_o
 );
 
@@ -88,6 +91,9 @@ module flash_phy
   logic [BusWidth-1:0] rd_data [NumBanks];
   logic [NumBanks-1:0] rd_err;
 
+  // fsm error per block
+  logic [NumBanks-1:0] fsm_err;
+
   // select which bank each is operating on
   assign host_bank_sel = host_req_i ? host_addr_i[BusAddrW-1 -: BankW] : '0;
   assign ctrl_bank_sel = flash_ctrl_i.addr[BusAddrW-1 -: BankW];
@@ -110,6 +116,8 @@ module flash_phy
   assign flash_ctrl_o.init_busy = init_busy;
   // feed through host integrity error directly
   assign flash_ctrl_o.intg_err = host_intg_err_i;
+  assign flash_ctrl_o.fsm_err = |fsm_err;
+
 
   // This fifo holds the expected return order
   prim_fifo_sync #(
@@ -210,7 +218,9 @@ module flash_phy
     assign ctrl_req = flash_ctrl_i.req & (ctrl_bank_sel == bank);
     assign ecc_addr[bank][BusBankAddrW +: BankW] = bank;
 
-    flash_phy_core u_core (
+    flash_phy_core #(
+      .SecScrambleEn(SecScrambleEn)
+    ) u_core (
       .clk_i,
       .rst_ni,
       // integrity error is either from host or from controller
@@ -222,7 +232,6 @@ module flash_phy
       // host request must be suppressed if response fifo cannot hold more
       // otherwise the flash_phy_core and flash_phy will get out of sync
       .host_req_i(host_req),
-      .host_instr_type_i,
       .host_scramble_en_i(host_scramble_en),
       .host_ecc_en_i(host_ecc_en),
       .host_addr_i(host_addr_i[0 +: BusBankAddrW]),
@@ -253,7 +262,8 @@ module flash_phy
       .prim_flash_req_o(prim_flash_req[bank]),
       .prim_flash_rsp_i(prim_flash_rsp[bank]),
       .ecc_single_err_o(ecc_single_err[bank]),
-      .ecc_addr_o(ecc_addr[bank][BusBankAddrW-1:0])
+      .ecc_addr_o(ecc_addr[bank][BusBankAddrW-1:0]),
+      .fsm_err_o(fsm_err[bank])
     );
   end // block: gen_flash_banks
 
@@ -302,6 +312,8 @@ module flash_phy
     .tms_i(flash_ctrl_i.jtag_req.tms & (lc_nvm_debug_en[FlashLcTmsSel] == lc_ctrl_pkg::On)),
     .tdo_o(tdo),
     .bist_enable_i(bist_enable_qual),
+    .obs_ctrl_i,
+    .fla_obs_o,
     .scanmode_i,
     .scan_en_i,
     .scan_rst_ni,

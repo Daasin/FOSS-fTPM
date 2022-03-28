@@ -157,7 +157,8 @@ module tb;
 
     .otp_device_id_i(lc_ctrl_if.otp_device_id_i),
 
-    .otp_manuf_state_i(lc_ctrl_if.otp_manuf_state_i)
+    .otp_manuf_state_i(lc_ctrl_if.otp_manuf_state_i),
+    .hw_rev_o()
   );
 
   //
@@ -178,9 +179,9 @@ module tb;
 
 
   initial begin
-    lc_ctrl_parameters_cfg parameters_cfg = lc_ctrl_parameters_cfg::type_id::create(
-        "parameters_cfg"
-    );
+    static lc_ctrl_parameters_cfg parameters_cfg =
+        lc_ctrl_parameters_cfg::type_id::create("parameters_cfg");
+
     // drive clk and rst_n from clk_if
     clk_rst_if.set_active();
     uvm_config_db#(virtual clk_rst_if)::set(null, "*.env", "clk_rst_vif", clk_rst_if);

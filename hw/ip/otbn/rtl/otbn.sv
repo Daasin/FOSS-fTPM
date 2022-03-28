@@ -33,8 +33,7 @@ module otbn
   output tlul_pkg::tl_d2h_t tl_o,
 
   // Inter-module signals
-  output logic idle_o,
-  output logic idle_otp_o,
+  output prim_mubi_pkg::mubi4_t idle_o,
 
   // Interrupts
   output logic intr_done_o,
@@ -94,10 +93,15 @@ module otbn
 
   logic start_d, start_q;
   logic busy_execute_d, busy_execute_q;
-  logic done, locked, idle;
+  logic done, done_core, locked, idle;
   logic illegal_bus_access_d, illegal_bus_access_q;
+  logic dmem_sec_wipe;
+  logic imem_sec_wipe;
+  logic mems_sec_wipe;
+  logic req_sec_wipe_urnd_keys;
+  logic [127:0] dmem_sec_wipe_urnd_key, imem_sec_wipe_urnd_key;
 
-  logic recoverable_err;
+  logic core_recoverable_err, recoverable_err_d, recoverable_err_q;
   logic reg_intg_violation;
   err_bits_t err_bits, err_bits_d, err_bits_q;
   logic err_bits_en;
@@ -123,18 +127,28 @@ module otbn
   // The clock can be gated and some registers can be updated as long as OTBN isn't currently
   // running. Other registers can only be updated when OTBN is in the Idle state (which also implies
   // !locked).
-  logic is_not_running;
-  assign is_not_running = ~busy_execute_q;
+  logic is_not_running, is_not_running_r;
+  logic otbn_dmem_scramble_key_req_busy, otbn_imem_scramble_key_req_busy;
+
+  assign is_not_running =
+    ~(busy_execute_q | otbn_dmem_scramble_key_req_busy | otbn_imem_scramble_key_req_busy);
+
+  // Add a register stage so we have an `is_not_running_r` which changes with the same timing as
+  // `status.q`. Without this `idle_o` will be asserted a cycle before `status.q` changes resulting
+  // in bad interrupt timing where the interrupt is seen the cycle after `idle_o`.
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if(!rst_ni) begin
+      is_not_running_r <= 1'b1;
+    end else begin
+      is_not_running_r <= is_not_running;
+    end
+  end
 
   // Inter-module signals ======================================================
 
   // Note: This is not the same thing as STATUS == IDLE. For example, we want to allow clock gating
   // when locked.
-  assign idle_o = is_not_running;
-
-  // TODO: These two signals aren't technically in the same clock domain. Sort out how we do the
-  // signalling properly.
-  assign idle_otp_o = idle_o;
+  assign idle_o = prim_mubi_pkg::mubi4_bool_to_mubi(is_not_running_r);
 
   // Lifecycle ==================================================================
 
@@ -145,7 +159,7 @@ module otbn
     .clk_i,
     .rst_ni,
     .lc_en_i(lc_escalate_en_i),
-    .lc_en_o(lc_escalate_en)
+    .lc_en_o({lc_escalate_en})
   );
 
   // Reduce the life cycle escalation signal to a single bit to be used within this cycle.
@@ -154,8 +168,12 @@ module otbn
 
   // Interrupts ================================================================
 
+  assign done = is_busy_status(status_e'(reg2hw.status.q)) &
+    !is_busy_status(status_e'(hw2reg.status.d));
+
   prim_intr_hw #(
-    .Width(1)
+    .Width(1),
+    .FlopOutput(0)
   ) u_intr_hw_done (
     .clk_i,
     .rst_ni                (rst_n),
@@ -233,6 +251,7 @@ module otbn
   logic                    otbn_dmem_scramble_valid;
   logic                    unused_otbn_dmem_scramble_key_seed_valid;
 
+
   logic otbn_scramble_state_error;
 
   otbn_scramble_ctrl #(
@@ -258,8 +277,13 @@ module otbn
     .otbn_imem_scramble_valid_o         (otbn_imem_scramble_valid),
     .otbn_imem_scramble_key_seed_valid_o(unused_otbn_imem_scramble_key_seed_valid),
 
-    .otbn_dmem_scramble_new_req_i(1'b0),
-    .otbn_imem_scramble_new_req_i(1'b0),
+    .otbn_dmem_scramble_sec_wipe_i    (dmem_sec_wipe),
+    .otbn_dmem_scramble_sec_wipe_key_i(dmem_sec_wipe_urnd_key),
+    .otbn_imem_scramble_sec_wipe_i    (imem_sec_wipe),
+    .otbn_imem_scramble_sec_wipe_key_i(imem_sec_wipe_urnd_key),
+
+    .otbn_dmem_scramble_key_req_busy_o(otbn_dmem_scramble_key_req_busy),
+    .otbn_imem_scramble_key_req_busy_o(otbn_imem_scramble_key_req_busy),
 
     .state_error_o(otbn_scramble_state_error)
   );
@@ -624,8 +648,34 @@ module otbn
                                reg_bus_intg_violation);
 
   // CMD register
-  // start is flopped to avoid long timing paths from the TL fabric into OTBN internals.
-  assign start_d = reg2hw.cmd.qe & (reg2hw.cmd.q == CmdExecute) & idle;
+  always_comb begin
+    // start is flopped to avoid long timing paths from the TL fabric into OTBN internals.
+    start_d       = 1'b0;
+    dmem_sec_wipe = 1'b0;
+    imem_sec_wipe = 1'b0;
+
+    // Can only start a new command when idle.
+    if (idle) begin
+      if (reg2hw.cmd.qe) begin
+        unique case (reg2hw.cmd.q)
+          CmdExecute:     start_d       = 1'b1;
+          CmdSecWipeDmem: dmem_sec_wipe = 1'b1;
+          CmdSecWipeImem: imem_sec_wipe = 1'b1;
+          default: ;
+        endcase
+      end
+    end else if (busy_execute_q) begin
+      // OTBN can command a secure wipe of IMEM and DMEM. This occurs when OTBN encounters a fatal
+      // error.
+      if (mems_sec_wipe) begin
+        dmem_sec_wipe = 1'b1;
+        imem_sec_wipe = 1'b1;
+      end
+    end
+  end
+
+  assign req_sec_wipe_urnd_keys = dmem_sec_wipe | imem_sec_wipe;
+
   assign illegal_bus_access_d = dmem_illegal_bus_access | imem_illegal_bus_access;
 
   // Flop `illegal_bus_access_q` so we know an illegal bus access has happened and to break a timing
@@ -641,20 +691,27 @@ module otbn
   end
 
   // STATUS register
-  always_comb begin
-    unique case (1'b1)
-      busy_execute_q: hw2reg.status.d = StatusBusyExecute;
-      locked:         hw2reg.status.d = StatusLocked;
-      idle:           hw2reg.status.d = StatusIdle;
-      // TODO: Add other busy flags
+  // imem/dmem scramble req can be busy when locked, so use a priority selection so locked status
+  // always takes priority.
+  assign hw2reg.status.d = locked                          ? StatusLocked          :
+                           busy_execute_q                  ? StatusBusyExecute     :
+                           otbn_dmem_scramble_key_req_busy ? StatusBusySecWipeDmem :
+                           otbn_imem_scramble_key_req_busy ? StatusBusySecWipeImem :
+                           idle                            ? StatusIdle            :
+                                                             StatusLocked;
 
-      // Default case should not be reachable (checked by OtbnStatesOneHot assertion below)
-      default:        hw2reg.status.d = StatusLocked;
-    endcase
-  end
   assign hw2reg.status.de = 1'b1;
 
-  `ASSERT(OtbnStatesOneHot, $onehot({busy_execute_q, locked, idle}))
+  `ASSERT(OtbnStateDefined, |{locked,
+                              busy_execute_q,
+                              otbn_dmem_scramble_key_req_busy,
+                              otbn_imem_scramble_key_req_busy,
+                              idle})
+
+  `ASSERT(OtbnOnlyIdleIfNoActivity, idle |-> ~|{locked,
+                                                busy_execute_q,
+                                                otbn_dmem_scramble_key_req_busy,
+                                                otbn_imem_scramble_key_req_busy})
 
   // CTRL register
   assign software_errs_fatal_d =
@@ -692,7 +749,7 @@ module otbn
 
   assign err_bits_clear = reg2hw.err_bits.bad_data_addr.qe & is_not_running;
   assign err_bits_d = err_bits_clear ? '0 : err_bits;
-  assign err_bits_en = err_bits_clear | done;
+  assign err_bits_en = err_bits_clear | done_core;
 
   logic unused_reg2hw_err_bits;
 
@@ -721,6 +778,18 @@ module otbn
     end
   end
 
+  // Latch the recoverable error signal from the core. This will be generated as a pulse some time
+  // during the run (and before secure wipe finishes). Collect up this bit, clearing on the start or
+  // end of an operation (start_q / done_core, respectively)
+  assign recoverable_err_d = (recoverable_err_q | core_recoverable_err) & ~(start_q | done_core);
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      recoverable_err_q <= '0;
+    end else begin
+      recoverable_err_q <= recoverable_err_d;
+    end
+  end
+
   // FATAL_ALERT_CAUSE register. The .de and .d values are equal for each bit, so that it can only
   // be set, not cleared.
   assign hw2reg.fatal_alert_cause.imem_intg_violation.de = insn_fetch_err;
@@ -737,7 +806,7 @@ module otbn
   assign hw2reg.fatal_alert_cause.illegal_bus_access.d = illegal_bus_access_d;
   assign hw2reg.fatal_alert_cause.lifecycle_escalation.de = lifecycle_escalation;
   assign hw2reg.fatal_alert_cause.lifecycle_escalation.d = lifecycle_escalation;
-  assign hw2reg.fatal_alert_cause.fatal_software.de = done;
+  assign hw2reg.fatal_alert_cause.fatal_software.de = done_core;
   assign hw2reg.fatal_alert_cause.fatal_software.d = err_bits_d.fatal_software;
 
   // INSN_CNT register
@@ -745,7 +814,7 @@ module otbn
   logic        insn_cnt_clear;
   logic        unused_insn_cnt_q;
   assign hw2reg.insn_cnt.d = insn_cnt;
-  assign insn_cnt_clear = (reg2hw.insn_cnt.qe & is_not_running) | lifecycle_escalation;
+  assign insn_cnt_clear = reg2hw.insn_cnt.qe & is_not_running;
   // Ignore all write data to insn_cnt. All writes zero the register.
   assign unused_insn_cnt_q = ^reg2hw.insn_cnt.q;
 
@@ -764,7 +833,7 @@ module otbn
                               lifecycle_escalation |
                               err_bits.fatal_software;
 
-  assign alerts[AlertRecov] = recoverable_err & done;
+  assign alerts[AlertRecov] = recoverable_err_q & done_core;
 
   for (genvar i = 0; i < NumAlerts; i++) begin : gen_alert_tx
     prim_alert_sender #(
@@ -794,7 +863,8 @@ module otbn
   // internal entropy width of 256 bit.
 
   prim_edn_req #(
-    .OutWidth(EdnDataWidth)
+    .OutWidth(EdnDataWidth),
+    .RepCheck(1'b1)
   ) u_prim_edn_rnd_req (
     .clk_i,
     .rst_ni     ( rst_n        ),
@@ -803,6 +873,7 @@ module otbn
     .ack_o      ( edn_rnd_ack  ),
     .data_o     ( edn_rnd_data ),
     .fips_o     (              ), // unused
+    .err_o      (              ),
     .clk_edn_i,
     .rst_edn_ni,
     .edn_o      ( edn_rnd_o ),
@@ -819,6 +890,7 @@ module otbn
     .ack_o      ( edn_urnd_ack  ),
     .data_o     ( edn_urnd_data ),
     .fips_o     (               ), // unused
+    .err_o      (               ), // unused
     .clk_edn_i,
     .rst_edn_ni,
     .edn_o      ( edn_urnd_o    ),
@@ -835,218 +907,74 @@ module otbn
       busy_execute_q <= busy_execute_d;
     end
   end
-  assign busy_execute_d = (busy_execute_q | start_d) & ~done;
+  assign busy_execute_d = (busy_execute_q | start_d) & ~done_core;
 
-  `ifdef OTBN_BUILD_MODEL
-    // Build both model and RTL implementation into the design, and switch at runtime through a
-    // plusarg.
+  otbn_core #(
+    .RegFile(RegFile),
+    .DmemSizeByte(DmemSizeByte),
+    .ImemSizeByte(ImemSizeByte),
+    .SecWipeEn(SecWipeEn),
+    .RndCnstUrndPrngSeed(RndCnstUrndPrngSeed)
+  ) u_otbn_core (
+    .clk_i,
+    .rst_ni                      (rst_n),
 
-    // Set the plusarg +OTBN_USE_MODEL=1 to use the model (ISS) instead of the RTL implementation.
-    bit otbn_use_model;
-    initial begin
-      $value$plusargs("OTBN_USE_MODEL=%d", otbn_use_model);
-    end
+    .start_i                     (start_q),
+    .done_o                      (done_core),
+    .locked_o                    (locked),
 
-    // Mux between model and RTL implementation at runtime.
-    logic         done_rr_model, done_rtl;
-    logic         locked_model, locked_rtl;
-    logic         start_model, start_rtl;
-    err_bits_t    err_bits_model, err_bits_rtl;
-    logic         recoverable_err_model, recoverable_err_rtl;
-    logic [31:0]  insn_cnt_model, insn_cnt_rtl;
-    logic         edn_rnd_req_model, edn_rnd_req_rtl;
-    logic         edn_urnd_req_model, edn_urnd_req_rtl;
+    .err_bits_o                  (err_bits),
+    .recoverable_err_o           (core_recoverable_err),
+    .reg_intg_violation_o        (reg_intg_violation),
 
-    edn_pkg::edn_rsp_t  edn_rnd_model_i;
+    .imem_req_o                  (imem_req_core),
+    .imem_addr_o                 (imem_addr_core),
+    .imem_rdata_i                (imem_rdata_core),
+    .imem_rvalid_i               (imem_rvalid_core),
 
-    edn_pkg::edn_rsp_t  edn_urnd_model_i;
+    .insn_fetch_err_o            (insn_fetch_err),
 
-    logic       edn_rnd_data_valid;
-    logic       edn_urnd_data_valid;
+    .dmem_req_o                  (dmem_req_core),
+    .dmem_write_o                (dmem_write_core),
+    .dmem_addr_o                 (dmem_addr_core),
+    .dmem_wdata_o                (dmem_wdata_core),
+    .dmem_wmask_o                (dmem_wmask_core),
+    .dmem_rmask_o                (dmem_rmask_core_d),
+    .dmem_rdata_i                (dmem_rdata_core),
+    .dmem_rvalid_i               (dmem_rvalid_core),
+    .dmem_rerror_i               (dmem_rerror_core),
 
-    // Note that the "done" signal will come two cycles later when using the model as a core than it
-    // does when using the RTL
-    assign done = otbn_use_model ? done_rr_model : done_rtl;
-    assign locked = otbn_use_model ? locked_model : locked_rtl;
-    assign err_bits = otbn_use_model ? err_bits_model : err_bits_rtl;
-    assign recoverable_err = otbn_use_model ? recoverable_err_model : recoverable_err_rtl;
-    assign insn_cnt = otbn_use_model ? insn_cnt_model : insn_cnt_rtl;
-    assign start_model = start_q & otbn_use_model;
-    assign start_rtl = start_q & ~otbn_use_model;
+    .edn_rnd_req_o               (edn_rnd_req),
+    .edn_rnd_ack_i               (edn_rnd_ack),
+    .edn_rnd_data_i              (edn_rnd_data),
 
-    // Model (Instruction Set Simulator)
-    assign edn_rnd_model_i    = otbn_use_model ? edn_rnd_i : '0;
-    assign edn_rnd_req        = otbn_use_model ? edn_rnd_req_model : edn_rnd_req_rtl;
-    assign edn_rnd_data_valid = edn_rnd_req & edn_rnd_ack;
+    .edn_urnd_req_o              (edn_urnd_req),
+    .edn_urnd_ack_i              (edn_urnd_ack),
+    .edn_urnd_data_i             (edn_urnd_data),
 
-    assign edn_urnd_model_i    = otbn_use_model ? edn_urnd_i : '0;
-    assign edn_urnd_req        = otbn_use_model ? edn_urnd_req_model : edn_urnd_req_rtl;
-    assign edn_urnd_data_valid = edn_urnd_req & edn_urnd_ack;
+    .insn_cnt_o                  (insn_cnt),
+    .insn_cnt_clear_i            (insn_cnt_clear),
 
-    otbn_core_model #(
-      .MemScope(".."),
-      .DesignScope(""),
-      .SecWipeEn(SecWipeEn)
-    ) u_otbn_core_model (
-      .clk_i,
-      .clk_edn_i,
+    .mems_sec_wipe_o             (mems_sec_wipe),
+    .dmem_sec_wipe_urnd_key_o    (dmem_sec_wipe_urnd_key),
+    .imem_sec_wipe_urnd_key_o    (imem_sec_wipe_urnd_key),
+    .req_sec_wipe_urnd_keys_i    (req_sec_wipe_urnd_keys),
 
-      .rst_ni                (rst_n),
-      .rst_edn_ni,
+    .bus_intg_violation_i        (bus_intg_violation),
+    .illegal_bus_access_i        (illegal_bus_access_q),
+    .lifecycle_escalation_i      (lifecycle_escalation),
 
-      .start_i               (start_model),
+    .software_errs_fatal_i       (software_errs_fatal_q),
 
-      .lc_escalate_en_i      (lc_escalate_en_i == lc_ctrl_pkg::On),
+    .otbn_scramble_state_error_i (otbn_scramble_state_error),
 
-      .err_bits_o            (err_bits_model),
-
-      .edn_rnd_i             (edn_rnd_model_i),
-      .edn_rnd_o             (edn_rnd_req_model),
-      .edn_rnd_cdc_done_i    (edn_rnd_data_valid),
-
-      .edn_urnd_i            (edn_urnd_model_i),
-      .edn_urnd_o            (edn_urnd_req_model),
-      .edn_urnd_cdc_done_i   (edn_urnd_data_valid),
-
-      .status_o              (),
-      .insn_cnt_o            (insn_cnt_model),
-
-      .done_rr_o (done_rr_model),
-
-      .err_o ()
-    );
-
-    assign recoverable_err_model = |{err_bits_model.key_invalid,
-                                     err_bits_model.loop,
-                                     err_bits_model.illegal_insn,
-                                     err_bits_model.call_stack,
-                                     err_bits_model.bad_insn_addr,
-                                     err_bits_model.bad_data_addr} &
-                                    ~software_errs_fatal_q;
-
-    assign locked_model = 1'b0;
-
-    // RTL implementation
-    otbn_core #(
-      .RegFile(RegFile),
-      .DmemSizeByte(DmemSizeByte),
-      .ImemSizeByte(ImemSizeByte),
-      .SecWipeEn(SecWipeEn),
-      .RndCnstUrndPrngSeed(RndCnstUrndPrngSeed)
-    ) u_otbn_core (
-      .clk_i,
-      .rst_ni                      (rst_n),
-
-      .start_i                     (start_rtl),
-      .done_o                      (done_rtl),
-      .locked_o                    (locked_rtl),
-
-      .err_bits_o                  (err_bits_rtl),
-      .recoverable_err_o           (recoverable_err_rtl),
-      .reg_intg_violation_o        (reg_intg_violation),
-
-      .imem_req_o                  (imem_req_core),
-      .imem_addr_o                 (imem_addr_core),
-      .imem_rdata_i                (imem_rdata_core),
-      .imem_rvalid_i               (imem_rvalid_core),
-
-      .insn_fetch_err_o            (insn_fetch_err),
-
-      .dmem_req_o                  (dmem_req_core),
-      .dmem_write_o                (dmem_write_core),
-      .dmem_addr_o                 (dmem_addr_core),
-      .dmem_wdata_o                (dmem_wdata_core),
-      .dmem_wmask_o                (dmem_wmask_core),
-      .dmem_rmask_o                (dmem_rmask_core_d),
-      .dmem_rdata_i                (dmem_rdata_core),
-      .dmem_rvalid_i               (dmem_rvalid_core),
-      .dmem_rerror_i               (dmem_rerror_core),
-
-      .edn_rnd_req_o               (edn_rnd_req_rtl),
-      .edn_rnd_ack_i               (edn_rnd_ack),
-      .edn_rnd_data_i              (edn_rnd_data),
-
-      .edn_urnd_req_o              (edn_urnd_req_rtl),
-      .edn_urnd_ack_i              (edn_urnd_ack),
-      .edn_urnd_data_i             (edn_urnd_data),
-
-      .insn_cnt_o                  (insn_cnt_rtl),
-      .insn_cnt_clear_i            (insn_cnt_clear),
-
-      .bus_intg_violation_i        (bus_intg_violation),
-      .illegal_bus_access_i        (illegal_bus_access_q),
-      .lifecycle_escalation_i      (lifecycle_escalation),
-
-      .software_errs_fatal_i       (software_errs_fatal_q),
-
-      .otbn_scramble_state_error_i (otbn_scramble_state_error),
-
-      .sideload_key_shares_i       (keymgr_key_i.key),
-      .sideload_key_shares_valid_i ({2{keymgr_key_i.valid}})
-    );
-  `else
-
-    otbn_core #(
-      .RegFile(RegFile),
-      .DmemSizeByte(DmemSizeByte),
-      .ImemSizeByte(ImemSizeByte),
-      .SecWipeEn(SecWipeEn),
-      .RndCnstUrndPrngSeed(RndCnstUrndPrngSeed)
-    ) u_otbn_core (
-      .clk_i,
-      .rst_ni                      (rst_n),
-
-      .start_i                     (start_q),
-      .done_o                      (done),
-      .locked_o                    (locked),
-
-      .err_bits_o                  (err_bits),
-      .recoverable_err_o           (recoverable_err),
-      .reg_intg_violation_o        (reg_intg_violation),
-
-      .imem_req_o                  (imem_req_core),
-      .imem_addr_o                 (imem_addr_core),
-      .imem_rdata_i                (imem_rdata_core),
-      .imem_rvalid_i               (imem_rvalid_core),
-
-      .insn_fetch_err_o            (insn_fetch_err),
-
-      .dmem_req_o                  (dmem_req_core),
-      .dmem_write_o                (dmem_write_core),
-      .dmem_addr_o                 (dmem_addr_core),
-      .dmem_wdata_o                (dmem_wdata_core),
-      .dmem_wmask_o                (dmem_wmask_core),
-      .dmem_rmask_o                (dmem_rmask_core_d),
-      .dmem_rdata_i                (dmem_rdata_core),
-      .dmem_rvalid_i               (dmem_rvalid_core),
-      .dmem_rerror_i               (dmem_rerror_core),
-
-      .edn_rnd_req_o               (edn_rnd_req),
-      .edn_rnd_ack_i               (edn_rnd_ack),
-      .edn_rnd_data_i              (edn_rnd_data),
-
-      .edn_urnd_req_o              (edn_urnd_req),
-      .edn_urnd_ack_i              (edn_urnd_ack),
-      .edn_urnd_data_i             (edn_urnd_data),
-
-      .insn_cnt_o                  (insn_cnt),
-      .insn_cnt_clear_i            (insn_cnt_clear),
-
-      .bus_intg_violation_i        (bus_intg_violation),
-      .illegal_bus_access_i        (illegal_bus_access_q),
-      .lifecycle_escalation_i      (lifecycle_escalation),
-
-      .software_errs_fatal_i       (software_errs_fatal_q),
-
-      .otbn_scramble_state_error_i (otbn_scramble_state_error),
-
-      .sideload_key_shares_i       (keymgr_key_i.key),
-      .sideload_key_shares_valid_i ({2{keymgr_key_i.valid}})
-    );
-  `endif
+    .sideload_key_shares_i       (keymgr_key_i.key),
+    .sideload_key_shares_valid_i ({2{keymgr_key_i.valid}})
+  );
 
   // We're idle if we're neither busy executing something nor locked
-  assign idle = ~(busy_execute_q | locked);
+  assign idle = ~(busy_execute_q | locked | otbn_dmem_scramble_key_req_busy |
+                  otbn_imem_scramble_key_req_busy);
 
   // The core can never signal a write to IMEM
   assign imem_write_core = 1'b0;
@@ -1058,7 +986,6 @@ module otbn
   `ASSERT_KNOWN(TlODValidKnown_A, tl_o.d_valid)
   `ASSERT_KNOWN(TlOAReadyKnown_A, tl_o.a_ready)
   `ASSERT_KNOWN(IdleOKnown_A, idle_o)
-  `ASSERT_KNOWN(IdleOtpOKnown_A, idle_otp_o, clk_otp_i, !rst_otp_ni)
   `ASSERT_KNOWN(IntrDoneOKnown_A, intr_done_o)
   `ASSERT_KNOWN(AlertTxOKnown_A, alert_tx_o)
   `ASSERT_KNOWN(EdnRndOKnown_A, edn_rnd_o, clk_edn_i, !rst_edn_ni)

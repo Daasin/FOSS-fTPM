@@ -23,9 +23,9 @@ package flash_ctrl_env_pkg;
   `include "dv_macros.svh"
 
   // parameters
-  parameter string LIST_OF_ALERTS[] = {"recov_err", "fatal_err"};
+  parameter string LIST_OF_ALERTS[] = {"recov_err", "fatal_std_err", "fatal_err"};
 
-  parameter uint NUM_ALERTS = 4;
+  parameter uint NUM_ALERTS = 3;
   parameter uint FlashNumPages = flash_ctrl_pkg::NumBanks * flash_ctrl_pkg::PagesPerBank;
   parameter uint FlashSizeBytes         = FlashNumPages * flash_ctrl_pkg::WordsPerPage *
                                             flash_ctrl_pkg::DataWidth / 8;
@@ -78,10 +78,26 @@ package flash_ctrl_env_pkg;
       seed_valid: 1'b0
   };
 
-  // For Secret Partitions
+  // For Secret Partitions and RMA
   parameter uint FlashSecretPartWords = 8;  // Size Of Secret Part - (8x32=256 Bits)
   parameter uint FlashCreatorPartStartAddr = 32'h00000800;  // Info Partition Page 1
   parameter uint FlashOwnerPartStartAddr = 32'h00001000;  // Info Partition Page 2
+  parameter uint FlashIsolPartStartAddr = 32'h00001800;
+
+  parameter uint FlashData0StartAddr = 32'h00000000;
+  parameter uint FlashData0EndAddr = 32'h00080000;
+  parameter uint FlashData1StartAddr = 32'h00080000;
+  parameter uint FlashData1EndAddr = 32'h00100000;
+
+  parameter uint FullPageNumWords = 512;  // 32 Cycles of 16 Words = 512 Words
+  parameter uint FullBankNumWords = 131072;  // 8192 Cycles of 16 Words = 131072 Words
+
+  parameter uint MaxNumPages = 256;  // Number of Pages in a Bank
+  parameter uint FIFO_DEPTH = 16;  // Depth of the Program and Read FIFO in words
+
+  // Read Check Parameters
+  parameter bit READ_CHECK_NORM = 0;  // Check Read Data via the Backdoor
+  parameter bit READ_CHECK_EXPLICIT = 1;  // Check Read Data Explicitly
 
   // types
   typedef enum int {
@@ -111,10 +127,12 @@ package flash_ctrl_env_pkg;
   } flash_dv_part_e;
 
   // Special Partitions
-  typedef enum logic [1:0] {
+  typedef enum logic [2:0] {
     FlashCreatorPart = 0,
     FlashOwnerPart   = 1,
-    FlashIsolPart    = 2
+    FlashIsolPart    = 2,
+    FlashData0Part   = 3,
+    FlashData1Part   = 4
   } flash_sec_part_e;
 
   typedef struct packed {
@@ -149,6 +167,16 @@ package flash_ctrl_env_pkg;
 
   // Data queue for flash transactions
   typedef logic [TL_DW-1:0] data_q_t[$];
+  typedef bit [TL_DW-1:0] data_t;
+  typedef bit [TL_AW-1:0] addr_t;
+
+  // types
+  typedef class flash_ctrl_scoreboard;
+
+  // Parameter for Probing into the DUT RMA FSM
+  parameter string PRB_RMA_FSM = "tb.dut.u_flash_hw_if.state_q";
+  // Taken from enum type lcmgr_state_e in flash_ctrl_lcmgr.sv
+  parameter uint RMA_FSM_STATE_ST_RMA_RSP = 11'b10100100001;
 
   // functions
 

@@ -5,11 +5,13 @@
   instance_name: top_earlgrey_alert_handler
   param_values:
   {
-    n_alerts: 59
+    n_alerts: 61
     esc_cnt_dw: 32
     accu_cnt_dw: 16
     async_on:
     [
+      1'b1
+      1'b1
       1'b1
       1'b1
       1'b1
@@ -98,6 +100,7 @@
       5'd10
       5'd10
       5'd10
+      5'd10
       5'd11
       5'd12
       5'd13
@@ -106,6 +109,7 @@
       5'd15
       5'd15
       5'd11
+      5'd16
       5'd16
       5'd16
       5'd16

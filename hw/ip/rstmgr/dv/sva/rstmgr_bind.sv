@@ -8,13 +8,16 @@ module rstmgr_bind;
     .EndpointType("Device")
   ) tlul_assert_device (.clk_i, .rst_ni, .h2d(tl_i), .d2h(tl_o));
 
+  // In top-level testbench, do not bind the csr_assert_fpv to reduce simulation time.
+  `ifndef TOP_LEVEL_DV
   bind rstmgr rstmgr_csr_assert_fpv rstmgr_csr_assert (.clk_i, .rst_ni, .h2d(tl_i), .d2h(tl_o));
+  `endif
 
-  bind rstmgr pwrmgr_rstmgr_sva_if #(
-    .CHECK_RSTREQS(0)
-  ) pwrmgr_rstmgr_sva_if (
+  bind rstmgr pwrmgr_rstmgr_sva_if pwrmgr_rstmgr_sva_if (
     .clk_i(clk_i),
     .rst_ni(rst_ni),
+    .clk_slow_i(clk_aon_i),
+    .rst_slow_ni(&rst_por_aon_n),
     // These inputs from pwrmgr are ignored since they check pwrmgr's rstreqs output.
     .rstreqs_i('0),
     .reset_en('0),
@@ -25,6 +28,7 @@ module rstmgr_bind;
     // These are actually used for checks.
     .rst_lc_req(pwr_i.rst_lc_req),
     .rst_sys_req(pwr_i.rst_sys_req),
+    .main_pd_n('1),
     .ndm_sys_req(ndmreset_req_i),
     .reset_cause(pwr_i.reset_cause),
     // The inputs from rstmgr.
@@ -71,7 +75,7 @@ module rstmgr_bind;
     }),
     .rst_ni,
     .parent_rst_n(rst_sys_src_n[1]),
-    .ctrl_ns(hw2reg.sw_rst_ctrl_n),
+    .ctrl_ns(reg2hw.sw_rst_ctrl_n),
     .rst_ens({
       rst_en_o.i2c2[1] == prim_mubi_pkg::MuBi4True,
       rst_en_o.i2c1[1] == prim_mubi_pkg::MuBi4True,
@@ -94,4 +98,9 @@ module rstmgr_bind;
     })
   );
 
+  // sec cm coverage bind
+  bind rstmgr cip_mubi_cov_if #(.Width(prim_mubi_pkg::MuBi4Width)) u_scanmode_mubi_cov_if (
+    .rst_ni (rst_ni),
+    .mubi   (scanmode_i)
+  );
 endmodule

@@ -25,8 +25,26 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
   virtual pins_if#(3) sw_straps_vif;
   virtual pins_if#(1) rst_n_mon_vif;
 
+  // pwrmgr probe interface
+  virtual pwrmgr_low_power_if   pwrmgr_low_power_vif;
   // Memory backdoor util instances for all memory instances in the chip.
   mem_bkdr_util mem_bkdr_util_h[chip_mem_e];
+
+  // Creator SW config region in OTP that holds the AST config data. Randomized for open source.
+  //
+  // These are written via backdoor to the OTP region that starts at
+  // otp_ctrl_reg_pkg::CreatorSwCfgAstCfgOffset. SW based tests (via test ROM or the production mask
+  // ROM) will read out from this OTP region and write blindly to AST at the start. Non-SW based
+  // tests will do the same, prior to the test starting, see
+  // chip_stub_cpu_base_vseq::dut_init().
+  //
+  // In closed source, tests can modify this data directly in the extended sequence's dut_init(),
+  // before invoking super.dut_init(), or any other suitable place.
+  rand uint creator_sw_cfg_ast_cfg_data[ast_pkg::AstRegsNum];
+
+  // A knob that controls whether the AST initialization is done, enabled by default.
+  // Can be updated with plusarg.
+  bit do_creator_sw_cfg_ast_cfg = 1;
 
   // sw related
   // Directory from where to pick up the SW test images -default to PWD {run_dir}.
@@ -71,6 +89,7 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
   rand uart_agent_cfg       m_uart_agent_cfgs[NUM_UARTS];
   rand jtag_riscv_agent_cfg m_jtag_riscv_agent_cfg;
   rand spi_agent_cfg        m_spi_agent_cfg;
+  pwm_monitor_cfg           m_pwm_monitor_cfg[NUM_PWM_CHANNELS];
 
   `uvm_object_utils_begin(chip_env_cfg)
     `uvm_field_int   (stub_cpu,               UVM_DEFAULT)
@@ -78,16 +97,14 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     `uvm_field_object(m_spi_agent_cfg,        UVM_DEFAULT)
   `uvm_object_utils_end
 
-  // TODO: Fixing core clk freq to 50MHz for now.
-  // Need to find a way to pass this to the SW test.
   constraint clk_freq_mhz_c {
-    clk_freq_mhz == 50;
+    clk_freq_mhz == 100;
   }
 
   `uvm_object_new
 
   virtual function void initialize(bit [TL_AW-1:0] csr_base_addr = '1);
-
+    int extclk_freq_mhz;
     has_devmode = 0;
     list_of_alerts = chip_env_pkg::LIST_OF_ALERTS;
 
@@ -108,10 +125,11 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     // create spi agent config obj
     m_spi_agent_cfg = spi_agent_cfg::type_id::create("m_spi_agent_cfg");
 
-    // By default, assume SW images in PWD with these generic names.
-    sw_images[SwTypeRom] = "./rom";
-    sw_images[SwTypeTest] = "./sw";
-    sw_images[SwTypeOtbn] = "./otbn";
+    // create pwm monitor config obj
+    foreach (m_pwm_monitor_cfg[i]) begin
+      m_pwm_monitor_cfg[i] = pwm_monitor_cfg::type_id::create($sformatf("m_pwm_monitor%0d_cfg", i));
+      m_pwm_monitor_cfg[i].is_active = 0;
+    end
 
     // By default, assume these OTP image paths.
     otp_images[lc_ctrl_state_pkg::LcStRaw] = "otp_ctrl_img_raw.vmem";
@@ -120,6 +138,14 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
 
     `DV_CHECK_LE_FATAL(num_ram_main_tiles, 16)
     `DV_CHECK_LE_FATAL(num_ram_ret_tiles, 16)
+
+    // Set external clock frequency.
+    if ($value$plusargs("extclk_freq_mhz=%d", extclk_freq_mhz)) begin
+      `DV_CHECK(extclk_freq_mhz inside {48, 100},
+                $sformatf("Unexpected extclk frequency %0d: valid numbers are 100 and 48",
+                          extclk_freq_mhz))
+        clk_freq_mhz = extclk_freq_mhz;
+    end
   endfunction
 
   // Apply RAL fixes before it is locked.

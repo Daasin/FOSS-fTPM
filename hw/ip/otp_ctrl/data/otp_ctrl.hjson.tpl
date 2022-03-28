@@ -91,6 +91,12 @@
       randcount: "40",
       randtype:  "perm", // random permutation for randcount elements
     }
+    { name:      "RndCnstScrmblKeyInit",
+      desc:      "Compile-time random permutation for scrambling key/nonce register reset value",
+      type:      "otp_ctrl_pkg::scrmbl_key_init_t"
+      randcount: "256",
+      randtype:  "data", // random permutation for randcount elements
+    }
     // Normal parameters
     { name: "NumSramKeyReqSlots",
       desc: "Number of key slots",
@@ -325,6 +331,21 @@
       act:     "req"
       default: "'0"
       package: "otp_ctrl_part_pkg"
+    }
+    // AST observability control
+    { struct: "ast_obs_ctrl",
+      type: "uni",
+      name: "obs_ctrl",
+      act: "rcv",
+      package: "ast_pkg"
+    }
+    // prim otp observe bus
+    { struct: "logic",
+      type: "uni",
+      name: "otp_obs",
+      act: "req",
+      width: "8",
+      package: ""
     }
   ] // inter_signal_list
 

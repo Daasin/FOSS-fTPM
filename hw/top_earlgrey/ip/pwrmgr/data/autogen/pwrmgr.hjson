@@ -241,7 +241,7 @@
     { name: "FSM.LOCAL_ESC",
       desc: "When FSMs reach a bad state, escalate directly and force user reset."
     }
-    { name: "FSM.GLOBAL_ESC",
+    { name: "CTRL_FLOW.GLOBAL_ESC",
       desc: "When global escalation is received, proceed directly to reset."
     }
     { name: "MAIN_PD.RST.LOCAL_ESC",
@@ -459,7 +459,7 @@
             the sync completes, this bit then self clears.
 
             Software should write this bit to 1, wait for it to clear, before assuming the slow clock
-            domain has assumed the programmed values.
+            domain has accepted the programmed values.
           ''',
           resval: "0",
         },

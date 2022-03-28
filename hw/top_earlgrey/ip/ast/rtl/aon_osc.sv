@@ -9,6 +9,7 @@
 module aon_osc (
   input vcore_pok_h_i,    // VCORE POK @3.3V
   input aon_en_i,         // AON Source Clock Enable
+  input aon_osc_cal_i,    // AON Oscillator Calibrated
 `ifdef AST_BYPASS_CLK
   input clk_aon_ext_i,    // FPGA/VERILATOR Clock input\
 `endif
@@ -22,12 +23,18 @@ module aon_osc (
 timeunit 1ns / 10ps;
 import ast_bhv_pkg::* ;
 
-localparam time AonClkPeriod = 5000ns; // 5000ns (200Khz)
-reg init_start = 1'b0;
+real CLK_PERIOD, ckmul;
+
+reg init_start;
+initial init_start = 1'b0;
 
 initial begin
-  $display("\nAON Clock Period: %0dns", AonClkPeriod);
-  #1; init_start  = 1'b1;
+  if ( !$value$plusargs("osc200k_freq_multiplier=%f", ckmul) ) begin
+    ckmul = 1.0;
+  end
+  #1; init_start = 1'b1;
+  $display("\nAON Power-up Base Clock Frequency: %0d Hz", $rtoi(10**9/(CLK_PERIOD*ckmul)));
+  $display("AON Power-up Multiplied Clock Frequency: %0d Hz", $rtoi(10**9/CLK_PERIOD));
 end
 
 // Enable 5us RC Delay on rise
@@ -37,16 +44,26 @@ assign en_osc_re = en_osc_re_buf && init_start;
 
 // Clock Oscillator
 ////////////////////////////////////////
-logic en_osc;
-reg clk_osc = 1'b1;
+real CalAonClkPeriod, UncAonClkPeriod, AonClkPeriod;
+
+initial CalAonClkPeriod = $itor( 5000 );                         // 5000ns (200KHz)
+initial UncAonClkPeriod = $itor( $urandom_range(10000, 5555) );  // 10000-5555ps (100-180KHz)
+
+assign AonClkPeriod = (aon_osc_cal_i && init_start) ? CalAonClkPeriod : UncAonClkPeriod;
+assign CLK_PERIOD = AonClkPeriod/ckmul;
+
+// Free running oscillator
+reg clk_osc;
+initial clk_osc = 1'b1;
 
 always begin
-  #(AonClkPeriod/2) clk_osc = ~clk_osc;
+  #(CLK_PERIOD/2) clk_osc = ~clk_osc;
 end
 
+logic en_osc;
+
 // HDL Clock Gate
-logic clk;
-reg en_clk;
+logic en_clk, clk;
 
 always_latch begin
   if ( !clk_osc ) en_clk <= en_osc;
@@ -103,5 +120,14 @@ prim_clock_buf #(
   .clk_i ( clk ),
   .clk_o ( aon_clk_o )
 );
+
+
+`ifdef SYNTHESIS
+///////////////////////
+// Unused Signals
+///////////////////////
+logic unused_sigs;
+assign unused_sigs = ^{ aon_osc_cal_i };
+`endif
 
 endmodule : aon_osc

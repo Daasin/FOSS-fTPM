@@ -66,7 +66,34 @@
       name: sysrst_ctrl_override_test
       uvm_test_seq: sysrst_ctrl_pin_override_vseq
     }
-
+    {
+      name: sysrst_ctrl_flash_wr_prot_out
+      uvm_test_seq: sysrst_ctrl_flash_wr_prot_vseq
+    }
+    {
+      name: sysrst_ctrl_ec_pwr_on_rst
+      uvm_test_seq: sysrst_ctrl_ec_pwr_on_rst_vseq
+      run_opts: ["+test_timeout_ns=10_000_000_000"]
+    }
+    {
+      name: sysrst_ctrl_auto_blk_key_output
+      uvm_test_seq: sysrst_ctrl_auto_blk_key_output_vseq
+    }
+    {
+      name: sysrst_ctrl_ultra_low_pwr
+      uvm_test_seq: sysrst_ctrl_ultra_low_pwr_vseq
+      run_opts: ["+test_timeout_ns=10_000_000_000"]
+    }
+    {
+      name: sysrst_ctrl_combo_detect
+      uvm_test_seq: sysrst_ctrl_combo_detect_vseq
+      run_opts: ["+test_timeout_ns=10_000_000_000"]
+    }
+    {
+      name: sysrst_ctrl_edge_detect
+      uvm_test_seq: sysrst_ctrl_edge_detect_vseq
+      run_opts: ["+test_timeout_ns=10_000_000_000"]
+    }
   ]
 
   // List of regressions.

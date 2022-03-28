@@ -454,10 +454,14 @@ static bool execute_test(const dif_uart_t *uart) {
     if (!uart_rx_done && uart_irq_rx_watermark_fired) {
       uart_irq_rx_watermark_fired = false;
 
-      // Receive the remaining uart_rx_data as and when the RX watermark fires.
-      CHECK(uart_transfer_ongoing_bytes(uart, kUartReceive, uart_rx_data,
-                                        UART_DATASET_SIZE, &uart_rx_bytes_read,
-                                        &uart_rx_done));
+      // When RX watermark fires, read the data, but if remaining items are less
+      // than 16, RX watermark won't fire. In that case, keep reading until all
+      // item are received.
+      do {
+        CHECK(uart_transfer_ongoing_bytes(uart, kUartReceive, uart_rx_data,
+                                          UART_DATASET_SIZE,
+                                          &uart_rx_bytes_read, &uart_rx_done));
+      } while (!uart_rx_done && (UART_DATASET_SIZE - uart_rx_bytes_read < 16));
 
       if (uart_rx_done) {
         exp_uart_irq_rx_watermark = false;
@@ -528,7 +532,7 @@ const test_config_t kTestConfig;
 bool test_main(void) {
   update_uart_base_addr_and_irq_id();
 
-  LOG_INFO("Test UART%d with base_addr: %8x", kUartIdx, uart_base_addr);
+  LOG_INFO("Test UART%d with base_addr: %08x", kUartIdx, uart_base_addr);
 
   // TODO, remove thse once pinout configuration is provided
   pinmux_connect_uart_to_pads(

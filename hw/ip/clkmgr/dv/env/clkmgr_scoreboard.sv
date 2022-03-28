@@ -43,25 +43,23 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
   endtask
 
   task monitor_all_clk_byp();
-    lc_tx_t prev_all_clk_byp_req = Off;
+    mubi4_t prev_all_clk_byp_req = MuBi4False;
     forever
       @cfg.clkmgr_vif.clk_cb begin
         if (cfg.clkmgr_vif.all_clk_byp_req != prev_all_clk_byp_req) begin
           `uvm_info(`gfn, $sformatf(
-                    "Got all_clk_byp_req %s", cfg.clkmgr_vif.all_clk_byp_req == On ? "On" : "Off"),
-                    UVM_MEDIUM)
-          prev_all_clk_byp_req = lc_tx_t'(cfg.clkmgr_vif.all_clk_byp_req);
+                    "Got all_clk_byp_req %s",
+                    cfg.clkmgr_vif.all_clk_byp_req == MuBi4True ? "True" : "False"
+                    ), UVM_MEDIUM)
+          prev_all_clk_byp_req = cfg.clkmgr_vif.all_clk_byp_req;
         end
         if (cfg.clk_rst_vif.rst_n) begin
-          if ((cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_sel == On) &&
-              (cfg.clkmgr_vif.clk_cb.lc_hw_debug_en_i == On)) begin
-            `DV_CHECK_EQ(cfg.clkmgr_vif.all_clk_byp_req, On, "Expected all_clk_byp_req to be On")
-          end
           if (cfg.en_cov) begin
-            cov.extclk_cg.sample(cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_sel,
-                                 cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_step_down,
-                                 cfg.clkmgr_vif.clk_cb.lc_hw_debug_en_i,
-                                 cfg.clkmgr_vif.clk_cb.lc_clk_byp_req, cfg.clkmgr_vif.scanmode_i);
+            cov.extclk_cg.sample(cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_sel == MuBi4True,
+                                 cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_step_down == MuBi4True,
+                                 cfg.clkmgr_vif.clk_cb.lc_hw_debug_en_i == On,
+                                 cfg.clkmgr_vif.clk_cb.lc_clk_byp_req == On,
+                                 cfg.clkmgr_vif.scanmode_i == MuBi4True);
           end
         end
       end
@@ -78,14 +76,12 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           prev_lc_clk_byp_req = cfg.clkmgr_vif.lc_clk_byp_req;
         end
         if (cfg.clk_rst_vif.rst_n) begin
-          if (cfg.clkmgr_vif.clk_cb.lc_clk_byp_req == On) begin
-            `DV_CHECK_EQ(cfg.clkmgr_vif.io_clk_byp_req, On, "Expected io_clk_byp_req to be On")
-          end
           if (cfg.en_cov) begin
-            cov.extclk_cg.sample(cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_sel,
-                                 cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_step_down,
-                                 cfg.clkmgr_vif.clk_cb.lc_hw_debug_en_i,
-                                 cfg.clkmgr_vif.clk_cb.lc_clk_byp_req, cfg.clkmgr_vif.scanmode_i);
+            cov.extclk_cg.sample(cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_sel == MuBi4True,
+                                 cfg.clkmgr_vif.clk_cb.extclk_ctrl_csr_step_down == MuBi4True,
+                                 cfg.clkmgr_vif.clk_cb.lc_hw_debug_en_i == On,
+                                 cfg.clkmgr_vif.clk_cb.lc_clk_byp_req == On,
+                                 cfg.clkmgr_vif.scanmode_i == MuBi4True);
           end
         end
       end
@@ -98,8 +94,8 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           if (cfg.clk_rst_vif.rst_n) begin
             @cfg.clkmgr_vif.jitter_enable_csr begin
               cfg.clk_rst_vif.wait_clks(2);
-              `DV_CHECK_EQ(cfg.clkmgr_vif.jitter_en_o, prim_mubi_pkg::mubi4_test_true_loose(
-                           cfg.clkmgr_vif.jitter_enable_csr), "Mismatching jitter enable output")
+              `DV_CHECK_EQ(cfg.clkmgr_vif.jitter_en_o, cfg.clkmgr_vif.jitter_enable_csr,
+                           "Mismatching jitter enable output")
             end
           end
         end
@@ -108,8 +104,8 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           if (cfg.clk_rst_vif.rst_n) begin
             @cfg.clkmgr_vif.jitter_en_o begin
               cfg.clk_rst_vif.wait_clks(2);
-              `DV_CHECK_EQ(cfg.clkmgr_vif.jitter_en_o, prim_mubi_pkg::mubi4_test_true_loose(
-                           cfg.clkmgr_vif.jitter_enable_csr), "Mismatching jitter enable output")
+              `DV_CHECK_EQ(cfg.clkmgr_vif.jitter_en_o, cfg.clkmgr_vif.jitter_enable_csr,
+                           "Mismatching jitter enable output")
             end
           end
         end
@@ -123,7 +119,7 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           if (cfg.io_clk_rst_vif.rst_n && cfg.en_cov) begin
             cov.peri_cg_wrap[PeriIo].sample(cfg.clkmgr_vif.peri_io_cb.clk_enable,
                                             cfg.clkmgr_vif.peri_io_cb.ip_clk_en,
-                                            cfg.clkmgr_vif.scanmode_i == prim_mubi_pkg::MuBi4True);
+                                            cfg.clkmgr_vif.scanmode_i == MuBi4True);
           end
         end
       forever
@@ -131,8 +127,7 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           if (cfg.io_clk_rst_vif.rst_n && cfg.en_cov) begin
             cov.peri_cg_wrap[PeriDiv2].sample(cfg.clkmgr_vif.peri_div2_cb.clk_enable,
                                               cfg.clkmgr_vif.peri_div2_cb.ip_clk_en,
-                                              cfg.clkmgr_vif.scanmode_i == prim_mubi_pkg::MuBi4True
-                                              );
+                                              cfg.clkmgr_vif.scanmode_i == MuBi4True);
           end
         end
       forever
@@ -140,8 +135,7 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           if (cfg.io_clk_rst_vif.rst_n && cfg.en_cov) begin
             cov.peri_cg_wrap[PeriDiv4].sample(cfg.clkmgr_vif.peri_div4_cb.clk_enable,
                                               cfg.clkmgr_vif.peri_div4_cb.ip_clk_en,
-                                              cfg.clkmgr_vif.scanmode_i == prim_mubi_pkg::MuBi4True
-                                              );
+                                              cfg.clkmgr_vif.scanmode_i == MuBi4True);
           end
         end
       forever
@@ -149,7 +143,7 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
           if (cfg.io_clk_rst_vif.rst_n && cfg.en_cov) begin
             cov.peri_cg_wrap[PeriUsb].sample(cfg.clkmgr_vif.peri_usb_cb.clk_enable,
                                              cfg.clkmgr_vif.peri_usb_cb.ip_clk_en,
-                                             cfg.clkmgr_vif.scanmode_i == prim_mubi_pkg::MuBi4True);
+                                             cfg.clkmgr_vif.scanmode_i == MuBi4True);
           end
         end
     join
@@ -159,19 +153,11 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
     logic hint, clk_en, idle, src_rst_en;
     trans_e trans = trans_e'(trans_index);
     forever begin
-      if (trans == TransOtbnIoDiv4) begin
-        @cfg.clkmgr_vif.peri_div4_cb;
-        hint = cfg.clkmgr_vif.peri_div4_cb.clk_hint_otbn;
-        idle = cfg.clkmgr_vif.peri_div4_cb.otbn_idle;
-        clk_en = cfg.clkmgr_vif.peri_div4_cb.ip_clk_en;
-        src_rst_en = cfg.io_clk_rst_vif.rst_n;
-      end else begin
-        @cfg.clkmgr_vif.trans_cb;
-        hint = cfg.clkmgr_vif.trans_cb.clk_hints[trans_index];
-        idle = cfg.clkmgr_vif.trans_cb.idle_i[trans_index];
-        clk_en = cfg.clkmgr_vif.trans_cb.ip_clk_en;
-        src_rst_en = cfg.main_clk_rst_vif.rst_n;
-      end
+      @cfg.clkmgr_vif.trans_cb;
+      hint = cfg.clkmgr_vif.trans_cb.clk_hints[trans_index];
+      idle = cfg.clkmgr_vif.trans_cb.idle_i[trans_index];
+      clk_en = cfg.clkmgr_vif.trans_cb.ip_clk_en;
+      src_rst_en = cfg.main_clk_rst_vif.rst_n;
       if (src_rst_en && cfg.en_cov) begin
         logic scan_en = cfg.clkmgr_vif.scanmode_i == prim_mubi_pkg::MuBi4True;
         cov.trans_cg_wrap[trans].sample(hint, clk_en, scan_en, idle);
@@ -281,9 +267,13 @@ class clkmgr_scoreboard extends cip_base_scoreboard #(
                        })
         end
       end
+      "jitter_regwen": begin
+      end
       "jitter_enable": begin
         if (addr_phase_write) begin
-          `DV_CHECK_EQ(prim_mubi_pkg::mubi4_t'(item.a_data), cfg.clkmgr_vif.jitter_enable_csr)
+          if (`gmv(ral.jitter_regwen)) begin
+            `DV_CHECK_EQ(prim_mubi_pkg::mubi4_t'(item.a_data), cfg.clkmgr_vif.jitter_enable_csr)
+          end
         end
       end
       "clk_enables": begin
