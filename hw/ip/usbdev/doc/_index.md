@@ -31,7 +31,7 @@ This feature might be added in a later version of this IP.
 
 The USB device module is a simple software-driven generic USB device interface for Full-Speed USB 2.0 operation.
 The IP includes the physical layer interface, the low level USB protocol and a packet buffer interface to the software.
-The physical layer interface features multiple transmit and receive paths to allow interfacing with a variety of USB PHYs or regular 3.3V IO pads for FPGA prototyping.
+The physical layer interface features both differential and single-ended transmit and receive paths to allow interfacing with a variety of USB PHYs or regular 3.3V IO pads for FPGA prototyping.
 
 
 ## Compatibility
@@ -85,44 +85,48 @@ clock and USB clock domains.
 ## USB Interface Pins
 
 Full-Speed USB uses a bidirectional serial interface as shown in Figure 7-24 of the [USB 2.0 Full-Speed specification](https://www.usb.org/document-library/usb-20-specification).
-For reasons of flexibility, this IP block features multiple transmit and receive paths for interfacing with various transceivers.
+For reasons of flexibility, this IP block features both differential and single-ended transmit and receive paths.
+
+For better receive sensitivity, lower transmit jitter and to be standard compliant, a dedicated, differential USB transceiver such as the [USB1T11A](https://www.mouser.com/datasheet/2/149/fairchild%20semiconductor_usb1t11a-320893.pdf) or the [USB1T20](https://www.onsemi.com/pub/Collateral/USB1T20-D.pdf) must be used (see Section 7.1.4.1 of the [USB 2.0 specification](https://www.usb.org/document-library/usb-20-specification)).
+Depending on the selected USB transceiver, either the differential or the single-ended transmit and receive paths or a combination of the two can be used to interface the IP block with the transceiver.
+
+When prototyping on FPGAs (here the interface can be implemented with pseudo-differential 3.3V GPIO pins and an oversampling receiver for recovery of the bitstream and clock alignment), the single-ended signal pairs can be used.
+External to the IP, these should be combined to drive the actual pins when transmit is enabled and receive otherwise.
+Using standard 3.3V IO pads allows use on most FPGAs although the drive strength and series termination resistors may need to be adjusted to meet the USB signal eye.
+On a Xilinx Artix-7 (and less well tested Spartan-7) part, setting the driver to the 8mA, FAST setting seems to work well with a 22R series termination (and with a 0R series termination).
 
 The following sections describe how the various input/output signals relate to the USB interface pins for the different receive and transmit configurations.
 
 
 ### Data Transmit
 
-The IP block supports two different encodings, driving out on separate TX interfaces.
-The default encoding looks like the USB bus, with D+ and D- values driven on usb_dp_o and usb_dn_o pins.
-The alternate encoding uses usb_se0_o to indicate a single-ended zero (SE0), and usb_d_o encodes K/J (when usb_se0_o is low).
-The TX mode can be selected by setting the `use_tx_d_se0` bit in {{< regref "phy_config" >}} to either 1 (alternate, using d/se0) or 0 (default, using dp/dn).
+The IP block supports both differential and single-ended transmission (TX).
+The TX mode can be selected by setting the `tx_differential_mode` bit in {{< regref "phy_config" >}} to either 1 (differential) or 0 (single ended).
 
 The following table summarizes how the different output signals relate to the USB interface pins.
 
 |  External Pins | Internal Signals | Notes |
 |----------------|------------------|-------|
-| D+, D-         | dp_o, dn_o       | Data output with an encoding like the USB bus, intended to go directly to pads for supported targets. On an FPGA, the components should be used with a USB transceiver, as the regular bidirectional I/O cells will likely not be USB compliant. |
-| [Alt TX Data]  | se0_o            | Signal Single-Ended Zero (SE0) link state to a USB transceiver. |
-| [Alt TX Data]  | d_o              | Data output used for encoding K and J, for interfacing with a USB transceiver. |
-|   [TX Mode]    | tx_use_d_se0_o   | Indicates the selected TX interface: use dp_o and dn_o (0) or use d_o and se0_o (1). |
+| D+, D-         | d_o              | Data output for interfacing with a differential USB transceiver. |
+| \"             | se0_o            | Signal Single-Ended Zero (SE0) link state to a differential USB transceiver. |
+| \"             | dp_o, dn_o       | Single-ended data output signals. These can be used to interface to regular IO cells for prototyping on an FPGA, but such an interface will probably not be USB compliant. |
+|   [TX Mode]    | tx_mode_se_o     | Indicates the selected TX mode: single-ended (1) or differential (0) operation. |
 
 Note that according to the [Comportable guideline for peripheral functionality]({{< relref "doc/rm/comportability_specification" >}}), every output signal `name_o` has a dedicated output enable `name_en_o`.
-For TX data, these separate signals `dp_en_o` and `dn_en_o` all correspond to the same TX or output enable signal (`OE` in the USB spec).
-The other signals listed are of the "intersignal" variety, and they do not go directly to pads or have dedicated output enable signals.
+For TX data, these separate signals `d_en_o`, `dp_en_o` and `dn_en_o` all correspond to the same TX or output enable signal (`OE` in the USB spec).
 
 
 ### Data Receive
 
-The IP block supports recovery of the differential K and J symbols from the output of an external differential receiver or directly from the D+/D- pair.
-The RX mode can be selected to use a differential receiver's output by setting the `use_diff_rcvr` bit in {{< regref "phy_config" >}}.
-The D+/D- pair is always used to detect the single-ended zero (SE0) state.
+The IP block supports both differential and single-ended reception (RX).
+The RX mode can be selected by setting the `rx_differential_mode` bit in {{< regref "phy_config" >}} to either 1 (differential) or 0 (single ended).
 
 The following table summarizes how the different input signals relate to the USB interface pins.
 
 |  External Pins | Internal Signals | Notes |
 |----------------|------------------|-------|
-| D+, D-         | dp_i, dn_i       | D+ and D- signals passing into the IP single-ended, intended to go directly to pads for supported targets. These signals are used to detect the SE0 link state, and if a differential receiver is not present, they are also used for K and J symbols. On an FPGA, the components should be used with a USB transceiver, as the bidirectional regular IO cells will likely not be USB compliant. |
-| [Diff Rcvr Out]| d_i              | Data input for interfacing with a differential receiver, which is required for this input. |
+| D+, D-         | d_i              | Data input for interfacing with a differential USB transceiver. Used in differential RX mode only. |
+| \"             | dp_i, dn_i       | Single-ended data input signals. These signals are used to detect the SE0 link state in differential RX mode. They can further be used to interface to regular IO cells for prototyping on an FPGA, but such an interface will probably not be USB compliant. |
 
 
 ### Non-Data Pins
@@ -134,7 +138,6 @@ The USB device features the following non-data pins.
 | sense (VBUS)   | sense_i                  | The sense pin indicates the presence of VBUS from the USB host. |
 | [pullup]       | dp_pullup_o, dn_pullup_o | When dp_pullup_o or dn_pullup_o asserts a 1.5k pullup resistor should be connected to D+ or D-, respectively. This can be done inside the chip or with an external pin. A permanently connected resistor could be used if the pin flip feature is not needed, but this is not recommended because there is then no way to force the device to appear to unplug. Only one of the pullup signals can be asserted at any time. The selection is based on the `pinflip` bit in {{< regref "phy_config" >}}. Because this is a Full-Speed device the resistor must be on the D+ pin, so when `pinflip` is zero, dp_pullup_o is used. |
 | [suspend]      | suspend_o                | The suspend pin indicates to the USB transceiver that a constant idle has been detected on the link and the device is in the Suspend state (see Section 7.1.7.6 of the [USB 2.0 specification](https://www.usb.org/document-library/usb-20-specification)). |
-| [rx_enable]    | rx_enable_o              | The rx_enable pin turns on/off a differential receiver. It is enabled via a CSR and automatically disabled when the device suspends. |
 
 The USB host will identify itself to the device by enabling the 5V VBUS power.
 It may do a hard reset of a port by removing and reasserting VBUS (the Linux driver will do this when it finds a port in an inconsistent state or a port that generates errors during enumeration).
@@ -144,7 +147,7 @@ Note that this may require a resistor divider or (for USB-C where VBUS can be up
 
 A Full-Speed device identifies itself by providing a 1.5k pullup resistor (to 3.3V) on the D+ line.
 The IP block produces a signal `dp_pullup_o` that is asserted when this resistor should be presented.
-This signal will be asserted whenever the interface is enabled and VBUS is present.
+This signal will be asserted whenever the interface is enabled.
 In an FPGA implementation, this signal can drive a 3.3V output pin that is driven high when the signal is asserted and set high impedance when the signal is deasserted, and the output pin used to drive a 1.5k resistor connected on the board to the D+ line.
 Alternatively, it can be used to enable an internal 1.5k pullup on the D+ pin.
 
@@ -153,6 +156,29 @@ If the `pinflip` bit in {{< regref "phy_config" >}} is set, the data pins are fl
 To control the pullup on the D- line, this USB device features `dn_pullup_o` signal.
 Of the two pullup signals `dp_pullup_o` and `dn_pullup_o`, only one can be enabled at any time.
 As this is a Full-Speed device, `dp_pullup_o`, i.e., the pullup on D+ is used by default (`pinflip` equals zero).
+
+### FPGA Board Implementation With PMOD
+
+The interface was developed using the Digilent Nexys Video board with a PMOD card attached.
+A PMOD interface with direct connection to the SoC should be used (some PMOD interfaces include 100R series resistors which break the signal requirements for USB).
+The PMOD card includes two USB micro-B connectors and allows two USB interfaces to be used.
+The D+ and D- signals have 22R series resistors (in line with the USB spec) and there is a 1.5k pullup on D+ to the pullup enable signal.
+There is a resistive divider to set the sense pin at half of the VBUS voltage which enables detection on the FPGA without overvoltage on the pin.
+
+![PMOD Schematic](dualpmod-sch.svg)
+
+The PMOD PCB is [available from OSH Park](https://oshpark.com/shared_projects/xMKhTIHn).
+
+The PMOD design files for KiCad version 5 are in the [`usbdev/pmod`](https://github.com/lowRISC/opentitan/tree/master/hw/ip/usbdev/pmod) directory. 
+The BOM can be filled by parts from Digikey.
+
+| Item | Qty | Reference(s) | Value | LibPart | Footprint | Datasheet | Category | DK_Datasheet_Link | DK_Detail_Page | Description | Digi-Key_PN | Family | MPN | Manufacturer | Status|
+|------|-----|--------------|-------|---------|-----------|-----------|----------|-------------------|----------------|-------------|-------------|--------|-----|--------------|-------|
+| 1 | 2 | J1, J2 | 10118193-0001LF | dualpmod-rescue:10118193-0001LF-dk_USB-DVI-HDMI-Connectors | digikey-footprints:USB_Micro_B_Female_10118193-0001LF | http://www.amphenol-icc.com/media/wysiwyg/files/drawing/10118193.pdf | Connectors, Interconnects | http://www.amphenol-icc.com/media/wysiwyg/files/drawing/10118193.pdf | /product-detail/en/amphenol-icc-fci/10118193-0001LF/609-4616-1-ND/2785380 | CONN RCPT USB2.0 MICRO B SMD R/A | 609-4616-1-ND | USB, DVI, HDMI Connectors | 10118193-0001LF | Amphenol ICC (FCI) | Active|
+| 2 | 1 | J3 | 68021-412HLF | dualpmod-rescue:68021-412HLF-dk_Rectangular-Connectors-Headers-Male-Pins | digikey-footprints:PinHeader_6x2_P2.54mm_Horizontal | https://cdn.amphenol-icc.com/media/wysiwyg/files/drawing/68020.pdf | Connectors, Interconnects | https://cdn.amphenol-icc.com/media/wysiwyg/files/drawing/68020.pdf | /product-detail/en/amphenol-icc-fci/68021-412HLF/609-3355-ND/1878558 | CONN HEADER R/A 12POS 2.54MM | 609-3355-ND | Rectangular Connectors - Headers, Male Pins | 68021-412HLF | Amphenol ICC (FCI) | Active|
+| 3 | 4 | R1, R2, R7, R8 | 5k1 | Device:R_Small_US | Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder | ~ |  |  |  |  | A126379CT-ND |  |  |  | |
+| 4 | 4 | R3, R4, R5, R6 | 22R | Device:R_Small_US | Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder | ~ |  |  |  |  | A126352CT-ND |  |  |  | |
+| 5 | 2 | R9, R10 | 1k5 | Device:R_Small_US | Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder | ~ |  |  |  |  | A106057CT-ND |  |  |  | |
 
 ## Hardware Interfaces
 
@@ -181,7 +207,7 @@ The FSM implements a subset of the USB device state diagram shown in Figure 9-1 
 |Link Reset| The link has been in the SE0 state for 3 us.|
 |Link Suspend| The link has been in the J state for more than 3 ms, upon which we have to enter the Suspend state.|
 |Link Resume| The link has been driven to a non-J state after being in Suspend. For the case of resuming to active link states, the end of resume signaling has occurred.|
-|Host Lost| Signaled using an interrupt if the link is active but a start of frame (SOF) packet has not been received from the host in 4 frames. The host is required to send a SOF packet every 1 ms. This is not an expected condition.|
+|Host Lost| Signaled using an interrupt if the link is active but a start of frame (SOF) packet has not been received from the host in 4.096 ms. The host is required to send a SOF packet every 1 ms. This is not an expected condition.|
 
 
 ## USB Protocol Engine
@@ -218,15 +244,8 @@ In addition, the buffer ID, the packet size, an out/setup flag and the endpoint 
 Software should immediately provide a free buffer for future reception by writing the corresponding buffer ID to the Available Buffer FIFO.
 It can then process the packet and eventually return the received buffer to the free pool.
 This allows streaming on a single endpoint or across a number of endpoints.
-If the packets cannot be consumed at the rate they are received, software can implement selective flow control by clearing {{< regref "rxenable_out" >}} for a particular endpoint, which will result in a request to that endpoint being NAKed (negative acknowledgment).
-In the unfortunate event that the Available Buffer FIFO is empty or the Received Buffer FIFO is full, all OUT transactions are NAKed and SETUP transactions are ignored.
-In that event, the host will retry the transaction (up to some maximum attempts or time).
-
-There are two options for a given OUT endpoint's flow control, controlled by the {{< regref "set_nak_out" >}} register.
-If `set_nak_out` is 0 for the endpoint, it will accept packets as long as there are buffers available in the Available Buffer FIFO and space available in the Received Buffer FIFO.
-For timing, this option implies that software may not be able to affect the response to a given transaction, and buffer availability is the only needed factor.
-If `set_nak_out` is 1 for the endpoint, it will clear its corresponding bit in the {{< regref "rxenable_out" >}} register, forcing NAK responses to OUT transactions to that endpoint until software can intervene.
-That option uses NAK to defer the host, and this enables software to implement features that require protocol-level control at transaction boundaries, such as when implementing the functional stall.
+If the packets cannot be consumed at the rate they are received, software can implement selective flow control by disabling OUT or SETUP transactions for a particular endpoint, which will result in a request to that endpoint being NACKed (negative acknowledgment).
+In the unfortunate event that the Available Buffer FIFO is empty or the Received Buffer FIFO is full, all OUT and SETUP transactions are NACKed.
 
 
 ### Transmission
@@ -238,7 +257,7 @@ On receipt of the ACK from the host, the rdy bit in the {{< regref "configin" >}
 Software can return the buffer to the free pool and write a 1 to clear the endpoint bit in the {{< regref "in_sent" >}} register.
 Note that streaming can be achieved if the next buffer has been prepared and is written to the {{< regref "configin" >}} register when the interrupt is received.
 
-A Control transfer requires one or more IN transactions, either during the data stage or the status stage.
+A Control transfer may need an IN data transfer.
 Therefore, when a SETUP transaction is received for an endpoint, any buffers that are waiting to be sent out to the host from that endpoint are canceled by clearing the rdy bit in the corresponding {{< regref "configin" >}} register.
 To keep track of such canceled buffers, the pend bit in the same register is set.
 The transfer must be queued again after the Control transfer is completed.
@@ -268,7 +287,7 @@ The interface will need extending for high rate isochronous use (a possible opti
 
 ## Initialization
 
-The basic hardware initialization is to (in any order) configure the physical interface for the implementation via the {{< regref "phy_config" >}} register, fill the Available Buffer FIFO, enable IN and OUT endpoints with ID 0 (this is the control endpoint that the host will use to configure the interface), enable reception of SETUP and OUT packets on OUT Endpoint 0, and enable any required interrupts.
+The basic hardware initialization is to (in any order) fill the Available Buffer FIFO, enable reception of SETUP and OUT packets on Endpoint 0 (this is the control endpoint that the host will use to configure the interface), enable reception of SETUP and OUT packets on any endpoints that accept them and enable any required interrupts.
 Finally, the interface is enabled by setting the enable bit in the {{< regref "usbctrl" >}} register.
 Setting this bit causes the USB device to assert the pullup on the D+ line, which is used by the host to detect the device.
 There is no need to configure the device ID in ({{< regref "usbctrl.device_address" >}}) at this point -- the line remains in reset and the hardware forces the device ID to zero.
@@ -278,11 +297,6 @@ Initially these will be sent to device ID 0.
 When a Set Address request is received, the device ID received must be stored in the {{< regref "usbctrl.device_address" >}} register.
 Note that device 0 is used for the entire control transaction setting the new device ID, so writing the new ID to the register should not be done until the ACK for the Status stage has been received (see [USB 2.0 specification](https://www.usb.org/document-library/usb-20-specification)).
 
-The host will then issue additional control transfers to Endpoint 0 to configure the device, now to the device's configured address.
-In response to the Set Configuration request, software should set up the rest of the endpoints for that configuration, including configuring the flow control behavior for OUT endpoints via the {{< regref "set_nak_out" >}} register, configuring the endpoint type via the {{< regref "rxenable_setup" >}} register (for a control endpoint) and the {{< regref "out_iso" >}} and {{< regref "in_iso" >}} registers (for isochronous OUT and IN endpoints, respectively).
-Finally, software should enable the configured endpoints via the {{< regref "ep_out_enable" >}} and {{< regref "ep_in_enable" >}} registers.
-The status stage of the Set Configuration request should not be allowed to complete until all endpoints are set up.
-
 
 ## Buffers
 
@@ -290,18 +304,16 @@ Software needs to manage the buffers in the packet buffer (2 kB SRAM).
 Each buffer can hold the maximum length packet for a Full-Speed interface (64 bytes).
 Other than for data movement, the management is most likely done based on their buffer ID which is a small integer between zero and (SRAM size in bytes)/(max packet size in bytes).
 
-In order to avoid unintentionally deferring transactions, there must be buffers available when the host sends data to the device (an OUT or SETUP transaction).
+In order to avoid unintentional stalling the interface, there must be buffers available when the host sends data to the device (an OUT or STATUS transaction).
 Software needs to ensure (1) there are always buffer IDs in the Available Buffer FIFO, and (2) the Received Buffer FIFO is not full.
-For OUT transactions, if the Available Buffer FIFO is empty or the Received Buffer FIFO is full when data is received, a NAK will be returned to the host, requesting the packet be retried later.
-For SETUP transactions under the same conditions, the request will be dropped and a handshake will not be sent, indicating an error to the host and provoking a retry.
-These conditions cause the bus to be busy and perform no work, lowering performance for this device and potentially others on the same bus.
-Timely management of buffers may have a significant impact on throughput.
+If the Available Buffer FIFO is empty or the Received Buffer FIFO is full when data is received, a NACK will be returned to the host, requesting the packet be retried later.
+Generating NACK with this mechanism is generally to be avoided (for example the host expects a device will always accept STATUS packets to Endpoint 0).
 
 Keeping the Available Buffer FIFO full can be done with a simple loop, adding buffer IDs from the software-managed free pool until the FIFO is full.
 A simpler policy of just adding a buffer ID to the Available Buffer FIFO whenever a buffer ID is removed from the Received Buffer FIFO should work on average, but performance will be slightly worse when bursts of packets are received.
 
-Flow control (using NAKs) may be done on a per-endpoint basis using the {{< regref "rxenable_out" >}} register.
-If this does not indicate OUT packet reception is enabled, then any OUT packet will receive a NAK to request a retry later.
+Flow control (using NACKs) may be done on a per-endpoint basis using the {{< regref "rxenable_out" >}} and {{< regref "rxenable_setup" >}} registers.
+If this does not indicate OUT/SETUP packet reception is enabled, then any packet will receive a NACK to request a retry later.
 This should only be done for short durations or the host may timeout the transaction.
 
 
@@ -309,21 +321,20 @@ This should only be done for short durations or the host may timeout the transac
 
 The host will send OUT or SETUP transactions when it wants to transfer data to the device.
 The data packets are directed to a particular endpoint, and the maximum packet size is set per-endpoint in its Endpoint Descriptor (this must be the same or smaller than the maximum packet size supported by the device).
-A pkt_received interrupt is raised whenever there are one or more packets in the Received Buffer FIFO.
-Software should pop the information from the Received Buffer FIFO by reading the {{< regref "rxfifo" >}} register, which gives (1) the buffer ID that the data was received in, (2) the data length received in bytes, (3) the endpoint to which the packet was sent, and (4) an indication if the packet was sent with an OUT or SETUP transaction.
-Note that the data length could be between zero and the maximum packet size -- in some situations a zero length packet is used as an acknowledgment or end of transfer.
+A pkt_received interrupt is raised whenever there is one or more packets in the Received Buffer FIFO.
+Software should pop the information from the Received Buffer FIFO by reading the {{< regref "rxfifo" >}} register, which gives (1) the buffer ID that the data was received in, (2) the data length received in bytes, (3) the endpoint to which the packet was sent, and (4) an indication if the packet was sent with an OUT or STATUS transaction.
+Note that the data length could be between zero and the maximum packet size -- in some situations a zero length packet is used as an acknowledgment or end of transmission.
 
 The data length does not include the packet CRC.
 (The CRC bytes are written to the buffer if they fit within the maximum buffer size.)
-Packets with a bad CRC will **not** be transferred to the Received Buffer FIFO; the hardware will drop the transaction without a handshake, indicating an error to the host.
-For non-isochronous endpoints, this typically results in the host retrying the transaction.
+Packets with a bad CRC will **not** be transferred to the Received Buffer FIFO, the hardware will request a retry.
 
 
 ## Transmission
 
 Data is transferred to the host based on the host requesting a transfer with an IN transaction.
 The host will only generate IN requests if the endpoint is declared as an IN endpoint in its Endpoint Descriptor (note that two descriptors are needed if the same endpoint is used for both IN and OUT transfers).
-The Endpoint Descriptor also includes a description of the frequency the endpoint should be polled (for isochronous and interrupt endpoints).
+The Endpoint Descriptor also includes a description of the frequency the endpoint should be polled.
 
 Data is queued for transmission by writing the corresponding {{< regref "configin" >}} register with the buffer ID containing the data, the length in bytes of data (0 to maximum packet length) and setting the rdy bit.
 This data (with the packet CRC) will be sent as a response to the next IN transaction on the corresponding endpoint.
@@ -331,64 +342,26 @@ When the host ACKs the data, the rdy bit is cleared, the corresponding endpoint 
 When the packet transmission has been noted by software, the corresponding endpoint bit should be cleared in the {{< regref "in_sent" >}} register (by writing a 1 to this very bit).
 
 Note that the {{< regref "configin" >}} for an endpoint is a single register, so no new data packet should be queued until the previous packet has been ACKed.
-If a SETUP transaction is received on a control endpoint that has a transmission pending, the hardware will **clear the rdy bit** and **set the pend bit** in the {{< regref "configin" >}} register of that endpoint.
+If an enabled SETUP transaction is received on an endpoint that has a transmission pending, the hardware will **clear the rdy bit** and **set the pend bit** in the {{< regref "configin" >}} register of that endpoint.
 Software must remember the pending transmission and, after the Control transaction is complete, write it back to the {{< regref "configin" >}} register with the rdy bit set.
 
 
 ## Stalling
 
-The {{< regref "out_stall" >}} and {{< regref "in_stall" >}} registers are used for endpoint stalling.
+The {{< regref "stall" >}} registers are used for endpoint stalling.
 There is one dedicated register per endpoint.
 Stalling is used to signal that the host should not retry a particular transmission or to signal certain error conditions (functional stall).
 Control endpoints also use a STALL to indicate unsupported requests (protocol stall).
-Unused endpoints can have their {{< regref "in_stall" >}} or {{< regref "out_stall" >}} register left clear, so in many cases there is no need to use the register.
-If the stall register is set for an enabled endpoint then the STALL response will be provided to all IN or OUT requests on that endpoint.
+Unused endpoints can have their {{< regref "stall" >}} register left clear, so in many cases there is no need to use the {{< regref "stall" >}} register.
+If the {{< regref "stall" >}} register is set for an endpoint then the STALL response will be provided to all IN/OUT requests on that endpoint.
 
 In the case of a protocol stall, the device must send a STALL for all IN/OUT requests until the next SETUP token is received.
-To support this, software sets the {{< regref "in_stall" >}} and {{< regref "out_stall" >}} register for an endpoint when the host requests an unsupported transfer.
+To support this, software sets the {{< regref "stall" >}} register for an endpoint when the host requests an unsupported transfer.
 The hardware will then send a STALL response to all IN/OUT transactions until the next SETUP is received for this endpoint.
-Receiving the **SETUP token clears the {{< regref "in_stall" >}} and {{< regref "out_stall" >}} registers** for that endpoint.
-If either a control endpoint's {{< regref "set_nak_out" >}} bit is set or software has cleared the {{< regref "rxenable_out" >}} bit before this transfer began, the hardware will send NAKs to any IN/OUT requests until the software has decided what action to take for the new SETUP request.
+Receiving the **SETUP token clears the {{< regref "stall" >}} register** for that endpoint.
+The hardware then sends NACKs to any IN/OUT requests until the software has decided what action to take for the new SETUP request.
 
 
 ## Register Table
 
 {{< incGenFromIpDesc "../data/usbdev.hjson" "registers" >}}
-
-
-## Application to FPGAs
-
-### Differential Receivers
-
-For better receive sensitivity, lower transmit jitter and to be standard compliant, a dedicated, differential USB transceiver such as the [USB1T11A](https://www.mouser.com/datasheet/2/149/fairchild%20semiconductor_usb1t11a-320893.pdf) or the [USB1T20](https://www.onsemi.com/pub/Collateral/USB1T20-D.pdf) must be used (see Section 7.1.4.1 of the [USB 2.0 specification](https://www.usb.org/document-library/usb-20-specification)).
-Depending on the selected USB transceiver, either the dp/dn or d/se0 transmit paths or can be used to interface the IP block with the transceiver.
-If the selected USB transceiver contains a differential receiver, its output may also be enabled and passed to the D input of the IP block.
-
-When prototyping on FPGAs the interface can be implemented with pseudo-differential 3.3V GPIO pins for D+ and D-. The receiver will oversample to recover the bitstream and clock alignment even if there is considerable timing skew between the signal paths.
-The full speed transmit always uses LVCMOS output drivers (see USB 2.0 spec Figure 7-1 and Figure 7-3) but there are two possible encodings: Either the D+ and D- values are directly driven from tx_dp and tx_dn, or there is a data value from tx_d and an indicator to force SE0 from tx_se0.
-External to the IP, these should be combined to drive the actual pins when transmit is enabled and receive otherwise.
-Using standard 3.3V IO pads allows use on most FPGAs although the drive strength and series termination resistors may need to be adjusted to meet the USB signal eye.
-On a Xilinx Artix-7 (and less well tested Spartan-7) part, setting the driver to the 8mA, FAST setting seems to work well with a 22R series termination (and with a 0R series termination).
-
-### FPGA Board Implementation With PMOD
-
-The interface was developed using the Digilent Nexys Video board with a PMOD card attached.
-A PMOD interface with direct connection to the SoC should be used (some PMOD interfaces include 100R series resistors which break the signal requirements for USB).
-The PMOD card includes two USB micro-B connectors and allows two USB interfaces to be used.
-The D+ and D- signals have 22R series resistors (in line with the USB spec) and there is a 1.5k pullup on D+ to the pullup enable signal.
-There is a resistive divider to set the sense pin at half of the VBUS voltage which enables detection on the FPGA without overvoltage on the pin.
-
-![PMOD Schematic](dualpmod-sch.svg)
-
-The PMOD PCB is [available from OSH Park](https://oshpark.com/shared_projects/xMKhTIHn).
-
-The PMOD design files for KiCad version 5 are in the [`usbdev/pmod`](https://github.com/lowRISC/opentitan/tree/master/hw/ip/usbdev/pmod) directory.
-The BOM can be filled by parts from Digikey.
-
-| Item | Qty | Reference(s) | Value | LibPart | Footprint | Datasheet | Category | DK_Datasheet_Link | DK_Detail_Page | Description | Digi-Key_PN | Family | MPN | Manufacturer | Status|
-|------|-----|--------------|-------|---------|-----------|-----------|----------|-------------------|----------------|-------------|-------------|--------|-----|--------------|-------|
-| 1 | 2 | J1, J2 | 10118193-0001LF | dualpmod-rescue:10118193-0001LF-dk_USB-DVI-HDMI-Connectors | digikey-footprints:USB_Micro_B_Female_10118193-0001LF | http://www.amphenol-icc.com/media/wysiwyg/files/drawing/10118193.pdf | Connectors, Interconnects | http://www.amphenol-icc.com/media/wysiwyg/files/drawing/10118193.pdf | /product-detail/en/amphenol-icc-fci/10118193-0001LF/609-4616-1-ND/2785380 | CONN RCPT USB2.0 MICRO B SMD R/A | 609-4616-1-ND | USB, DVI, HDMI Connectors | 10118193-0001LF | Amphenol ICC (FCI) | Active|
-| 2 | 1 | J3 | 68021-412HLF | dualpmod-rescue:68021-412HLF-dk_Rectangular-Connectors-Headers-Male-Pins | digikey-footprints:PinHeader_6x2_P2.54mm_Horizontal | https://cdn.amphenol-icc.com/media/wysiwyg/files/drawing/68020.pdf | Connectors, Interconnects | https://cdn.amphenol-icc.com/media/wysiwyg/files/drawing/68020.pdf | /product-detail/en/amphenol-icc-fci/68021-412HLF/609-3355-ND/1878558 | CONN HEADER R/A 12POS 2.54MM | 609-3355-ND | Rectangular Connectors - Headers, Male Pins | 68021-412HLF | Amphenol ICC (FCI) | Active|
-| 3 | 4 | R1, R2, R7, R8 | 5k1 | Device:R_Small_US | Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder | ~ |  |  |  |  | A126379CT-ND |  |  |  | |
-| 4 | 4 | R3, R4, R5, R6 | 22R | Device:R_Small_US | Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder | ~ |  |  |  |  | A126352CT-ND |  |  |  | |
-| 5 | 2 | R9, R10 | 1k5 | Device:R_Small_US | Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder | ~ |  |  |  |  | A106057CT-ND |  |  |  | |

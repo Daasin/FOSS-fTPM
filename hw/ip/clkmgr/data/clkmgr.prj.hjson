@@ -12,9 +12,9 @@
       {
         version:            "0.1",
         life_stage:         "L1",
-        design_stage:       "D2S",
+        design_stage:       "D2",
         verification_stage: "V2",
-        dif_stage:          "S2",
+        dif_stage:          "S1",
       }
     ]
 }

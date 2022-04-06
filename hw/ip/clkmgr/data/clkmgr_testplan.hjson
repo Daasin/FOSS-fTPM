@@ -11,8 +11,7 @@
                      "hw/dv/tools/dvsim/testplans/stress_all_with_reset_testplan.hjson",
                      // TODO: Top-level specific Hjson imported here. This will likely be resolved
                      // once we move to IPgen flow.
-                     "hw/top_earlgrey/ip/clkmgr/data/autogen/clkmgr_sec_cm_testplan.hjson",
-                     "hw/dv/tools/dvsim/testplans/sec_cm_count_testplan.hjson"]
+                     "hw/top_earlgrey/ip/clkmgr/data/autogen/clkmgr_sec_cm_testplan.hjson"]
   testpoints: [
     {
       name: smoke
@@ -239,10 +238,10 @@
       tests: ["clkmgr_frequency"]
     }
     {
-      name: stress_all
-      desc: '''This runs random sequences in succession.
+      name: stress
+      desc: '''Create standard stress tests.
 
-            Randomly chooses from the following sequences:
+            Stress with the following sequences:
             - clkmgr_extclk_vseq,
             - clkmgr_frequency_timeout_vseq,
             - clkmgr_frequency_vseq,
@@ -252,6 +251,19 @@
             '''
       milestone: V2
       tests: ["clkmgr_stress_all"]
+    }
+    {
+      name: stress_with_rand_reset
+      desc: '''Create standard stress tests with random reset.
+
+            Stress with the following sequences:
+            - clkmgr_extclk_vseq,
+            - clkmgr_peri_vseq,
+            - clkmgr_smoke_vseq,
+            - clkmgr_trans_vseq
+            '''
+      milestone: V3
+      tests: []
     }
   ]
 

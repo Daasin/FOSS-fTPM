@@ -704,23 +704,30 @@ package top_earlgrey_pkg;
 
   // Enumeration for DIO signals, used on both the top and chip-levels.
   typedef enum int unsigned {
-    DioUsbdevUsbDp = 0,
-    DioUsbdevUsbDn = 1,
-    DioSpiHost0Sd0 = 2,
-    DioSpiHost0Sd1 = 3,
-    DioSpiHost0Sd2 = 4,
-    DioSpiHost0Sd3 = 5,
-    DioSpiDeviceSd0 = 6,
-    DioSpiDeviceSd1 = 7,
-    DioSpiDeviceSd2 = 8,
-    DioSpiDeviceSd3 = 9,
-    DioSysrstCtrlAonEcRstL = 10,
-    DioSysrstCtrlAonFlashWpL = 11,
+    DioSpiHost0Sd0 = 0,
+    DioSpiHost0Sd1 = 1,
+    DioSpiHost0Sd2 = 2,
+    DioSpiHost0Sd3 = 3,
+    DioSpiDeviceSd0 = 4,
+    DioSpiDeviceSd1 = 5,
+    DioSpiDeviceSd2 = 6,
+    DioSpiDeviceSd3 = 7,
+    DioUsbdevD = 8,
+    DioUsbdevDp = 9,
+    DioUsbdevDn = 10,
+    DioSysrstCtrlAonEcRstL = 11,
     DioSpiDeviceSck = 12,
     DioSpiDeviceCsb = 13,
     DioSpiHost0Sck = 14,
     DioSpiHost0Csb = 15,
-    DioCount = 16
+    DioUsbdevSe0 = 16,
+    DioUsbdevDpPullup = 17,
+    DioUsbdevDnPullup = 18,
+    DioUsbdevTxModeSe = 19,
+    DioUsbdevSuspend = 20,
+    DioUsbdevRxEnable = 21,
+    DioSysrstCtrlAonFlashWpL = 22,
+    DioCount = 23
   } dio_e;
 
   // Raw MIO/DIO input array indices on chip-level.

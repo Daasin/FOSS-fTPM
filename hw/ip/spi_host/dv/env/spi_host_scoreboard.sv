@@ -28,15 +28,10 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
   local bit [7:0]                   rx_data_q[$];
 
   // interrupt bit vector
-  local bit [NumSpiHostIntr-1:0]    intr_state = 2'b00;
-  local bit [NumSpiHostIntr-1:0]    intr_enable = 2'b00;
-  local bit [NumSpiHostIntr-1:0]    intr_test = 2'b00;
-  local bit [4:0]                   error_enable = 5'b00000;
-
+  local bit [NumSpiHostIntr-1:0]    intr_exp;
   // hold dut registers
   local spi_host_command_t          spi_cmd_reg;
   local spi_host_ctrl_t             spi_ctrl_reg;
-  local spi_host_status_t           spi_status_reg;
   spi_host_configopts_t             spi_configopts;
   // control bits
   local bit                         spien              = 1'b0;
@@ -240,8 +235,6 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           if (sw_rst || spien) begin
             write_segment_q.delete();
             rx_data_q.delete();
-            in_tx_seg_cnt = 0;
-            checked_tx_seg_cnt = 0;
           end
         end
 
@@ -289,43 +282,23 @@ class spi_host_scoreboard extends cip_base_scoreboard #(
           host_wr_segment = new();
         end
         "intr_state": begin
-          intr_state[1]      = bit'(get_field_val(ral.intr_state.spi_event, item.a_data));
-          intr_state[0]      = bit'(get_field_val(ral.intr_state.error, item.a_data));
+          // TODO
           do_read_check = 1'b0;
         end
         "intr_enable": begin
-          intr_enable[1]      = bit'(get_field_val(ral.intr_enable.spi_event, item.a_data));
-          intr_enable[0]      = bit'(get_field_val(ral.intr_enable.error, item.a_data));
+          // TODO
         end
         "intr_test": begin
-          intr_test[1]      = bit'(get_field_val(ral.intr_test.spi_event, item.a_data));
-          intr_test[0]      = bit'(get_field_val(ral.intr_test.error, item.a_data));
+          // TODO
         end
         "status": begin
-         spi_status_reg.ready       =  get_field_val(ral.status.ready, item.a_data);
-         spi_status_reg.active      =  get_field_val(ral.status.active, item.a_data);
-         spi_status_reg.txfull      =  get_field_val(ral.status.txfull, item.a_data);
-         spi_status_reg.txempty     =  get_field_val(ral.status.txempty, item.a_data);
-         spi_status_reg.txstall     =  get_field_val(ral.status.txstall, item.a_data);
-         spi_status_reg.tx_wm       =  get_field_val(ral.status.txwm, item.a_data);
-         spi_status_reg.rxfull      =  get_field_val(ral.status.rxfull, item.a_data);
-         spi_status_reg.rxempty     =  get_field_val(ral.status.rxempty, item.a_data);
-         spi_status_reg.rxstall     =  get_field_val(ral.status.rxstall, item.a_data);
-         spi_status_reg.byteorder   =  get_field_val(ral.status.byteorder, item.a_data);
-         spi_status_reg.rx_wm       =  get_field_val(ral.status.rxwm, item.a_data);
-         spi_status_reg.cmd_qd      =  get_field_val(ral.status.cmdqd, item.a_data);
-         spi_status_reg.rx_qd       =  get_field_val(ral.status.rxqd, item.a_data);
-         spi_status_reg.tx_qd       =  get_field_val(ral.status.txqd, item.a_data);
+          // TODO
         end
         "csid": begin
           spi_ctrl_reg.csid = item.a_data;
         end
         "error_enable": begin
-          error_enable[4]      = bit'(get_field_val(ral.error_enable.csidinval, item.a_data));
-          error_enable[3]      = bit'(get_field_val(ral.error_enable.cmdinval, item.a_data));
-          error_enable[2]      = bit'(get_field_val(ral.error_enable.underflow, item.a_data));
-          error_enable[1]      = bit'(get_field_val(ral.error_enable.overflow, item.a_data));
-          error_enable[0]      = bit'(get_field_val(ral.error_enable.cmdbusy, item.a_data));
+          // TODO
         end
         default: begin
          // do nothing

@@ -11,7 +11,6 @@ interface clkmgr_if (
   input logic rst_main_n,
   input logic rst_usb_n
 );
-  import uvm_pkg::*;
   import clkmgr_env_pkg::*;
 
   // The ports to the dut side.
@@ -19,7 +18,7 @@ interface clkmgr_if (
   localparam int LcTxTWidth = $bits(lc_ctrl_pkg::lc_tx_t);
 
   // Encodes the transactional units that are idle.
-  mubi_hintables_t idle_i;
+  hintables_t idle_i;
 
   // pwrmgr req contains ip_clk_en, set to enable the gated clocks.
   pwrmgr_pkg::pwr_clk_req_t pwr_i;
@@ -44,9 +43,7 @@ interface clkmgr_if (
   prim_mubi_pkg::mubi4_t all_clk_byp_req;
   prim_mubi_pkg::mubi4_t all_clk_byp_ack;
 
-  prim_mubi_pkg::mubi4_t div_step_down_req;
-
-  prim_mubi_pkg::mubi4_t jitter_en_o;
+  logic jitter_en_o;
   clkmgr_pkg::clkmgr_out_t clocks_o;
 
   // Internal DUT signals.
@@ -71,20 +68,23 @@ interface clkmgr_if (
   always_comb
     clk_hints_csr = '{
     otbn_main: `CLKMGR_HIER.reg2hw.clk_hints.clk_main_otbn_hint.q,
+    otbn_io_div4: `CLKMGR_HIER.reg2hw.clk_hints.clk_io_div4_otbn_hint.q,
     kmac: `CLKMGR_HIER.reg2hw.clk_hints.clk_main_kmac_hint.q,
     hmac: `CLKMGR_HIER.reg2hw.clk_hints.clk_main_hmac_hint.q,
     aes: `CLKMGR_HIER.reg2hw.clk_hints.clk_main_aes_hint.q
   };
 
-  prim_mubi_pkg::mubi4_t extclk_ctrl_csr_sel;
+  // TODO: Change this to mubi4_t type.
+  lc_ctrl_pkg::lc_tx_t extclk_ctrl_csr_sel;
   always_comb begin
-    extclk_ctrl_csr_sel = prim_mubi_pkg::mubi4_t'(`CLKMGR_HIER.reg2hw.extclk_ctrl.sel.q);
+    extclk_ctrl_csr_sel = lc_ctrl_pkg::lc_tx_t'(`CLKMGR_HIER.reg2hw.extclk_ctrl.sel.q);
   end
 
-  prim_mubi_pkg::mubi4_t extclk_ctrl_csr_step_down;
+  // TODO: Change this to mubi4_t type.
+  lc_ctrl_pkg::lc_tx_t extclk_ctrl_csr_step_down;
   always_comb begin
-    extclk_ctrl_csr_step_down = prim_mubi_pkg::mubi4_t'(
-        `CLKMGR_HIER.reg2hw.extclk_ctrl.hi_speed_sel.q);
+    extclk_ctrl_csr_step_down = lc_ctrl_pkg::lc_tx_t'(
+        `CLKMGR_HIER.reg2hw.extclk_ctrl.low_speed_sel.q);
   end
 
   prim_mubi_pkg::mubi4_t jitter_enable_csr;
@@ -157,7 +157,7 @@ interface clkmgr_if (
   end
   always_comb usb_timeout_err = `CLKMGR_HIER.usb_timeout_err;
 
-  function automatic void update_idle(mubi_hintables_t value);
+  function automatic void update_idle(hintables_t value);
     idle_i = value;
   endfunction
 
@@ -191,12 +191,6 @@ interface clkmgr_if (
     all_clk_byp_ack = value;
   endfunction
 
-  function automatic void update_div_step_down_req(prim_mubi_pkg::mubi4_t value);
-    `uvm_info("clkmgr_if", $sformatf("In clkmgr_if update_div_step_down_req with %b", value),
-              UVM_MEDIUM)
-    div_step_down_req = value;
-  endfunction
-
   function automatic void update_io_clk_byp_ack(prim_mubi_pkg::mubi4_t value);
     io_clk_byp_ack = value;
   endfunction
@@ -218,7 +212,7 @@ interface clkmgr_if (
     endcase
   endfunction
 
-  task automatic init(mubi_hintables_t idle, prim_mubi_pkg::mubi4_t scanmode,
+  task automatic init(hintables_t idle, prim_mubi_pkg::mubi4_t scanmode,
                       lc_ctrl_pkg::lc_tx_t lc_debug_en = lc_ctrl_pkg::Off,
                       lc_ctrl_pkg::lc_tx_t lc_clk_byp_req = lc_ctrl_pkg::Off);
     `uvm_info("clkmgr_if", "In clkmgr_if init", UVM_MEDIUM)
@@ -238,21 +232,28 @@ interface clkmgr_if (
   // Pipelines and clocking blocks for peripheral clocks.
 
   logic [PIPELINE_DEPTH-1:0] clk_enable_div4_ffs;
+  logic [PIPELINE_DEPTH-1:0] clk_hint_otbn_div4_ffs;
   logic [PIPELINE_DEPTH-1:0] ip_clk_en_div4_ffs;
   always @(posedge clocks_o.clk_io_div4_powerup or negedge rst_io_n) begin
     if (rst_io_n) begin
       clk_enable_div4_ffs <= {
         clk_enable_div4_ffs[PIPELINE_DEPTH-2:0], clk_enables_csr.io_div4_peri_en
       };
+      clk_hint_otbn_div4_ffs <= {
+        clk_hint_otbn_div4_ffs[PIPELINE_DEPTH-2:0], clk_hints_csr[TransOtbnIoDiv4]
+      };
       ip_clk_en_div4_ffs <= {ip_clk_en_div4_ffs[PIPELINE_DEPTH-2:0], pwr_i.io_ip_clk_en};
     end else begin
       clk_enable_div4_ffs <= '0;
-      ip_clk_en_div4_ffs  <= '0;
+      clk_hint_otbn_div4_ffs <= '0;
+      ip_clk_en_div4_ffs <= '0;
     end
   end
   clocking peri_div4_cb @(posedge clocks_o.clk_io_div4_powerup or negedge rst_io_n);
     input ip_clk_en = ip_clk_en_div4_ffs[PIPELINE_DEPTH-1];
     input clk_enable = clk_enable_div4_ffs[PIPELINE_DEPTH-1];
+    input clk_hint_otbn = clk_hint_otbn_div4_ffs[PIPELINE_DEPTH-1];
+    input otbn_idle = idle_i[TransOtbnIoDiv4];
   endclocking
 
   logic [PIPELINE_DEPTH-1:0] clk_enable_div2_ffs;

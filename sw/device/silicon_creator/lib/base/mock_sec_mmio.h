@@ -5,7 +5,6 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_BASE_MOCK_SEC_MMIO_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_BASE_MOCK_SEC_MMIO_H_
 
-#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/lib/base/testing/mock_mmio_test_utils.h"
 #include "sw/device/silicon_creator/lib/base/sec_mmio.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
@@ -20,7 +19,7 @@ namespace internal {
 /**
  * Mock class for abs_mmio.c.
  */
-class MockSecMmio : public global_mock::GlobalMock<MockSecMmio> {
+class MockSecMmio : public GlobalMock<MockSecMmio> {
  public:
   MOCK_METHOD(void, Init, ());
   MOCK_METHOD(uint32_t, Read32, (uint32_t addr));

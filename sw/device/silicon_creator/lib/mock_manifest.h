@@ -5,7 +5,6 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_MANIFEST_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_MANIFEST_H_
 
-#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/silicon_creator/lib/manifest.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
 
@@ -15,7 +14,7 @@ namespace internal {
 /**
  * Mock class for manifest.h.
  */
-class MockManifest : public global_mock::GlobalMock<MockManifest> {
+class MockManifest : public GlobalMock<MockManifest> {
  public:
   MOCK_METHOD(rom_error_t, Check, (const manifest_t *));
   MOCK_METHOD(manifest_digest_region_t, DigestRegion, (const manifest_t *));

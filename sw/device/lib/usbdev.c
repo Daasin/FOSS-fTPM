@@ -216,35 +216,28 @@ void usbdev_set_deviceid(usbdev_ctx_t *ctx, int deviceid) {
 }
 
 void usbdev_halt(usbdev_ctx_t *ctx, int endpoint, int enable) {
-  uint32_t reg_offset = endpoint_is_in(endpoint) ? USBDEV_IN_STALL_REG_OFFSET
-                                                 : USBDEV_OUT_STALL_REG_OFFSET;
-  uint32_t epbit = 1 << endpoint_number(endpoint);
-  uint32_t stall = REG32(USBDEV_BASE_ADDR + reg_offset);
+  // FIXME: The two endpoints are supposed to be independent
+  uint32_t epbit = 1 << endpoint;
+  uint32_t stall = REG32(USBDEV_BASE_ADDR + USBDEV_IN_STALL_REG_OFFSET);
   if (enable) {
     stall |= epbit;
   } else {
     stall &= ~epbit;
   }
-  REG32(USBDEV_BASE_ADDR + reg_offset) = stall;
+  REG32(USBDEV_BASE_ADDR + USBDEV_IN_STALL_REG_OFFSET) = stall;
+  REG32(USBDEV_BASE_ADDR + USBDEV_OUT_STALL_REG_OFFSET) = stall;
   ctx->halted = stall;
   // TODO future addition would be to callback the endpoint driver
   // for now it just sees its traffic has stopped
 }
 
 void usbdev_set_iso(usbdev_ctx_t *ctx, int endpoint, int enable) {
-  uint32_t reg_offset;
-  uint32_t ep_number = endpoint_number(endpoint);
-  if (endpoint_is_in(endpoint)) {
-    reg_offset = USBDEV_IN_ISO_REG_OFFSET;
-  } else {
-    reg_offset = USBDEV_OUT_ISO_REG_OFFSET;
-  }
   if (enable) {
-    REG32(USBDEV_BASE_ADDR + reg_offset) =
-        SETBIT(REG32(USBDEV_BASE_ADDR + reg_offset), ep_number);
+    REG32(USBDEV_BASE_ADDR + USBDEV_ISO_REG_OFFSET) =
+        SETBIT(REG32(USBDEV_BASE_ADDR + USBDEV_ISO_REG_OFFSET), endpoint);
   } else {
-    REG32(USBDEV_BASE_ADDR + reg_offset) =
-        CLRBIT(REG32(USBDEV_BASE_ADDR + reg_offset), ep_number);
+    REG32(USBDEV_BASE_ADDR + USBDEV_ISO_REG_OFFSET) =
+        CLRBIT(REG32(USBDEV_BASE_ADDR + USBDEV_ISO_REG_OFFSET), endpoint);
   }
 }
 
@@ -267,18 +260,11 @@ void usbdev_set_ep0_stall(usbdev_ctx_t *ctx, int stall) {
   }
 }
 
-void usbdev_clear_out_nak(usbdev_ctx_t *ctx, int ep) {
-  uint32_t rxen = REG32(USBDEV_BASE_ADDR + USBDEV_RXENABLE_OUT_REG_OFFSET);
-  rxen |= (1 << (ep + USBDEV_RXENABLE_OUT_OUT_0_BIT));
-  REG32(USBDEV_BASE_ADDR + USBDEV_RXENABLE_OUT_REG_OFFSET) = rxen;
-}
-
 // TODO got hang with this inline
 int usbdev_can_rem_wake(usbdev_ctx_t *ctx) { return ctx->can_wake; }
 
-void usbdev_endpoint_setup(usbdev_ctx_t *ctx, int ep,
-                           usbdev_out_transfer_mode_t out_mode, void *ep_ctx,
-                           void (*tx_done)(void *),
+void usbdev_endpoint_setup(usbdev_ctx_t *ctx, int ep, int enableout,
+                           void *ep_ctx, void (*tx_done)(void *),
                            void (*rx)(void *, usbbufid_t, int, int),
                            void (*flush)(void *), void (*reset)(void *)) {
   ctx->ep_ctx[ep] = ep_ctx;
@@ -291,19 +277,13 @@ void usbdev_endpoint_setup(usbdev_ctx_t *ctx, int ep,
   tx_ep_en |= (1 << (ep + USBDEV_EP_IN_ENABLE_ENABLE_0_BIT));
   REG32(USBDEV_BASE_ADDR + USBDEV_EP_IN_ENABLE_REG_OFFSET) = tx_ep_en;
 
-  if (out_mode != kUsbdevOutDisabled) {
+  if (enableout) {
     uint32_t rxen = REG32(USBDEV_BASE_ADDR + USBDEV_RXENABLE_OUT_REG_OFFSET);
     rxen |= (1 << (ep + USBDEV_RXENABLE_OUT_OUT_0_BIT));
     REG32(USBDEV_BASE_ADDR + USBDEV_RXENABLE_OUT_REG_OFFSET) = rxen;
     uint32_t ep_en = REG32(USBDEV_BASE_ADDR + USBDEV_EP_OUT_ENABLE_REG_OFFSET);
     ep_en |= (1 << (ep + USBDEV_EP_OUT_ENABLE_ENABLE_0_BIT));
     REG32(USBDEV_BASE_ADDR + USBDEV_EP_OUT_ENABLE_REG_OFFSET) = ep_en;
-  }
-  if (out_mode == kUsbdevOutMessage) {
-    uint32_t set_nak_out =
-        REG32(USBDEV_BASE_ADDR + USBDEV_SET_NAK_OUT_REG_OFFSET);
-    set_nak_out |= (1 << (ep + USBDEV_SET_NAK_OUT_ENABLE_0_BIT));
-    REG32(USBDEV_BASE_ADDR + USBDEV_SET_NAK_OUT_REG_OFFSET) = set_nak_out;
   }
 }
 
@@ -312,12 +292,10 @@ void usbdev_connect(usbdev_ctx_t *ctx) {
       (1 << USBDEV_USBCTRL_ENABLE_BIT);
 }
 
-void usbdev_init(usbdev_ctx_t *ctx, bool pinflip, bool en_diff_rcvr,
-                 bool tx_use_d_se0) {
+void usbdev_init(usbdev_ctx_t *ctx, bool pinflip, bool diff_rx, bool diff_tx) {
   // setup context
   for (int i = 0; i < NUM_ENDPOINTS; i++) {
-    usbdev_endpoint_setup(ctx, i, kUsbdevOutDisabled, NULL, NULL, NULL, NULL,
-                          NULL);
+    usbdev_endpoint_setup(ctx, i, 0, NULL, NULL, NULL, NULL, NULL);
   }
   ctx->halted = 0;
   ctx->can_wake = 0;
@@ -340,10 +318,11 @@ void usbdev_init(usbdev_ctx_t *ctx, bool pinflip, bool en_diff_rcvr,
   REG32(USBDEV_BASE_ADDR + USBDEV_IN_STALL_REG_OFFSET) = 0;
   REG32(USBDEV_BASE_ADDR + USBDEV_OUT_STALL_REG_OFFSET) = 0;
 
-  uint32_t phy_config = (pinflip << USBDEV_PHY_CONFIG_PINFLIP_BIT) |
-                        (en_diff_rcvr << USBDEV_PHY_CONFIG_USE_DIFF_RCVR_BIT) |
-                        (tx_use_d_se0 << USBDEV_PHY_CONFIG_TX_USE_D_SE0_BIT) |
-                        (1 << USBDEV_PHY_CONFIG_EOP_SINGLE_BIT_BIT);
+  uint32_t phy_config =
+      (pinflip << USBDEV_PHY_CONFIG_PINFLIP_BIT) |
+      (diff_rx << USBDEV_PHY_CONFIG_RX_DIFFERENTIAL_MODE_BIT) |
+      (diff_tx << USBDEV_PHY_CONFIG_TX_DIFFERENTIAL_MODE_BIT) |
+      (1 << USBDEV_PHY_CONFIG_EOP_SINGLE_BIT_BIT);
   REG32(USBDEV_BASE_ADDR + USBDEV_PHY_CONFIG_REG_OFFSET) = phy_config;
 }
 

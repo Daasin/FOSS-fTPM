@@ -131,21 +131,6 @@
       name: spi_device_tpm_read
       uvm_test_seq: spi_device_tpm_read_vseq
     }
-    
-    {
-      name: spi_device_pass_cmd_filtering
-      uvm_test_seq: spi_device_pass_cmd_filtering_vseq
-    }
-    
-    {
-      name: spi_device_pass_addr_translation
-      uvm_test_seq: spi_device_pass_addr_translation_vseq
-    }
-    
-    {
-      name: spi_device_pass_data_translation
-      uvm_test_seq: spi_device_pass_data_translation_vseq
-    }
   ]
 
   // List of regressions.

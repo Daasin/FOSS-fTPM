@@ -116,36 +116,6 @@
       package: "",
       default: "1'b0"
     },
-    { name:    "usb_dppullup_en_upwr",
-      type:    "uni",
-      act:     "rcv",
-      package: "",
-      struct:  "logic",
-      width:   "1"
-    },
-    { name:    "usb_dnpullup_en_upwr",
-      type:    "uni",
-      act:     "rcv",
-      package: "",
-      struct:  "logic",
-      width:   "1"
-    },
-    { name:    "usb_dppullup_en",
-      type:    "uni",
-      act:     "req",
-      package: "",
-      struct:  "logic",
-      width:   "1"
-      default: "1'b0"
-    },
-    { name:    "usb_dnpullup_en",
-      type:    "uni",
-      act:     "req",
-      package: "",
-      struct:  "logic",
-      width:   "1"
-      default: "1'b0"
-    },
     { struct:  "logic",
       type:    "uni",
       name:    "usb_wkup_req",
@@ -775,9 +745,6 @@
                                 Note that these registers are synced to the always-on clock.
                                 The first write access always completes immediately.
                                 However, read/write accesses following a write will block until that write has completed.
-
-                                Note that the wkup detector should be disabled by setting !!WKUP_DETECTOR_EN_0 before changing the detection mode.
-                                The reason for that is that the pulse width counter is NOT cleared upon a mode change while the detector is enabled.
                                 '''
                   count:        "NWkupDetect",
                   compact:      "false",
@@ -791,7 +758,7 @@
                     { bits: "2:0",
                       name: "MODE",
                       resval: 0,
-                      desc: "Wakeup detection mode. Out of range values default to Posedge."
+                      desc: "Wakeup detection mode."
                       enum: [
                         { value: "0",
                           name: "Posedge",

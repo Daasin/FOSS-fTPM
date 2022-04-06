@@ -296,13 +296,8 @@ class CompileSim(Deploy):
     cmds_list_vars = ["pre_build_cmds", "post_build_cmds"]
     weight = 5
 
-    # A static, randomized seed that is fixed across all builds.
-    # This value can be overridden by --build-seed switch.
-    seed = random.getrandbits(32)
-
     def __init__(self, build_mode, sim_cfg):
         self.build_mode_obj = build_mode
-        self.seed = CompileSim.seed
         super().__init__(sim_cfg)
 
     def _define_attrs(self):
@@ -356,13 +351,8 @@ class CompileOneShot(Deploy):
 
     target = "build"
 
-    # A static, randomized seed that is fixed across all builds.
-    # This value can be overridden by --build-seed switch.
-    seed = random.getrandbits(32)
-
     def __init__(self, build_mode, sim_cfg):
         self.build_mode_obj = build_mode
-        self.seed = CompileOneShot.seed
         super().__init__(sim_cfg)
 
     def _define_attrs(self):

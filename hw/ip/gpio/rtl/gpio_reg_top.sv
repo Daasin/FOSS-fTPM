@@ -219,9 +219,6 @@ module gpio_reg_top (
 
 
   // R[intr_test]: V(True)
-  logic intr_test_qe;
-  logic [0:0] intr_test_flds_we;
-  assign intr_test_qe = &intr_test_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_intr_test (
@@ -230,17 +227,13 @@ module gpio_reg_top (
     .wd     (intr_test_wd),
     .d      ('0),
     .qre    (),
-    .qe     (intr_test_flds_we[0]),
+    .qe     (reg2hw.intr_test.qe),
     .q      (reg2hw.intr_test.q),
     .qs     ()
   );
-  assign reg2hw.intr_test.qe = intr_test_qe;
 
 
   // R[alert_test]: V(True)
-  logic alert_test_qe;
-  logic [0:0] alert_test_flds_we;
-  assign alert_test_qe = &alert_test_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test (
@@ -249,11 +242,10 @@ module gpio_reg_top (
     .wd     (alert_test_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[0]),
+    .qe     (reg2hw.alert_test.qe),
     .q      (reg2hw.alert_test.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.qe = alert_test_qe;
 
 
   // R[data_in]: V(False)
@@ -283,9 +275,6 @@ module gpio_reg_top (
 
 
   // R[direct_out]: V(True)
-  logic direct_out_qe;
-  logic [0:0] direct_out_flds_we;
-  assign direct_out_qe = &direct_out_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_direct_out (
@@ -294,17 +283,13 @@ module gpio_reg_top (
     .wd     (direct_out_wd),
     .d      (hw2reg.direct_out.d),
     .qre    (),
-    .qe     (direct_out_flds_we[0]),
+    .qe     (reg2hw.direct_out.qe),
     .q      (reg2hw.direct_out.q),
     .qs     (direct_out_qs)
   );
-  assign reg2hw.direct_out.qe = direct_out_qe;
 
 
   // R[masked_out_lower]: V(True)
-  logic masked_out_lower_qe;
-  logic [1:0] masked_out_lower_flds_we;
-  assign masked_out_lower_qe = &masked_out_lower_flds_we;
   //   F[data]: 15:0
   prim_subreg_ext #(
     .DW    (16)
@@ -314,11 +299,10 @@ module gpio_reg_top (
     .wd     (masked_out_lower_data_wd),
     .d      (hw2reg.masked_out_lower.data.d),
     .qre    (),
-    .qe     (masked_out_lower_flds_we[0]),
+    .qe     (reg2hw.masked_out_lower.data.qe),
     .q      (reg2hw.masked_out_lower.data.q),
     .qs     (masked_out_lower_data_qs)
   );
-  assign reg2hw.masked_out_lower.data.qe = masked_out_lower_qe;
 
   //   F[mask]: 31:16
   prim_subreg_ext #(
@@ -329,17 +313,13 @@ module gpio_reg_top (
     .wd     (masked_out_lower_mask_wd),
     .d      (hw2reg.masked_out_lower.mask.d),
     .qre    (),
-    .qe     (masked_out_lower_flds_we[1]),
+    .qe     (reg2hw.masked_out_lower.mask.qe),
     .q      (reg2hw.masked_out_lower.mask.q),
     .qs     ()
   );
-  assign reg2hw.masked_out_lower.mask.qe = masked_out_lower_qe;
 
 
   // R[masked_out_upper]: V(True)
-  logic masked_out_upper_qe;
-  logic [1:0] masked_out_upper_flds_we;
-  assign masked_out_upper_qe = &masked_out_upper_flds_we;
   //   F[data]: 15:0
   prim_subreg_ext #(
     .DW    (16)
@@ -349,11 +329,10 @@ module gpio_reg_top (
     .wd     (masked_out_upper_data_wd),
     .d      (hw2reg.masked_out_upper.data.d),
     .qre    (),
-    .qe     (masked_out_upper_flds_we[0]),
+    .qe     (reg2hw.masked_out_upper.data.qe),
     .q      (reg2hw.masked_out_upper.data.q),
     .qs     (masked_out_upper_data_qs)
   );
-  assign reg2hw.masked_out_upper.data.qe = masked_out_upper_qe;
 
   //   F[mask]: 31:16
   prim_subreg_ext #(
@@ -364,17 +343,13 @@ module gpio_reg_top (
     .wd     (masked_out_upper_mask_wd),
     .d      (hw2reg.masked_out_upper.mask.d),
     .qre    (),
-    .qe     (masked_out_upper_flds_we[1]),
+    .qe     (reg2hw.masked_out_upper.mask.qe),
     .q      (reg2hw.masked_out_upper.mask.q),
     .qs     ()
   );
-  assign reg2hw.masked_out_upper.mask.qe = masked_out_upper_qe;
 
 
   // R[direct_oe]: V(True)
-  logic direct_oe_qe;
-  logic [0:0] direct_oe_flds_we;
-  assign direct_oe_qe = &direct_oe_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_direct_oe (
@@ -383,17 +358,13 @@ module gpio_reg_top (
     .wd     (direct_oe_wd),
     .d      (hw2reg.direct_oe.d),
     .qre    (),
-    .qe     (direct_oe_flds_we[0]),
+    .qe     (reg2hw.direct_oe.qe),
     .q      (reg2hw.direct_oe.q),
     .qs     (direct_oe_qs)
   );
-  assign reg2hw.direct_oe.qe = direct_oe_qe;
 
 
   // R[masked_oe_lower]: V(True)
-  logic masked_oe_lower_qe;
-  logic [1:0] masked_oe_lower_flds_we;
-  assign masked_oe_lower_qe = &masked_oe_lower_flds_we;
   //   F[data]: 15:0
   prim_subreg_ext #(
     .DW    (16)
@@ -403,11 +374,10 @@ module gpio_reg_top (
     .wd     (masked_oe_lower_data_wd),
     .d      (hw2reg.masked_oe_lower.data.d),
     .qre    (),
-    .qe     (masked_oe_lower_flds_we[0]),
+    .qe     (reg2hw.masked_oe_lower.data.qe),
     .q      (reg2hw.masked_oe_lower.data.q),
     .qs     (masked_oe_lower_data_qs)
   );
-  assign reg2hw.masked_oe_lower.data.qe = masked_oe_lower_qe;
 
   //   F[mask]: 31:16
   prim_subreg_ext #(
@@ -418,17 +388,13 @@ module gpio_reg_top (
     .wd     (masked_oe_lower_mask_wd),
     .d      (hw2reg.masked_oe_lower.mask.d),
     .qre    (),
-    .qe     (masked_oe_lower_flds_we[1]),
+    .qe     (reg2hw.masked_oe_lower.mask.qe),
     .q      (reg2hw.masked_oe_lower.mask.q),
     .qs     (masked_oe_lower_mask_qs)
   );
-  assign reg2hw.masked_oe_lower.mask.qe = masked_oe_lower_qe;
 
 
   // R[masked_oe_upper]: V(True)
-  logic masked_oe_upper_qe;
-  logic [1:0] masked_oe_upper_flds_we;
-  assign masked_oe_upper_qe = &masked_oe_upper_flds_we;
   //   F[data]: 15:0
   prim_subreg_ext #(
     .DW    (16)
@@ -438,11 +404,10 @@ module gpio_reg_top (
     .wd     (masked_oe_upper_data_wd),
     .d      (hw2reg.masked_oe_upper.data.d),
     .qre    (),
-    .qe     (masked_oe_upper_flds_we[0]),
+    .qe     (reg2hw.masked_oe_upper.data.qe),
     .q      (reg2hw.masked_oe_upper.data.q),
     .qs     (masked_oe_upper_data_qs)
   );
-  assign reg2hw.masked_oe_upper.data.qe = masked_oe_upper_qe;
 
   //   F[mask]: 31:16
   prim_subreg_ext #(
@@ -453,11 +418,10 @@ module gpio_reg_top (
     .wd     (masked_oe_upper_mask_wd),
     .d      (hw2reg.masked_oe_upper.mask.d),
     .qre    (),
-    .qe     (masked_oe_upper_flds_we[1]),
+    .qe     (reg2hw.masked_oe_upper.mask.qe),
     .q      (reg2hw.masked_oe_upper.mask.q),
     .qs     (masked_oe_upper_mask_qs)
   );
-  assign reg2hw.masked_oe_upper.mask.qe = masked_oe_upper_qe;
 
 
   // R[intr_ctrl_en_rising]: V(False)

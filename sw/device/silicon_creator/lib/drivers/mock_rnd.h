@@ -5,7 +5,6 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_DRIVERS_MOCK_RND_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_DRIVERS_MOCK_RND_H_
 
-#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/silicon_creator/lib/drivers/rnd.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
 
@@ -15,7 +14,7 @@ namespace internal {
 /**
  * Mock class for rnd.c.
  */
-class MockRnd : public global_mock::GlobalMock<MockRnd> {
+class MockRnd : public GlobalMock<MockRnd> {
  public:
   MOCK_METHOD(uint32_t, Uint32, ());
 };

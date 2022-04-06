@@ -119,44 +119,40 @@
       type: host
       clock: clk_main_i
       reset: rst_main_ni
-      pipeline: false
+      pipeline: "false"
       xbar: false
       stub: false
       inst_type: ""
-      req_fifo_pass: true
-      rsp_fifo_pass: true
+      pipeline_byp: "true"
     }
     {
       name: rv_core_ibex.cored
       type: host
       clock: clk_main_i
       reset: rst_main_ni
-      pipeline: false
+      pipeline: "false"
       xbar: false
       stub: false
       inst_type: ""
-      req_fifo_pass: true
-      rsp_fifo_pass: true
+      pipeline_byp: "true"
     }
     {
       name: rv_dm.sba
       type: host
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       xbar: false
       stub: false
       inst_type: ""
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: rv_dm.regs
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: rv_dm
       addr_range:
       [
@@ -167,15 +163,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: rv_dm.rom
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: rv_dm
       addr_range:
       [
@@ -186,15 +181,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: rom_ctrl.rom
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: true
-      rsp_fifo_pass: false
+      pipeline: "false"
       inst_type: rom_ctrl
       addr_range:
       [
@@ -205,14 +199,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline_byp: "true"
     }
     {
       name: rom_ctrl.regs
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      pipeline: false
+      pipeline: "false"
       inst_type: rom_ctrl
       addr_range:
       [
@@ -223,18 +217,17 @@
       ]
       xbar: false
       stub: false
-      req_fifo_pass: true
+      pipeline_byp: "true"
     }
     {
       name: peri
       type: device
       clock: clk_fixed_i
       reset: rst_fixed_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       xbar: true
       stub: false
-      pipeline: true
+      pipeline: "true"
       addr_range:
       [
         {
@@ -252,7 +245,7 @@
       type: device
       clock: clk_spi_host0_i
       reset: rst_spi_host0_ni
-      pipeline: false
+      pipeline: "false"
       inst_type: spi_host
       addr_range:
       [
@@ -263,14 +256,14 @@
       ]
       xbar: false
       stub: false
-      req_fifo_pass: true
+      pipeline_byp: "true"
     }
     {
       name: spi_host1
       type: device
       clock: clk_spi_host1_i
       reset: rst_spi_host1_ni
-      pipeline: false
+      pipeline: "false"
       inst_type: spi_host
       addr_range:
       [
@@ -281,15 +274,14 @@
       ]
       xbar: false
       stub: false
-      req_fifo_pass: true
+      pipeline_byp: "true"
     }
     {
       name: flash_ctrl.core
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: flash_ctrl
       addr_range:
       [
@@ -300,15 +292,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: flash_ctrl.prim
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: flash_ctrl
       addr_range:
       [
@@ -319,15 +310,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: flash_ctrl.mem
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: flash_ctrl
       addr_range:
       [
@@ -338,15 +328,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: hmac
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: hmac
       addr_range:
       [
@@ -357,15 +346,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: kmac
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: kmac
       addr_range:
       [
@@ -376,15 +364,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: aes
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: aes
       addr_range:
       [
@@ -395,15 +382,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: entropy_src
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: entropy_src
       addr_range:
       [
@@ -414,15 +400,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: csrng
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: csrng
       addr_range:
       [
@@ -433,15 +418,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: edn0
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: edn
       addr_range:
       [
@@ -452,15 +436,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: edn1
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: edn
       addr_range:
       [
@@ -471,7 +454,7 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: rv_plic
@@ -479,8 +462,7 @@
       clock: clk_main_i
       reset: rst_main_ni
       inst_type: rv_plic
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       addr_range:
       [
         {
@@ -490,15 +472,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: otbn
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: otbn
       addr_range:
       [
@@ -509,15 +490,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: keymgr
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: keymgr
       addr_range:
       [
@@ -528,15 +508,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: rv_core_ibex.cfg
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      req_fifo_pass: false
-      rsp_fifo_pass: false
+      pipeline_byp: "false"
       inst_type: rv_core_ibex
       addr_range:
       [
@@ -547,14 +526,14 @@
       ]
       xbar: false
       stub: false
-      pipeline: true
+      pipeline: "true"
     }
     {
       name: sram_ctrl_main.regs
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      pipeline: false
+      pipeline: "false"
       inst_type: sram_ctrl
       addr_range:
       [
@@ -565,14 +544,14 @@
       ]
       xbar: false
       stub: false
-      req_fifo_pass: true
+      pipeline_byp: "true"
     }
     {
       name: sram_ctrl_main.ram
       type: device
       clock: clk_main_i
       reset: rst_main_ni
-      pipeline: false
+      pipeline: "false"
       inst_type: sram_ctrl
       addr_range:
       [
@@ -583,7 +562,7 @@
       ]
       xbar: false
       stub: false
-      req_fifo_pass: true
+      pipeline_byp: "true"
     }
   ]
   clock: clk_main_i

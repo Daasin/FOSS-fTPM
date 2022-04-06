@@ -27,9 +27,9 @@ class keymgr_hwsw_invalid_input_vseq extends keymgr_sw_invalid_input_vseq;
     return 0;
   endfunction
 
-  task body();
-    // invalid HW input may cause unstable data on kmac interface
-    $assertoff(0, "tb.keymgr_kmac_intf.req_data_if.H_DataStableWhenValidAndNotReady_A");
-    super.body();
-  endtask : body
+  task post_start();
+    expect_fatal_alerts = 1;
+    super.post_start();
+  endtask
+
 endclass : keymgr_hwsw_invalid_input_vseq

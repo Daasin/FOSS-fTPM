@@ -190,7 +190,7 @@ Tests         | [FPV_ALL_ASSERTIONS_WRITTEN][]          | N/A         |
 Tests         | [FPV_ALL_ASSUMPTIONS_REVIEWED][]        | N/A         |
 Tests         | [SIM_FW_SIMULATED][]                    | N/A         |
 Regression    | [SIM_NIGHTLY_REGRESSION_V2][]           | Done        |
-Coverage      | [SIM_CODE_COVERAGE_V2][]                | Done        | RV_TAP excluded except port toggle, condition coverage waived until V2S
+Coverage      | [SIM_CODE_COVERAGE_V2][]                | Done        | RV_TAP excluded
 Coverage      | [SIM_FUNCTIONAL_COVERAGE_V2][]          | Done        |
 Coverage      | [FPV_CODE_COVERAGE_V2][]                | N/A         |
 Coverage      | [FPV_COI_COVERAGE_V2][]                 | N/A         |
@@ -230,13 +230,11 @@ Review        | [V3_CHECKLIST_SCOPED][]                 | Done        |
 Documentation | [SEC_CM_TESTPLAN_COMPLETED][]           | Not Started |
 Tests         | [FPV_SEC_CM_VERIFIED][]                 | Not Started |
 Tests         | [SIM_SEC_CM_VERIFIED][]                 | Not Started |
-Coverage      | [SIM_COVERAGE_REVIEWED][]               | Not Started |
 Review        | [SEC_CM_DV_REVIEWED][]                  | Not Started |
 
 [SEC_CM_TESTPLAN_COMPLETED]:          {{<relref "/doc/project/checklist.md#sec_cm_testplan_completed" >}}
 [FPV_SEC_CM_VERIFIED]:                {{<relref "/doc/project/checklist.md#fpv_sec_cm_verified" >}}
 [SIM_SEC_CM_VERIFIED]:                {{<relref "/doc/project/checklist.md#sim_sec_cm_verified" >}}
-[SIM_COVERAGE_REVIEWED]:              {{<relref "/doc/project/checklist.md#sim_coverage_reviewed" >}}
 [SEC_CM_DV_REVIEWED]:                 {{<relref "/doc/project/checklist.md#sec_cm_dv_reviewed" >}}
 
 ### V3

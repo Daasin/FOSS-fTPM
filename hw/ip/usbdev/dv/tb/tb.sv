@@ -63,21 +63,29 @@ module tb;
 
     // USB Interface
     // TOOD: need to hook up an interface
-    .cio_usb_dp_i         (1'b1),
-    .cio_usb_dn_i         (1'b0),
-    .usb_rx_d_i           (1'b0),
-    .cio_usb_dp_o         (),
-    .cio_usb_dp_en_o      (),
-    .cio_usb_dn_o         (),
-    .cio_usb_dn_en_o      (),
-    .usb_tx_d_o           (),
-    .usb_tx_se0_o         (),
+    .cio_d_i              (1'b0),
+    .cio_dp_i             (1'b1),
+    .cio_dn_i             (1'b0),
+    .cio_d_o              (),
+    .cio_d_en_o           (),
+    .cio_dp_o             (),
+    .cio_dp_en_o          (),
+    .cio_dn_o             (),
+    .cio_dn_en_o          (),
 
     .cio_sense_i          (1'b0),
-    .usb_dp_pullup_o      (),
-    .usb_dn_pullup_o      (),
-    .usb_rx_enable_o      (),
-    .usb_tx_use_d_se0_o   (),
+    .cio_se0_o            (),
+    .cio_se0_en_o         (),
+    .cio_dp_pullup_o      (),
+    .cio_dp_pullup_en_o   (),
+    .cio_dn_pullup_o      (),
+    .cio_dn_pullup_en_o   (),
+    .cio_tx_mode_se_o     (),
+    .cio_tx_mode_se_en_o  (),
+    .cio_suspend_o        (),
+    .cio_suspend_en_o     (),
+    .cio_rx_enable_o      (),
+    .cio_rx_enable_en_o   (),
 
     // Direct pinmux aon detect connections
     .usb_out_of_rst_o     (),
@@ -88,7 +96,7 @@ module tb;
     // Events and debug info from wakeup module
     .usb_aon_bus_reset_i  ('0),
     .usb_aon_sense_lost_i ('0),
-    .usb_state_debug_i    (usbdev_pkg::AwkIdle),
+    .usb_state_debug_i    ('0),
 
     // SOF reference for clock calibration
     .usb_ref_val_o        (),

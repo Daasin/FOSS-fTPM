@@ -8,7 +8,6 @@
                      "hw/dv/tools/dvsim/testplans/mem_testplan.hjson",
                      "hw/dv/tools/dvsim/testplans/passthru_mem_intg_testplan.hjson",
                      "hw/dv/tools/dvsim/testplans/tl_device_access_types_testplan.hjson",
-                     "hw/dv/tools/dvsim/testplans/sec_cm_fsm_testplan.hjson",
                      "rom_ctrl_sec_cm_testplan.hjson"]
   testpoints: [
     {
@@ -65,14 +64,6 @@
             - Randomly add reset between each sequence'''
       milestone: V2
       tests: ["rom_ctrl_stress_all"]
-    }
-    {
-      name: kmac_err_chk
-      desc: '''
-            - Generate error from KMAC when it responds with KMAC digest image.
-            - Check that ROM controller goes into invalid state'''
-      milestone: V2
-      tests: ["rom_ctrl_kmac_err_chk"]
     }
 
   ]

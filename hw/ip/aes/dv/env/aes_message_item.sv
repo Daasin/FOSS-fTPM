@@ -12,37 +12,36 @@ class aes_message_item extends uvm_sequence_item;
   ///////////////////////////////////////
 
   // min number of data bytes
-  int               message_len_max       = 16;
+  int               message_len_max      = 16;
   // Max number of data bytes
-  int               message_len_min       = 1;
+  int               message_len_min      = 1;
   // percentage of configuration errors
-  int               config_error_pct      = 20;
-  cfg_error_type_t  config_error_type_en  = 3'b000;
+  int               config_error_pct     = 20;
   // errors enabled mask
-  error_types_t     error_types           = 3'b000;
+  error_types_t     error_types          = 3'b000;
 
   // manual mode percentage
-  int               manual_operation_pct  = 10;
+  int               manual_operation_pct = 10;
   // maskout unused key bits
-  bit               keymask               = 0;
+  bit               keymask              = 0;
   // use fixed key
-  bit               fixed_key_en          = 0;
+  bit               fixed_key_en         = 0;
   // used fixed key length
-  bit               fixed_keylen_en       = 0;
+  bit               fixed_keylen_en      = 0;
   // use fixed data (same data for each block in a message
-  bit               fixed_data_en         = 0;
+  bit               fixed_data_en        = 0;
   // fixed operation
-  bit               fixed_operation_en    = 0;
+  bit               fixed_operation_en   = 0;
   // fixed IV
-  bit               fixed_iv_en           = 0;
+  bit               fixed_iv_en          = 0;
   // sideload
-  int               sideload_pct          = 0;
-  rand bit          sideload_en           = 0;
+  int               sideload_pct         = 0;
+  rand bit          sideload_en          = 0;
 
   // clear register percentage
   // percentage of items that will try to clear
   // one or more registers
-  int               clear_reg_pct         = 0;
+  int               clear_reg_pct        = 0;
 
 
   // predefined values for fixed mode
@@ -66,11 +65,6 @@ class aes_message_item extends uvm_sequence_item;
   int    key_128b_weight      = 10;
   int    key_192b_weight      = 10;
   int    key_256b_weight      = 10;
-
-  // reseed weight
-  int    per8_weight          = 60;
-  int    per64_weight         = 30;
-  int    per8k_weight         = 10;
 
   // set if this message should not be
   // validated
@@ -100,8 +94,6 @@ class aes_message_item extends uvm_sequence_item;
   rand cfg_error_type_t  cfg_error_type;
   // run AES in manual mode
   rand bit               manual_operation;
-  // reseed rate
-  rand bit [2:0]         reseed_rate;
 
 
   ///////////////////////////////////////
@@ -137,20 +129,6 @@ class aes_message_item extends uvm_sequence_item;
       aes_keylen == fixed_keylen
     };
   }
-
-  constraint rsd_rate_c {
-    solve has_config_error before reseed_rate;
-    solve cfg_error_type before reseed_rate;
-    if (!(has_config_error && cfg_error_type.rsd_rate) ) {
-      reseed_rate inside { 3'b001, 3'b010, 3'b100 };
-      reseed_rate dist   { 3'b001 :/ per8_weight,
-                           3'b010 :/ per64_weight,
-                           3'b100 :/ per8k_weight };
-    } else {
-      !( reseed_rate  inside { 3'b001, 3'b010, 3'b100 });
-    }
-  }
-
 
   constraint key_c {
     if (fixed_key_en) {
@@ -201,12 +179,9 @@ class aes_message_item extends uvm_sequence_item;
     solve has_config_error before cfg_error_type;
     solve sideload_en before cfg_error_type;
     if (has_config_error & !sideload_en) {
-      cfg_error_type inside {[1:7]};
-      config_error_type_en[0] -> cfg_error_type[0] == 0;
-      config_error_type_en[1] -> cfg_error_type[1] == 0;
-      config_error_type_en[2] -> cfg_error_type[2] == 0;
+      cfg_error_type inside {[1:3]};
     } else {
-      cfg_error_type == 3'b000;
+      cfg_error_type == 2'b00;
     }
   }
 
@@ -360,6 +335,5 @@ class aes_message_item extends uvm_sequence_item;
     fixed_iv_en      = rhs_.fixed_iv_en;
     skip_msg         = rhs_.skip_msg;
     sideload_en      = rhs_.sideload_en;
-    reseed_rate      = rhs_.reseed_rate;
   endfunction // copy
 endclass

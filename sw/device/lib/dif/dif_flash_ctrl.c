@@ -369,13 +369,7 @@ dif_result_t dif_flash_ctrl_start_unsafe(
                       transaction.byte_address);
   mmio_region_write32(handle->dev.base_addr, FLASH_CTRL_CONTROL_REG_OFFSET,
                       control_reg | (1u << FLASH_CTRL_CONTROL_START_BIT));
-  if (transaction.op == kDifFlashCtrlOpPageErase ||
-      transaction.op == kDifFlashCtrlOpBankErase) {
-    // Erase operations don't use the FIFO
-    handle->words_remaining = 0;
-  } else {
-    handle->words_remaining = transaction.word_count;
-  }
+  handle->words_remaining = transaction.word_count;
   handle->transaction_pending = true;
   return kDifOk;
 }
@@ -393,12 +387,9 @@ dif_result_t dif_flash_ctrl_start(dif_flash_ctrl_state_t *handle,
   }
 
   const uint32_t max_word_count = FLASH_CTRL_CONTROL_NUM_MASK;
-  if ((transaction.op != kDifFlashCtrlOpPageErase) &&
-      (transaction.op != kDifFlashCtrlOpBankErase)) {
-    if (transaction.word_count - 1 > max_word_count ||
-        transaction.word_count == 0) {
-      return kDifBadArg;
-    }
+  if (transaction.word_count - 1 > max_word_count ||
+      transaction.word_count == 0) {
+    return kDifBadArg;
   }
 
   if (handle->transaction_pending) {
@@ -1169,8 +1160,8 @@ dif_result_t dif_flash_ctrl_get_faults(const dif_flash_ctrl_state_t *handle,
   if (handle == NULL || faults_out == NULL) {
     return kDifBadArg;
   }
-  uint32_t reg = mmio_region_read32(handle->dev.base_addr,
-                                    FLASH_CTRL_FAULT_STATUS_REG_OFFSET);
+  const uint32_t reg = mmio_region_read32(handle->dev.base_addr,
+                                          FLASH_CTRL_FAULT_STATUS_REG_OFFSET);
   dif_flash_ctrl_faults_t faults;
   faults.memory_properties_error =
       bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_MP_ERR_BIT);
@@ -1182,17 +1173,14 @@ dif_result_t dif_flash_ctrl_get_faults(const dif_flash_ctrl_state_t *handle,
       bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_PROG_TYPE_ERR_BIT);
   faults.flash_phy_error =
       bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_FLASH_PHY_ERR_BIT);
-
-  reg = mmio_region_read32(handle->dev.base_addr,
-                           FLASH_CTRL_STD_FAULT_STATUS_REG_OFFSET);
   faults.register_integrity_error =
-      bitfield_bit32_read(reg, FLASH_CTRL_STD_FAULT_STATUS_REG_INTG_ERR_BIT);
+      bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_REG_INTG_ERR_BIT);
   faults.phy_integrity_error =
-      bitfield_bit32_read(reg, FLASH_CTRL_STD_FAULT_STATUS_PHY_INTG_ERR_BIT);
+      bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_PHY_INTG_ERR_BIT);
   faults.lifecycle_manager_error =
-      bitfield_bit32_read(reg, FLASH_CTRL_STD_FAULT_STATUS_LCMGR_ERR_BIT);
+      bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_LCMGR_ERR_BIT);
   faults.shadow_storage_error =
-      bitfield_bit32_read(reg, FLASH_CTRL_STD_FAULT_STATUS_STORAGE_ERR_BIT);
+      bitfield_bit32_read(reg, FLASH_CTRL_FAULT_STATUS_STORAGE_ERR_BIT);
   *faults_out = faults;
   return kDifOk;
 }

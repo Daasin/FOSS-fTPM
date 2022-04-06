@@ -51,7 +51,6 @@ typedef enum epmp_perm {
   kEpmpPermLockedReadOnly = EPMP_CFG_LR,
   kEpmpPermLockedReadWrite = EPMP_CFG_LRW,
   kEpmpPermLockedReadExecute = EPMP_CFG_LRX,
-  kEpmpPermLockedReadWriteExecute = EPMP_CFG_LRWX,
 } epmp_perm_t;
 
 /**

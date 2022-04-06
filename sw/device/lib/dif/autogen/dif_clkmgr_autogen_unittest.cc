@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "clkmgr_regs.h"  // Generated.
 
@@ -29,34 +28,38 @@ class ClkmgrTest : public Test, public MmioTest {
 class InitTest : public ClkmgrTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_clkmgr_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_clkmgr_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_clkmgr_init(dev().region(), &clkmgr_));
+  EXPECT_EQ(dif_clkmgr_init(dev().region(), &clkmgr_), kDifOk);
 }
 
 class AlertForceTest : public ClkmgrTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_clkmgr_alert_force(nullptr, kDifClkmgrAlertRecovFault));
+  EXPECT_EQ(dif_clkmgr_alert_force(nullptr, kDifClkmgrAlertRecovFault),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_clkmgr_alert_force(nullptr, static_cast<dif_clkmgr_alert_t>(32)));
+  EXPECT_EQ(
+      dif_clkmgr_alert_force(nullptr, static_cast<dif_clkmgr_alert_t>(32)),
+      kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(CLKMGR_ALERT_TEST_REG_OFFSET,
                  {{CLKMGR_ALERT_TEST_RECOV_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_clkmgr_alert_force(&clkmgr_, kDifClkmgrAlertRecovFault));
+  EXPECT_EQ(dif_clkmgr_alert_force(&clkmgr_, kDifClkmgrAlertRecovFault),
+            kDifOk);
 
   // Force last alert.
   EXPECT_WRITE32(CLKMGR_ALERT_TEST_REG_OFFSET,
                  {{CLKMGR_ALERT_TEST_FATAL_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_clkmgr_alert_force(&clkmgr_, kDifClkmgrAlertFatalFault));
+  EXPECT_EQ(dif_clkmgr_alert_force(&clkmgr_, kDifClkmgrAlertFatalFault),
+            kDifOk);
 }
 
 }  // namespace

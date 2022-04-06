@@ -5,29 +5,12 @@
 subdir('freestanding')
 subdir('testing')
 
-sw_lib_math_builtins = declare_dependency(
-  link_with: static_library(
-    'math_builtins_ot',
-    sources: ['math_builtins.c'],
-    c_args: ['-fno-builtin'],
-  )
-)
-
-sw_lib_math = declare_dependency(
-  link_with: static_library(
-    'math_ot',
-    sources: ['math.c', 'math_builtins.c'],
-  ),
-  dependencies: [sw_lib_math_builtins],
-)
-
 # Non volatile bit manipulation helper library (sw_lib_bitfield).
 sw_lib_bitfield = declare_dependency(
   link_with: static_library(
     'bitfield_ot',
     sources: ['bitfield.c'],
-  ),
-  dependencies: [sw_lib_math],
+  )
 )
 
 sw_lib_abs_mmio = declare_dependency(
@@ -36,8 +19,8 @@ sw_lib_abs_mmio = declare_dependency(
     sources: [
       'abs_mmio.c',
     ],
+    dependencies: [],
   ),
-  dependencies: [sw_lib_math],
 )
 
 
@@ -47,8 +30,7 @@ sw_lib_mem = declare_dependency(
     'mem_ot',
     sources: ['memory.c'],
     c_args: ['-fno-builtin'],
-  ),
-  dependencies: [sw_lib_math],
+  )
 )
 
 # MMIO register manipulation library

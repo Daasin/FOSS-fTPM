@@ -47,7 +47,6 @@ rust_library(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=thiserror",
         "manual",
     ],
     version = "1.0.30",

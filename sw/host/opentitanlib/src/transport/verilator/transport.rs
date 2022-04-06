@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::{ensure, Result};
 use lazy_static::lazy_static;
 use log::info;
 use regex::Regex;
@@ -9,13 +10,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::ensure;
 use crate::io::uart::Uart;
 use crate::transport::verilator::subprocess::{Options, Subprocess};
 use crate::transport::verilator::uart::VerilatorUart;
-use crate::transport::{
-    Capabilities, Capability, Result, Transport, TransportError, TransportInterfaceType,
-};
+use crate::transport::{Capabilities, Capability, Transport, TransportError};
 
 #[derive(Default)]
 struct Inner {
@@ -35,7 +33,7 @@ pub struct Verilator {
 
 impl Verilator {
     /// Creates a verilator subprocess-hosting transport from [`options`].
-    pub fn from_options(options: Options) -> anyhow::Result<Self> {
+    pub fn from_options(options: Options) -> Result<Self> {
         lazy_static! {
             static ref UART: Regex = Regex::new("UART: Created ([^ ]+) for uart0").unwrap();
             static ref SPI: Regex = Regex::new("SPI: Created ([^ ]+) for spi0").unwrap();
@@ -67,7 +65,7 @@ impl Verilator {
     }
 
     /// Shuts down the verilator subprocess.
-    pub fn shutdown(&mut self) -> anyhow::Result<()> {
+    pub fn shutdown(&mut self) -> Result<()> {
         if let Some(mut subprocess) = self.subprocess.take() {
             subprocess.kill()
         } else {
@@ -83,14 +81,14 @@ impl Drop for Verilator {
 }
 
 impl Transport for Verilator {
-    fn capabilities(&self) -> Result<Capabilities> {
-        Ok(Capabilities::new(Capability::UART))
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::new(Capability::UART)
     }
 
     fn uart(&self, instance: &str) -> Result<Rc<dyn Uart>> {
         ensure!(
             instance == "0",
-            TransportError::InvalidInstance(TransportInterfaceType::Uart, instance.to_string())
+            TransportError::InvalidInstance("uart", instance.to_string())
         );
         let mut inner = self.inner.borrow_mut();
         if inner.uart.is_none() {

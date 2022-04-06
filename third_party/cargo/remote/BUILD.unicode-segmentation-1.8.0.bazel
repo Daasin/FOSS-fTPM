@@ -50,7 +50,6 @@ rust_library(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=unicode-segmentation",
         "manual",
     ],
     version = "1.8.0",

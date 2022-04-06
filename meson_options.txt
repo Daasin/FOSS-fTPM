@@ -25,9 +25,3 @@ option(
   type: 'boolean',
   value: false,
 )
-
-option(
-  'closed_source_dir',
-  type: 'string',
-  value: '',
-)

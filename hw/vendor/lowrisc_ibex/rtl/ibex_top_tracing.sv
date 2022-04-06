@@ -83,10 +83,9 @@ module ibex_top_tracing import ibex_pkg::*; #(
   output logic                         double_fault_seen_o,
 
   // CPU Control Signals
-  input  fetch_enable_t                fetch_enable_i,
+  input  logic                         fetch_enable_i,
   output logic                         alert_minor_o,
-  output logic                         alert_major_internal_o,
-  output logic                         alert_major_bus_o,
+  output logic                         alert_major_o,
   output logic                         core_sleep_o
 
 );
@@ -235,8 +234,7 @@ module ibex_top_tracing import ibex_pkg::*; #(
 
     .fetch_enable_i,
     .alert_minor_o,
-    .alert_major_internal_o,
-    .alert_major_bus_o,
+    .alert_major_o,
     .core_sleep_o
   );
 

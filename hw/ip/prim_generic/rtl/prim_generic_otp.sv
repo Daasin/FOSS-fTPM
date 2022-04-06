@@ -30,9 +30,6 @@ module prim_generic_otp
 ) (
   input                          clk_i,
   input                          rst_ni,
-  // Observability
-  input ast_pkg::ast_obs_ctrl_t obs_ctrl_i,
-  output logic [7:0] otp_obs_o,
   // Macro-specific power sequencing signals to/from AST
   output logic [PwrSeqWidth-1:0] pwr_seq_o,
   input        [PwrSeqWidth-1:0] pwr_seq_h_i,
@@ -74,10 +71,6 @@ module prim_generic_otp
   logic [PwrSeqWidth-1:0] unused_pwr_seq_h;
   assign unused_pwr_seq_h = pwr_seq_h_i;
   assign pwr_seq_o = '0;
-
-  logic unused_obs;
-  assign unused_obs = |obs_ctrl_i;
-  assign otp_obs_o = '0;
 
   wire unused_ext_voltage;
   assign unused_ext_voltage = ext_voltage_io;

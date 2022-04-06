@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "rv_plic_regs.h"  // Generated.
 
@@ -29,30 +28,32 @@ class RvPlicTest : public Test, public MmioTest {
 class InitTest : public RvPlicTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_rv_plic_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_rv_plic_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_rv_plic_init(dev().region(), &rv_plic_));
+  EXPECT_EQ(dif_rv_plic_init(dev().region(), &rv_plic_), kDifOk);
 }
 
 class AlertForceTest : public RvPlicTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_rv_plic_alert_force(nullptr, kDifRvPlicAlertFatalFault));
+  EXPECT_EQ(dif_rv_plic_alert_force(nullptr, kDifRvPlicAlertFatalFault),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_rv_plic_alert_force(nullptr, static_cast<dif_rv_plic_alert_t>(32)));
+  EXPECT_EQ(
+      dif_rv_plic_alert_force(nullptr, static_cast<dif_rv_plic_alert_t>(32)),
+      kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(RV_PLIC_ALERT_TEST_REG_OFFSET,
                  {{RV_PLIC_ALERT_TEST_FATAL_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_rv_plic_alert_force(&rv_plic_, kDifRvPlicAlertFatalFault));
+  EXPECT_EQ(dif_rv_plic_alert_force(&rv_plic_, kDifRvPlicAlertFatalFault),
+            kDifOk);
 }
 
 }  // namespace

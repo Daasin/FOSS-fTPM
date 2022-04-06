@@ -91,7 +91,6 @@ rust_library(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=libftdi1-sys",
         "manual",
     ],
     version = "1.1.1",

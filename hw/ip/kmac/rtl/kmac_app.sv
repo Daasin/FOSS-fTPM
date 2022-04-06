@@ -255,10 +255,6 @@ module kmac_app
   // state output
   // Mux selection signal
   app_mux_sel_e mux_sel;
-  app_mux_sel_e mux_sel_buf_output;
-  app_mux_sel_e mux_sel_buf_err_check;
-  app_mux_sel_e mux_sel_buf_key;
-  app_mux_sel_e mux_sel_buf_kmac;
 
   // Error checking logic
 
@@ -281,7 +277,7 @@ module kmac_app
           digest_share0: app_digest[0],
           digest_share1: app_digest[1],
           // if fsm asserts done, should be an error case.
-          error:         error_i | fsm_digest_done_q | sparse_fsm_error_o
+          error:         error_i | fsm_digest_done_q
         };
       end else begin
         app_o[i] = '{
@@ -368,11 +364,7 @@ module kmac_app
     .state_o ( st_raw )
   );
 
-  // Create a lint error to reduce the risk of accidentally enabling this feature.
-  `ASSERT_STATIC_LINT_ERROR(KmacSecIdleAcceptSwMsgNonDefault, SecIdleAcceptSwMsg == 0)
-
   // Next State & output logic
-  // SEC_CM: FSM.SPARSE
   always_comb begin
     st_d = StIdle;
 
@@ -431,6 +423,8 @@ module kmac_app
 
       StAppMsg: begin
         mux_sel = SelApp;
+        // Wait until the completion (done) from KeyMgr?
+        // Or absorb completion?
         if (app_i[app_id].valid && app_o[app_id].ready && app_i[app_id].last) begin
           if (AppCfg[app_id].Mode == AppKMAC) begin
             st_d = StAppOutLen;
@@ -516,9 +510,6 @@ module kmac_app
         // this state is terminal
         st_d = st;
         sparse_fsm_error_o = 1'b 1;
-        fsm_err.valid = 1'b 1;
-        fsm_err.code = ErrFatalError;
-        fsm_err.info = 24'(app_id);
       end
 
       default: begin
@@ -527,12 +518,17 @@ module kmac_app
       end
     endcase
 
-    // SEC_CM: FSM.GLOBAL_ESC, FSM.LOCAL_ESC
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
     if (lc_escalate_en_i != lc_ctrl_pkg::Off) begin
       st_d = StTerminalError;
     end
+  end
+
+  if (SecIdleAcceptSwMsg != 1'b0) begin : gen_lint_err
+    // Create a lint error to reduce the risk of accidentally enabling this feature.
+    logic sec_idle_accept_sw_msg_dummy;
+    assign sec_idle_accept_sw_msg_dummy = (st == StIdle);
   end
 
   //////////////
@@ -558,7 +554,7 @@ module kmac_app
     kmac_data_o = '0;
     kmac_mask_o = '0;
 
-    unique case (mux_sel_buf_kmac)
+    unique case (mux_sel)
       SelApp: begin
         // app_id is valid at this time
         kmac_valid_o = app_i[app_id].valid;
@@ -597,12 +593,12 @@ module kmac_app
   always_comb begin
     mux_err = '{valid: 1'b 0, code: ErrNone, info: '0};
 
-    if (mux_sel_buf_err_check != SelSw && sw_valid_i) begin
+    if (mux_sel != SelSw && sw_valid_i) begin
       // If SW writes message into FIFO
       mux_err = '{
         valid: 1'b 1,
         code: ErrSwPushedMsgFifo,
-        info: 24'({8'h 00, 8'(st), 8'(mux_sel_buf_err_check)})
+        info: 24'({8'h 00, 8'(st), 8'(mux_sel)})
       };
     end else if (app_active_o && sw_cmd_i != CmdNone) begin
       // If SW issues command except start
@@ -614,67 +610,14 @@ module kmac_app
     end
   end
 
-  logic [AppMuxWidth-1:0] mux_sel_buf_output_logic;
-  assign mux_sel_buf_output = app_mux_sel_e'(mux_sel_buf_output_logic);
-
-  // SEC_CM: LOGIC.INTEGRITY
-  prim_sec_anchor_buf #(
-   .Width(AppMuxWidth)
-  ) u_prim_buf_state_output_sel (
-    .in_i(mux_sel),
-    .out_o(mux_sel_buf_output_logic)
-  );
-
-  logic [AppMuxWidth-1:0] mux_sel_buf_err_check_logic;
-  assign mux_sel_buf_err_check = app_mux_sel_e'(mux_sel_buf_err_check_logic);
-
-  // SEC_CM: LOGIC.INTEGRITY
-  prim_sec_anchor_buf #(
-   .Width(AppMuxWidth)
-  ) u_prim_buf_state_err_check (
-    .in_i(mux_sel),
-    .out_o(mux_sel_buf_err_check_logic)
-  );
-
-  logic [AppMuxWidth-1:0] mux_sel_buf_kmac_logic;
-  assign mux_sel_buf_kmac = app_mux_sel_e'(mux_sel_buf_kmac_logic);
-
-  // SEC_CM: LOGIC.INTEGRITY
-  prim_sec_anchor_buf #(
-   .Width(AppMuxWidth)
-  ) u_prim_buf_state_kmac_sel (
-    .in_i(mux_sel),
-    .out_o(mux_sel_buf_kmac_logic)
-  );
-
-  logic [AppMuxWidth-1:0] mux_sel_buf_key_logic;
-  assign mux_sel_buf_key = app_mux_sel_e'(mux_sel_buf_key_logic);
-
-  // SEC_CM: LOGIC.INTEGRITY
-  prim_sec_anchor_buf #(
-   .Width(AppMuxWidth)
-  ) u_prim_buf_state_key_sel (
-    .in_i(mux_sel),
-    .out_o(mux_sel_buf_key_logic)
-  );
-
-  // SEC_CM: LOGIC.INTEGRITY
-  logic reg_state_valid;
-  prim_sec_anchor_buf #(
-   .Width(1)
-  ) u_prim_buf_state_output_valid (
-    .in_i(reg_state_valid),
-    .out_o(reg_state_valid_o)
-  );
-
   // Keccak state Demux
   // Keccak state --> Register output is enabled when state is in StSw
   always_comb begin
-    if ((mux_sel_buf_output == SelSw) && (lc_escalate_en_i == lc_ctrl_pkg::Off)) begin
-      reg_state_valid = keccak_state_valid_i;
+    if (mux_sel == SelSw) begin
+      reg_state_valid_o = keccak_state_valid_i;
       reg_state_o = keccak_state_i;
     end else begin
-      reg_state_valid = 1'b 0;
+      reg_state_valid_o = 1'b 0;
       reg_state_o = '{default:'0};
     end
   end
@@ -683,8 +626,7 @@ module kmac_app
   always_comb begin
     app_digest_done = 1'b 0;
     app_digest = '{default:'0};
-    if (st == StAppWait && absorbed_i &&
-        lc_escalate_en_i == lc_ctrl_pkg::Off) begin
+    if (st == StAppWait && absorbed_i) begin
       // SHA3 engine has calculated the hash. Return the data to KeyMgr
       app_digest_done = 1'b 1;
 
@@ -701,7 +643,6 @@ module kmac_app
 
   // Prepare merged key if EnMasking is not set.
   // Combine share keys into unpacked array for logic below to assign easily.
-  // SEC_CM: KEY.SIDELOAD
   logic [MaxKeyLen-1:0] keymgr_key [Share];
   if (EnMasking == 1) begin : g_masked_key
     for (genvar i = 0; i < Share; i++) begin : gen_key_pad
@@ -718,7 +659,7 @@ module kmac_app
 
   // Sideloaded key is used when KeyMgr KDF is active or !!CFG.sideload is set
   always_comb begin
-    if (keymgr_key_en_i || (mux_sel_buf_key == SelApp)) begin
+    if (keymgr_key_en_i || (mux_sel == SelApp)) begin
       // KeyLen is fixed to the $bits(sideloaded_key)
       key_len_o = SideloadedKey;
     end else begin
@@ -727,7 +668,7 @@ module kmac_app
   end
 
   for (genvar i = 0 ; i < Share ; i++) begin : g_key_assign
-    assign key_data_o[i] = (keymgr_key_en_i || (mux_sel_buf_key == SelApp))
+    assign key_data_o[i] = (keymgr_key_en_i || (mux_sel == SelApp))
                          ? keymgr_key[i]
                          : reg_key_data_i[i] ;
   end

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::{bail, ensure, Result};
 use mundane::hash::{Digest, Hasher, Sha256};
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -10,8 +11,7 @@ use zerocopy::AsBytes;
 use crate::app::TransportWrapper;
 use crate::bootstrap::{Bootstrap, BootstrapOptions, UpdateProtocol};
 use crate::io::uart::Uart;
-use crate::transport::{Capability, Result};
-use crate::{bail, ensure};
+use crate::transport::Capability;
 
 #[derive(AsBytes, Debug, Default)]
 #[repr(C)]
@@ -149,7 +149,7 @@ impl Frame {
     }
 }
 
-#[derive(Debug, Error, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Error)]
 pub enum RescueError {
     #[error("Unrecognized image file format")]
     ImageFormatError,
@@ -283,7 +283,7 @@ impl UpdateProtocol for Rescue {
         transport: &TransportWrapper,
     ) -> Result<()> {
         transport
-            .capabilities()?
+            .capabilities()
             .request(Capability::GPIO | Capability::UART)
             .ok()?;
         Ok(())

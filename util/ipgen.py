@@ -120,7 +120,7 @@ def main() -> int:
     parser_generate.add_argument(
         "--config-file",
         "-c",
-        required=True,
+        required=False,
         type=argparse.FileType('r'),
         help="path to a configuration file",
     )

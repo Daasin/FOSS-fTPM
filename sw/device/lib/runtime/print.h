@@ -64,24 +64,17 @@ typedef struct buffer_sink {
  * - %h and %H, which are aliases for %x and %X, respectively.
  * - %b, which prints an unsigned binary uint32_t.
  *
- * Finally, additional nonstandard format specifiers is supported:
- * - %!s, which takes a size_t followed by a pointer to a buffer, and prints
+ * Finally, an additional nonstandard format specifier is supported:
+ * - %z, which takes a size_t followed by a pointer to a buffer, and prints
  *   out that many characters from the buffer.
- * - %!x, %!X, %!y, and %!Y, which are like %!s but print out a hex dump
- *   instead; casing is as with %x, and %!x will print in big-endian order
- *   (i.e., last byte printed first) while %!y will print in little-endian
- *   order (i.e., first byte printed first). This makes sure %!x is consistent
- *   with %x.
- * - %!b, which takes a bool and prints either true or false.
  *
  * When compiled for a DV testbench, this function will not read any pointers,
- * and as such the specifiers %s, %!s, %!x, %!X, %!y, and %!Y will behave as if
- * they were printing garbage, and are, as such, unsupported.
+ * and as such the specifiers %s and %z will behave as if they were printing
+ * garbage, and are, as such, unsupported.
  *
  * This function furthermore supports width modifiers for integer specifiers,
- * such as `%010d`. It does not support dynamic widths like `%*d`. If the width
- * specifier starts with a `0`, it is padded with zeroes; otherwise, it is
- * padded with spaces, consistent with the standard C behavior.
+ * such as `%10d`. It does not support dynamic widths like `%*d`, and will also
+ * always pad with zeroes, rather than spaces.
  *
  * Of course, providing arguments for formatting which are incompatible with a
  * given format specifier is Undefined Behavior.
@@ -89,7 +82,7 @@ typedef struct buffer_sink {
  * Note that for logging in DV, the following script updates the format
  * specifiers supported in C above and changes them to match the SystemVerilog
  * language semantics: util/device_sw_utils/extract_sw_logs.py
- * It also makes fixes as needed for custom speficiers such as %!s.
+ * It also makes fixes as needed for custom speficiers such as %z.
  *
  * @param format the format spec.
  * @param ... values to interpolate in the format spec.

@@ -15,7 +15,11 @@ use opentitanlib::transport::Capability;
 /// Read plain data bytes from a I2C device.
 #[derive(Debug, StructOpt)]
 pub struct I2cRawRead {
-    #[structopt(short = "n", long, help = "Number of bytes to read.")]
+    #[structopt(
+        short = "n",
+        long,
+        help = "Number of bytes to read."
+    )]
     length: usize,
 }
 
@@ -30,7 +34,7 @@ impl CommandDispatch for I2cRawRead {
         context: &dyn Any,
         transport: &TransportWrapper,
     ) -> Result<Option<Box<dyn Serialize>>> {
-        transport.capabilities()?.request(Capability::I2C).ok()?;
+        transport.capabilities().request(Capability::I2C).ok()?;
         let context = context.downcast_ref::<I2cCommand>().unwrap();
         let i2c_bus = context.params.create(transport)?;
         let mut v = vec![0u8; self.length];
@@ -54,16 +58,14 @@ impl CommandDispatch for I2cRawWrite {
         context: &dyn Any,
         transport: &TransportWrapper,
     ) -> Result<Option<Box<dyn Serialize>>> {
-        transport.capabilities()?.request(Capability::I2C).ok()?;
+        transport.capabilities().request(Capability::I2C).ok()?;
         let context = context.downcast_ref::<I2cCommand>().unwrap();
         let i2c_bus = context.params.create(transport)?;
-        i2c_bus.run_transaction(
-            context.addr,
-            &mut [Transfer::Write(&hex::decode(&self.hexdata)?)],
-        )?;
+        i2c_bus.run_transaction(context.addr, &mut [Transfer::Write(&hex::decode(&self.hexdata)?)])?;
         Ok(None)
     }
 }
+
 
 /// Commands for interacting with a generic I2C bus.
 #[derive(Debug, StructOpt, CommandDispatch)]

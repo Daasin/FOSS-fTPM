@@ -77,7 +77,6 @@ rust_library(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=proc-macro2",
         "manual",
     ],
     version = "1.0.32",

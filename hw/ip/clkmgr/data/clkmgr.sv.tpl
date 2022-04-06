@@ -4,10 +4,6 @@
 //
 // The overall clock manager
 
-<%
-from topgen.lib import Name
-%>\
-
 `include "prim_assert.sv"
 
   module clkmgr
@@ -53,8 +49,7 @@ from topgen.lib import Name
   input prim_mubi_pkg::mubi4_t scanmode_i,
 
   // idle hints
-  // SEC_CM: IDLE.INTERSIG.MUBI
-  input prim_mubi_pkg::mubi4_t [${len(typed_clocks.hint_clks)-1}:0] idle_i,
+  input [${len(typed_clocks.hint_clks)-1}:0] idle_i,
 
   // life cycle state output
   // SEC_CM: LC_CTRL.INTERSIG.MUBI
@@ -71,14 +66,10 @@ from topgen.lib import Name
   input mubi4_t io_clk_byp_ack_i,
   output mubi4_t all_clk_byp_req_o,
   input mubi4_t all_clk_byp_ack_i,
-  output mubi4_t hi_speed_sel_o,
+  output logic hi_speed_sel_o,
 
-  // jittery enable to ast
-  output mubi4_t jitter_en_o,
-
-  // external indication for whether dividers should be stepped down
-  // SEC_CM: DIV.INTERSIG.MUBI
-  input mubi4_t div_step_down_req_i,
+  // jittery enable
+  output logic jitter_en_o,
 
   // clock gated indications going to alert handlers
   output clkmgr_cg_en_t cg_en_o,
@@ -93,12 +84,14 @@ from topgen.lib import Name
 
   import prim_mubi_pkg::MuBi4False;
   import prim_mubi_pkg::MuBi4True;
-  import prim_mubi_pkg::mubi4_test_true_strict;
+  import prim_mubi_pkg::mubi4_test_true_loose;
+  import prim_mubi_pkg::mubi4_test_false_loose;
 
   ////////////////////////////////////////////////////
   // Divided clocks
   ////////////////////////////////////////////////////
 
+  logic step_down_req;
   logic [${len(clocks.derived_srcs)-1}:0] step_down_acks;
 
 % for src_name in clocks.derived_srcs:
@@ -106,17 +99,14 @@ from topgen.lib import Name
 % endfor
 
 % for src_name in clocks.all_derived_srcs():
-  mubi4_t ${src_name}_step_down_req;
-  prim_mubi4_sync #(
-    .NumCopies(1),
-    .AsyncOn(1),
-    .StabilityCheck(1),
-    .ResetValue(MuBi4False)
+  logic ${src_name}_step_down_req;
+  prim_flop_2sync #(
+    .Width(1)
   ) u_${src_name}_step_down_req_sync (
     .clk_i(clk_${src_name}_i),
     .rst_ni(rst_${src_name}_ni),
-    .mubi_i(div_step_down_req_i),
-    .mubi_o(${src_name}_step_down_req)
+    .d_i(step_down_req),
+    .q_o(${src_name}_step_down_req)
   );
 
 % endfor
@@ -139,9 +129,9 @@ from topgen.lib import Name
   ) u_no_scan_${src.name}_div (
     .clk_i(clk_${src.src.name}_i),
     .rst_ni(rst_${src.src.name}_ni),
-    .step_down_req_i(mubi4_test_true_strict(${src.src.name}_step_down_req)),
+    .step_down_req_i(${src.src.name}_step_down_req),
     .step_down_ack_o(step_down_acks[${loop.index}]),
-    .test_en_i(mubi4_test_true_strict(${src.name}_div_scanmode[0])),
+    .test_en_i(prim_mubi_pkg::mubi4_test_true_strict(${src.name}_div_scanmode[0])),
     .clk_o(clk_${src.name}_i)
   );
 % endfor
@@ -155,7 +145,6 @@ from topgen.lib import Name
   clkmgr_reg_pkg::clkmgr_hw2reg_t hw2reg;
 
   // SEC_CM: MEAS.CONFIG.REGWEN
-  // SEC_CM: MEAS.CONFIG.SHADOW
   // SEC_CM: CLK_CTRL.CONFIG.REGWEN
   clkmgr_reg_top u_reg (
     .clk_i,
@@ -188,10 +177,10 @@ from topgen.lib import Name
   logic recov_alert;
   assign recov_alert =
 % for src in typed_clocks.rg_srcs:
+    hw2reg.recov_err_code.${src}_update_err.de |
     hw2reg.recov_err_code.${src}_measure_err.de |
-    hw2reg.recov_err_code.${src}_timeout_err.de |
+    hw2reg.recov_err_code.${src}_timeout_err.de${";" if loop.last else " |"}
 % endfor
-    hw2reg.recov_err_code.shadow_update_err.de;
 
   assign alerts = {
     |reg2hw.fatal_err_code,
@@ -220,6 +209,8 @@ from topgen.lib import Name
   // Clock bypass request
   ////////////////////////////////////////////////////
 
+  mubi4_t low_speed_sel;
+  assign low_speed_sel = mubi4_t'(reg2hw.extclk_ctrl.low_speed_sel.q);
   clkmgr_byp #(
     .NumDivClks(${len(clocks.derived_srcs)})
   ) u_clkmgr_byp (
@@ -229,15 +220,25 @@ from topgen.lib import Name
     .lc_clk_byp_req_i,
     .lc_clk_byp_ack_o,
     .byp_req_i(mubi4_t'(reg2hw.extclk_ctrl.sel.q)),
-    .hi_speed_sel_i(mubi4_t'(reg2hw.extclk_ctrl.hi_speed_sel.q)),
+    .low_speed_sel_i(low_speed_sel),
     .all_clk_byp_req_o,
     .all_clk_byp_ack_i,
     .io_clk_byp_req_o,
     .io_clk_byp_ack_i,
-    .hi_speed_sel_o,
 
     // divider step down controls
-    .step_down_acks_i(step_down_acks)
+    .step_down_acks_i(step_down_acks),
+    .step_down_req_o(step_down_req)
+  );
+
+  // the external consumer of this signal requires the opposite polarity
+  prim_flop #(
+    .ResetValue(1'b1)
+  ) u_high_speed_sel (
+    .clk_i,
+    .rst_ni,
+    .d_i(mubi4_test_false_loose(low_speed_sel)),
+    .q_o(hi_speed_sel_o)
   );
 
   ////////////////////////////////////////////////////
@@ -308,13 +309,6 @@ from topgen.lib import Name
   // SEC_CM: TIMEOUT.CLK.BKGN_CHK, MEAS.CLK.BKGN_CHK
   ////////////////////////////////////////////////////
 
-  logic [${len(typed_clocks.rg_srcs)-1}:0] shadow_update_errs;
-  logic [${len(typed_clocks.rg_srcs)-1}:0] shadow_storage_errs;
-  assign hw2reg.recov_err_code.shadow_update_err.d = 1'b1;
-  assign hw2reg.recov_err_code.shadow_update_err.de = |shadow_update_errs;
-  assign hw2reg.fatal_err_code.shadow_storage_err.d = 1'b1;
-  assign hw2reg.fatal_err_code.shadow_storage_err.de = |shadow_storage_errs;
-
 <% aon_freq = clocks.all_srcs['aon'].freq %>\
 % for src in typed_clocks.rg_srcs:
   logic ${src}_fast_err;
@@ -372,11 +366,13 @@ from topgen.lib import Name
   assign hw2reg.recov_err_code.${src}_measure_err.de = synced_${src}_err;
   assign hw2reg.recov_err_code.${src}_timeout_err.d = 1'b1;
   assign hw2reg.recov_err_code.${src}_timeout_err.de = synced_${src}_timeout_err;
-  assign shadow_update_errs[${loop.index}] =
+  assign hw2reg.recov_err_code.${src}_update_err.d = 1'b1;
+  assign hw2reg.recov_err_code.${src}_update_err.de =
     reg2hw.${src}_meas_ctrl_shadowed.en.err_update |
     reg2hw.${src}_meas_ctrl_shadowed.hi.err_update |
     reg2hw.${src}_meas_ctrl_shadowed.lo.err_update;
-  assign shadow_storage_errs[${loop.index}] =
+  assign hw2reg.fatal_err_code.${src}_storage_err.d = 1'b1;
+  assign hw2reg.fatal_err_code.${src}_storage_err.de =
     reg2hw.${src}_meas_ctrl_shadowed.en.err_storage |
     reg2hw.${src}_meas_ctrl_shadowed.hi.err_storage |
     reg2hw.${src}_meas_ctrl_shadowed.lo.err_storage;
@@ -437,7 +433,7 @@ from topgen.lib import Name
   ) u_${k}_cg (
     .clk_i(clk_${v.src.name}_root),
     .en_i(${k}_combined_en),
-    .test_en_i(mubi4_test_true_strict(${k}_scanmode[0])),
+    .test_en_i(prim_mubi_pkg::mubi4_test_true_strict(${k}_scanmode[0])),
     .clk_o(clocks_o.${k})
   );
 
@@ -459,44 +455,72 @@ from topgen.lib import Name
   // clock target
   ////////////////////////////////////////////////////
 
-  logic [${len(typed_clocks.hint_clks)-1}:0] idle_cnt_err;
+% for clk in typed_clocks.hint_clks.keys():
+  logic ${clk}_hint;
+  logic ${clk}_en;
+% endfor
+
 % for clk, sig in typed_clocks.hint_clks.items():
-<%assert_name = Name.from_snake_case(clk)
-%>
-  clkmgr_trans #(
-% if clk == "clk_main_kmac":
-    .FpgaBufGlobal(1'b1) // KMAC is getting too big for a single clock region.
-% else:
-    .FpgaBufGlobal(1'b0) // This clock is used primarily locally.
-% endif
-  ) u_${clk}_trans (
+  assign ${clk}_en = ${clk}_hint | ~idle_i[${hint_names[clk]}];
+
+  prim_flop_2sync #(
+    .Width(1)
+  ) u_${clk}_hint_sync (
     .clk_i(clk_${sig.src.name}_i),
     .rst_ni(rst_${sig.src.name}_ni),
-    .clk_root_i(clk_${sig.src.name}_root),
-    .clk_root_en_i(clk_${sig.src.name}_en),
-    .idle_i(idle_i[${hint_names[clk]}]),
-    .sw_hint_i(reg2hw.clk_hints.${clk}_hint.q),
-    .scanmode_i,
-    .alert_cg_en_o(cg_en_o.${clk.split('clk_')[-1]}),
-    .clk_o(clocks_o.${clk}),
-    .clk_en_o(hw2reg.clk_hints_status.${clk}_val.d),
-    .cnt_err_o(idle_cnt_err[${hint_names[clk]}])
+    .d_i(reg2hw.clk_hints.${clk}_hint.q),
+    .q_o(${clk}_hint)
   );
-  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(
-    ${assert_name.as_camel_case()}CountCheck_A,
-    u_${clk}_trans.u_idle_cnt,
-    alert_tx_o[0])
+
+  // Declared as size 1 packed array to avoid FPV warning.
+  prim_mubi_pkg::mubi4_t [0:0] ${clk}_scanmode;
+  prim_mubi4_sync #(
+    .NumCopies(1),
+    .AsyncOn(0)
+  ) u_${clk}_scanmode_sync  (
+    .clk_i(1'b0),  //unused
+    .rst_ni(1'b1), //unused
+    .mubi_i(scanmode_i),
+    .mubi_o(${clk}_scanmode)
+  );
+
+  // Add a prim buf here to make sure the CG and the lc sender inputs
+  // are derived from the same physical signal.
+  logic ${clk}_combined_en;
+  prim_buf u_prim_buf_${clk}_en (
+    .in_i(${clk}_en & clk_${sig.src.name}_en),
+    .out_o(${clk}_combined_en)
+  );
+
+  prim_clock_gating #(
+    .FpgaBufGlobal(1'b0) // This clock is used primarily locally.
+  ) u_${clk}_cg (
+    .clk_i(clk_${sig.src.name}_root),
+    .en_i(${clk}_combined_en),
+    .test_en_i(prim_mubi_pkg::mubi4_test_true_strict(${clk}_scanmode[0])),
+    .clk_o(clocks_o.${clk})
+  );
+
+  // clock gated indication for alert handler
+  prim_mubi4_sender #(
+    .ResetValue(MuBi4True)
+  ) u_prim_mubi4_sender_${clk} (
+    .clk_i(clk_${sig.src.name}_i),
+    .rst_ni(rst_${sig.src.name}_ni),
+    .mubi_i(((${clk}_combined_en) ? MuBi4False : MuBi4True)),
+    .mubi_o(cg_en_o.${clk.split('clk_')[-1]})
+  );
+
 % endfor
-  assign hw2reg.fatal_err_code.idle_cnt.d = 1'b1;
-  assign hw2reg.fatal_err_code.idle_cnt.de = |idle_cnt_err;
 
   // state readback
 % for clk in typed_clocks.hint_clks.keys():
   assign hw2reg.clk_hints_status.${clk}_val.de = 1'b1;
+  assign hw2reg.clk_hints_status.${clk}_val.d = ${clk}_en;
 % endfor
 
   // SEC_CM: JITTER.CONFIG.MUBI
-  assign jitter_en_o = mubi4_t'(reg2hw.jitter_enable.q);
+  assign jitter_en_o = mubi4_test_true_loose(mubi4_t'(reg2hw.jitter_enable.q));
 
   ////////////////////////////////////////////////////
   // Exported clocks

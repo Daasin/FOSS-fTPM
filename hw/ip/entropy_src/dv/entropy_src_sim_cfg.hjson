@@ -32,8 +32,7 @@
                 "{proj_root}/hw/dv/tools/dvsim/tests/intr_test.hjson",
                 "{proj_root}/hw/dv/tools/dvsim/tests/alert_test.hjson",
                 "{proj_root}/hw/dv/tools/dvsim/tests/tl_access_tests.hjson",
-                // TODO: import `stress_tests.hjson` once hanging issue is resolved.
-                "{proj_root}/hw/dv/tools/dvsim/tests/stress_all_test.hjson"]
+                "{proj_root}/hw/dv/tools/dvsim/tests/stress_tests.hjson"]
 
   // Add additional tops for simulation.
   sim_tops: ["entropy_src_bind", "entropy_src_cov_bind"]
@@ -68,26 +67,9 @@
     {
       name: entropy_src_fw_ov
       uvm_test: entropy_src_fw_ov_test
-      uvm_test_seq: entropy_src_rng_vseq
+      uvm_test_seq: entropy_src_fw_ov_vseq
     }
 
-    {
-      name: entropy_src_intr
-      uvm_test: entropy_src_intr_test
-      uvm_test_seq: entropy_src_intr_vseq
-    }
-
-    {
-      name: entropy_src_alert
-      uvm_test: entropy_src_alert_test
-      uvm_test_seq: entropy_src_alert_vseq
-    }
-
-    {
-      name: entropy_src_err
-      uvm_test: entropy_src_intr_test
-      uvm_test_seq: entropy_src_err_vseq
-    }
     // TODO: add more tests here
   ]
 
@@ -106,7 +88,7 @@
 
   component_b: "uvm_test_top.env.virtual_sequencer"
   id_b : _ALL_
-  verbosity_b: UVM_FULL
+  verbosity_b: UVM_HIGH
   phase_b: run
 
   run_modes: [
@@ -118,9 +100,6 @@
       name: set_verbosity_comp_b_uvm_debug
       run_opts: ["+uvm_set_verbosity={component_b},{id_b},{verbosity_b},{phase_b}"]
     }
-    {
-      name: short_run
-      run_opts: ["+test_timeout_ns=1000000"]
-    }
   ]
 }
+

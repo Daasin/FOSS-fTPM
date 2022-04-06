@@ -4,7 +4,6 @@
 
 use anyhow::Result;
 use directories::ProjectDirs;
-use erased_serde::Serialize;
 use log::LevelFilter;
 use std::env::{args_os, ArgsOs};
 use std::ffi::OsString;
@@ -124,22 +123,6 @@ fn parse_command_line(opts: Opts, mut args: ArgsOs) -> Result<Opts> {
     Ok(opts)
 }
 
-// Print the result of a command.
-// If there is an error and `RUST_BACKTRACE=1` _and_ `--logging=debug`, print a backtrace.
-fn print_command_result(result: Result<Option<Box<dyn Serialize>>>) -> Result<()> {
-    match result {
-        Ok(Some(value)) => {
-            println!("{}", serde_json::to_string_pretty(&value)?);
-            Ok(())
-        }
-        Ok(None) => Ok(()),
-        Err(e) => {
-            log::debug!("{:?}", e);
-            Err(e)
-        }
-    }
-}
-
 // Execute is a convenience function for taking a list of strings,
 // parsing them into a command, executing the command and printing the result.
 fn execute<I>(args: I, opts: &Opts, transport: &TransportWrapper) -> Result<()>
@@ -149,7 +132,9 @@ where
     let command = RootCommandHierarchy::from_iter(
         std::iter::once(OsString::from("opentitantool")).chain(args),
     );
-    print_command_result(command.run(opts, &transport))?;
+    if let Some(value) = command.run(opts, transport)? {
+        println!("{}", serde_json::to_string_pretty(&value)?);
+    }
     Ok(())
 }
 
@@ -165,6 +150,9 @@ fn main() -> Result<()> {
             &transport,
         )?;
     }
-    print_command_result(opts.command.run(&opts, &transport))?;
+
+    if let Some(value) = opts.command.run(&opts, &transport)? {
+        println!("{}", serde_json::to_string_pretty(&value)?);
+    }
     Ok(())
 }

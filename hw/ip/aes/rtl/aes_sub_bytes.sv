@@ -6,7 +6,7 @@
 
 module aes_sub_bytes import aes_pkg::*;
 #(
-  parameter sbox_impl_e SecSBoxImpl = SBoxImplDom
+  parameter sbox_impl_e SBoxImpl = SBoxImplLut
 ) (
   input  logic                              clk_i,
   input  logic                              rst_ni,
@@ -38,9 +38,8 @@ module aes_sub_bytes import aes_pkg::*;
   // Check sparsely encoded signals.
   logic [Sp2VWidth-1:0] en_raw;
   aes_sel_buf_chk #(
-    .Num      ( Sp2VNum   ),
-    .Width    ( Sp2VWidth ),
-    .EnSecBuf ( 1'b1      )
+    .Num   ( Sp2VNum   ),
+    .Width ( Sp2VWidth )
   ) u_aes_sb_en_buf_chk (
     .clk_i  ( clk_i  ),
     .rst_ni ( rst_ni ),
@@ -52,9 +51,8 @@ module aes_sub_bytes import aes_pkg::*;
 
   logic [Sp2VWidth-1:0] out_ack_raw;
   aes_sel_buf_chk #(
-    .Num      ( Sp2VNum   ),
-    .Width    ( Sp2VWidth ),
-    .EnSecBuf ( 1'b1      )
+    .Num   ( Sp2VNum   ),
+    .Width ( Sp2VWidth )
   ) u_aes_sb_out_ack_buf_chk (
     .clk_i  ( clk_i       ),
     .rst_ni ( rst_ni      ),
@@ -74,7 +72,7 @@ module aes_sub_bytes import aes_pkg::*;
       assign in_prd[i][j] = {out_prd[i][aes_rot_int(j,4)], prd_i[i][j]};
 
       aes_sbox #(
-        .SecSBoxImpl ( SecSBoxImpl )
+        .SBoxImpl ( SBoxImpl )
       ) u_aes_sbox_ij (
         .clk_i     ( clk_i                ),
         .rst_ni    ( rst_ni               ),

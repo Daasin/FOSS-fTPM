@@ -16,7 +16,9 @@ class aes_config_error_test extends aes_base_test;
   function void configure_env();
     super.configure_env();
 
-    cfg.error_types              = 4'b0001;
+//    the feature below is waiting in anther PR
+//    cfg.zero_delay_pct           = 100;
+    cfg.error_types              = 3'b001;
     cfg.config_error_pct         = 75;
     cfg.num_messages_min         = 3;
     cfg.num_messages_max         = 10;
@@ -44,7 +46,6 @@ class aes_config_error_test extends aes_base_test;
     cfg.fixed_iv_en              = 0;
 
     cfg.random_data_key_iv_order = 0;
-    cfg.sideload_pct             = 30;
 
     `DV_CHECK_RANDOMIZE_FATAL(cfg)
   endfunction

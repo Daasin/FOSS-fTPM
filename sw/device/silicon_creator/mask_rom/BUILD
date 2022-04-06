@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//rules:opentitan.bzl", "OPENTITAN_CPU", "opentitan_functest", "opentitan_rom_binary", "verilator_params")
+load("//rules:opentitan.bzl", "OPENTITAN_CPU", "opentitan_binary", "opentitan_functest", "verilator_params")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -27,7 +27,6 @@ cc_library(
     testonly = True,
     hdrs = ["mock_boot_policy_ptrs.h"],
     deps = [
-        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -53,7 +52,7 @@ cc_test(
     ],
 )
 
-opentitan_rom_binary(
+opentitan_binary(
     name = "mask_rom",
     srcs = [
         "mask_rom.c",
@@ -63,6 +62,7 @@ opentitan_rom_binary(
     linkopts = [
         "-T $(location mask_rom.ld)",
     ],
+    output_scrambled = True,
     deps = [
         "mask_rom.ld",
         ":boot_policy",
@@ -121,7 +121,6 @@ cc_library(
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/lib/base",
         "//sw/device/silicon_creator/lib:epmp_intf",
-        "//sw/device/silicon_creator/lib/drivers:lifecycle",
     ],
 )
 
@@ -136,13 +135,11 @@ opentitan_functest(
     ],
     # This test doesn't use the OTTF.
     ottf = [],
+    output_scrambled = True,
     targets = ["verilator"],  # Can only run in verilator right now.
-    # This test is designed to run and complete entirely in the ROM boot stage.
-    # Setting the `test_in_rom` flag makes the `opentitan_functest` rule aware
-    # of this, and instructs it to load the test image into ROM (rather than
-    # loading the default test ROM, or any other ROM that may be specified via
-    # Verilator or CW310 params).
-    test_in_rom = True,
+    verilator = verilator_params(
+        rom = ":mask_rom_epmp_test_prog_verilator_scr",
+    ),
     deps = [
         "mask_rom.ld",
         ":mask_rom_epmp",
@@ -229,7 +226,7 @@ cc_library(
         "//sw/device/silicon_creator/lib/drivers:lifecycle",
         "//sw/device/silicon_creator/lib/drivers:otp",
         "//sw/device/silicon_creator/lib/drivers:rnd",
-        "//sw/device/silicon_creator/mask_rom/keys:test_public_keys",
+        "//sw/device/silicon_creator/mask_rom/keys:test_keys",
     ],
 )
 
@@ -255,7 +252,7 @@ cc_test(
         "//sw/device/silicon_creator/lib/drivers:mock_lifecycle",
         "//sw/device/silicon_creator/lib/drivers:mock_otp",
         "//sw/device/silicon_creator/lib/drivers:mock_rnd",
-        "//sw/device/silicon_creator/mask_rom/keys:test_public_keys",
+        "//sw/device/silicon_creator/mask_rom/keys:test_keys",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
@@ -266,9 +263,14 @@ opentitan_functest(
     srcs = [
         "mask_rom_test.c",
     ],
-    signed = True,
+    targets = ["verilator"],  # Can only run in verilator right now.
     verilator = verilator_params(
-        rom = ":mask_rom_sim_verilator_scr_vmem",
+        args = [
+            "console",
+            # This test program is not signed, so a boot fault is the expected behavior.
+            "--exit-success='boot_fault: 0x0142500d'",
+        ],
+        rom = ":mask_rom_verilator_scr",
         tags = [
             "cpu:4",
             "failing_verilator",

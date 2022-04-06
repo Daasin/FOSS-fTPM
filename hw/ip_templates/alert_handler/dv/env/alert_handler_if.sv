@@ -4,7 +4,6 @@
 //
 // Interface for LPG and crashdump output.
 interface alert_handler_if(input clk, input rst_n);
-  import uvm_pkg::*;
   import alert_pkg::*;
   import prim_mubi_pkg::*;
   import cip_base_pkg::*;

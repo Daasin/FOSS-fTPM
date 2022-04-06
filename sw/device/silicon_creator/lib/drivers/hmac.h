@@ -13,6 +13,8 @@
 extern "C" {
 #endif
 
+#define HMAC_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+
 enum {
   /**
    * Size of a SHA-256 digest in words.

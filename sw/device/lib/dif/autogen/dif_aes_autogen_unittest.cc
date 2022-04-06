@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "aes_regs.h"  // Generated.
 
@@ -29,35 +28,35 @@ class AesTest : public Test, public MmioTest {
 class InitTest : public AesTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aes_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_aes_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_aes_init(dev().region(), &aes_));
+  EXPECT_EQ(dif_aes_init(dev().region(), &aes_), kDifOk);
 }
 
 class AlertForceTest : public AesTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_aes_alert_force(nullptr, kDifAesAlertRecovCtrlUpdateErr));
+  EXPECT_EQ(dif_aes_alert_force(nullptr, kDifAesAlertRecovCtrlUpdateErr),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_aes_alert_force(nullptr, static_cast<dif_aes_alert_t>(32)));
+  EXPECT_EQ(dif_aes_alert_force(nullptr, static_cast<dif_aes_alert_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(AES_ALERT_TEST_REG_OFFSET,
                  {{AES_ALERT_TEST_RECOV_CTRL_UPDATE_ERR_BIT, true}});
-  EXPECT_DIF_OK(dif_aes_alert_force(&aes_, kDifAesAlertRecovCtrlUpdateErr));
+  EXPECT_EQ(dif_aes_alert_force(&aes_, kDifAesAlertRecovCtrlUpdateErr), kDifOk);
 
   // Force last alert.
   EXPECT_WRITE32(AES_ALERT_TEST_REG_OFFSET,
                  {{AES_ALERT_TEST_FATAL_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_aes_alert_force(&aes_, kDifAesAlertFatalFault));
+  EXPECT_EQ(dif_aes_alert_force(&aes_, kDifAesAlertFatalFault), kDifOk);
 }
 
 }  // namespace

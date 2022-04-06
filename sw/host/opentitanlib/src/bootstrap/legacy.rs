@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::Result;
 use mundane::hash::{Digest, Hasher, Sha256};
 use std::time::Duration;
 use thiserror::Error;
@@ -10,7 +11,7 @@ use zerocopy::AsBytes;
 use crate::app::TransportWrapper;
 use crate::bootstrap::{Bootstrap, BootstrapOptions, UpdateProtocol};
 use crate::io::spi::Transfer;
-use crate::transport::{Capability, Result};
+use crate::transport::Capability;
 
 #[derive(AsBytes, Debug, Default)]
 #[repr(C)]
@@ -139,7 +140,7 @@ impl Legacy {
     }
 }
 
-#[derive(Debug, Error, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Error)]
 pub enum LegacyBootstrapError {
     #[error("Boot rom not ready")]
     NotReady,
@@ -212,7 +213,7 @@ impl UpdateProtocol for Legacy {
         transport: &TransportWrapper,
     ) -> Result<()> {
         transport
-            .capabilities()?
+            .capabilities()
             .request(Capability::GPIO | Capability::SPI)
             .ok()?;
         Ok(())
@@ -276,10 +277,7 @@ impl UpdateProtocol for Legacy {
                 continue;
             }
 
-            if response[..Frame::HASH_LEN]
-                .iter()
-                .all(|&x| x == response[0])
-            {
+            if response.iter().all(|&x| x == response[0]) {
                 // A response consisteing of all identical bytes is a status code.
                 match LegacyBootstrapError::from(response[0]) {
                     LegacyBootstrapError::NotReady => {

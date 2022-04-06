@@ -10,8 +10,8 @@
 
 module aes_cipher_control import aes_pkg::*;
 #(
-  parameter bit         SecMasking  = 0,
-  parameter sbox_impl_e SecSBoxImpl = SBoxImplDom
+  parameter bit         Masking  = 0,
+  parameter sbox_impl_e SBoxImpl = SBoxImplLut
 ) (
   input  logic                    clk_i,
   input  logic                    rst_ni,
@@ -151,8 +151,8 @@ module aes_cipher_control import aes_pkg::*;
   for (genvar i = 0; i < Sp2VWidth; i++) begin : gen_fsm
     if (SP2V_LOGIC_HIGH[i] == 1'b1) begin : gen_fsm_p
       aes_cipher_control_fsm_p #(
-        .SecMasking  ( SecMasking  ),
-        .SecSBoxImpl ( SecSBoxImpl )
+        .Masking  ( Masking  ),
+        .SBoxImpl ( SBoxImpl )
       ) u_aes_cipher_control_fsm_i (
         .clk_i                 ( clk_i                    ),
         .rst_ni                ( rst_ni                   ),
@@ -214,8 +214,8 @@ module aes_cipher_control import aes_pkg::*;
       );
     end else begin : gen_fsm_n
       aes_cipher_control_fsm_n #(
-        .SecMasking  ( SecMasking  ),
-        .SecSBoxImpl ( SecSBoxImpl )
+        .Masking  ( Masking  ),
+        .SBoxImpl ( SBoxImpl )
       ) u_aes_cipher_control_fsm_i (
         .clk_i                 ( clk_i                    ),
         .rst_ni                ( rst_ni                   ),
@@ -433,16 +433,11 @@ module aes_cipher_control import aes_pkg::*;
   assign sp2v_sig[6] = sub_bytes_out_req_i;
   assign sp2v_sig[7] = key_expand_out_req_i;
 
-  // All signals inside sp2v_sig except for sub_bytes/key_expand_out_req_i are driven and consumed
-  // by multi-rail FSMs.
-  localparam bit [NumSp2VSig-1:0] Sp2VEnSecBuf = 8'b1100_0000;
-
   // Individually check sparsely encoded signals.
   for (genvar i = 0; i < NumSp2VSig; i++) begin : gen_sel_buf_chk
     aes_sel_buf_chk #(
-      .Num      ( Sp2VNum         ),
-      .Width    ( Sp2VWidth       ),
-      .EnSecBuf ( Sp2VEnSecBuf[i] )
+      .Num   ( Sp2VNum   ),
+      .Width ( Sp2VWidth )
     ) u_aes_sp2v_sig_buf_chk_i (
       .clk_i  ( clk_i               ),
       .rst_ni ( rst_ni              ),

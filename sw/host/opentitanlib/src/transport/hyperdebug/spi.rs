@@ -2,15 +2,14 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::{ensure, Result};
 use rusb::{Direction, Recipient, RequestType};
 use std::mem::size_of;
 use std::rc::Rc;
 use zerocopy::{AsBytes, FromBytes};
 
-use crate::ensure;
 use crate::io::spi::{SpiError, Target, Transfer, TransferMode};
-use crate::transport::hyperdebug::{BulkInterface, Inner};
-use crate::transport::{Result, TransportError};
+use crate::transport::hyperdebug::{BulkInterface, Error, Inner};
 
 pub struct HyperdebugSpiTarget {
     inner: Rc<Inner>,
@@ -137,22 +136,16 @@ impl HyperdebugSpiTarget {
         let rc = usb_handle.read_bulk(spi_interface.in_endpoint, resp.as_bytes_mut())?;
         ensure!(
             rc == size_of::<RspUsbSpiConfig>(),
-            TransportError::CommunicationError(
-                "Unrecognized reponse to GET_USB_SPI_CONFIG".to_string()
-            )
+            Error::CommunicationError("Unrecognized reponse to GET_USB_SPI_CONFIG")
         );
         ensure!(
             resp.packet_id == USB_SPI_PKT_ID_RSP_USB_SPI_CONFIG,
-            TransportError::CommunicationError(
-                "Unrecognized reponse to GET_USB_SPI_CONFIG".to_string()
-            )
+            Error::CommunicationError("Unrecognized reponse to GET_USB_SPI_CONFIG")
         );
         // Verify that interface supports concurrent read/write.
         ensure!(
             (resp.feature_bitmap & 0x0001) != 0,
-            TransportError::CommunicationError(
-                "HyperDebug does not support bidirectional SPI".to_string()
-            )
+            Error::CommunicationError("HyperDebug does not support bidirectional SPI")
         );
 
         Ok(Self {
@@ -190,19 +183,15 @@ impl HyperdebugSpiTarget {
         let bytecount = self.usb_read_bulk(&mut resp.as_bytes_mut())?;
         ensure!(
             bytecount >= 4,
-            TransportError::CommunicationError(
-                "Unrecognized reponse to TRANSFER_START".to_string()
-            )
+            Error::CommunicationError("Unrecognized reponse to TRANSFER_START")
         );
         ensure!(
             resp.packet_id == USB_SPI_PKT_ID_RSP_TRANSFER_START,
-            TransportError::CommunicationError(
-                "Unrecognized reponse to TRANSFER_START".to_string()
-            )
+            Error::CommunicationError("Unrecognized reponse to TRANSFER_START")
         );
         ensure!(
             resp.status_code == 0,
-            TransportError::CommunicationError("SPI error".to_string())
+            Error::CommunicationError("SPI error")
         );
         let databytes = bytecount - 4;
         rbuf[0..databytes].clone_from_slice(&resp.data[0..databytes]);
@@ -212,21 +201,15 @@ impl HyperdebugSpiTarget {
             let bytecount = self.usb_read_bulk(&mut resp.as_bytes_mut())?;
             ensure!(
                 bytecount > 4,
-                TransportError::CommunicationError(
-                    "Unrecognized reponse to TRANSFER_START".to_string()
-                )
+                Error::CommunicationError("Unrecognized reponse to TRANSFER_START")
             );
             ensure!(
                 resp.packet_id == USB_SPI_PKT_ID_RSP_TRANSFER_CONTINUE,
-                TransportError::CommunicationError(
-                    "Unrecognized reponse to TRANSFER_START".to_string()
-                )
+                Error::CommunicationError("Unrecognized reponse to TRANSFER_START")
             );
             ensure!(
                 resp.data_index == index as u16,
-                TransportError::CommunicationError(
-                    "Unexpected byte index in reponse to TRANSFER_START".to_string()
-                )
+                Error::CommunicationError("Unexpected byte index in reponse to TRANSFER_START")
             );
             let databytes = bytecount - 4;
             rbuf[index..index + databytes].clone_from_slice(&resp.data[0..0 + databytes]);
@@ -280,14 +263,14 @@ impl Target for HyperdebugSpiTarget {
         Ok(())
     }
 
-    fn get_max_transfer_count(&self) -> Result<usize> {
+    fn get_max_transfer_count(&self) -> usize {
         // The protocol imposes no limits to the number of Transfers
         // in a transaction.
-        Ok(usize::MAX)
+        usize::MAX
     }
 
-    fn max_chunk_size(&self) -> Result<usize> {
-        Ok(self.max_chunk_size)
+    fn max_chunk_size(&self) -> usize {
+        self.max_chunk_size
     }
 
     fn run_transaction(&self, transaction: &mut [Transfer]) -> Result<()> {

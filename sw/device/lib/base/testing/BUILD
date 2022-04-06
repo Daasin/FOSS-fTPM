@@ -5,13 +5,11 @@
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "global_mock",
-    hdrs = ["global_mock.h"],
-)
-
-cc_library(
-    name = "mock_mmio",
-    srcs = ["mock_mmio.cc"],
+    name = "testing",
+    srcs = [
+        "mock_mmio.cc",
+        "//sw/device/lib/base:mmio_src",
+    ],
     hdrs = [
         "mock_mmio.h",
         "mock_mmio_test_utils.h",
@@ -20,23 +18,7 @@ cc_library(
         "MOCK_MMIO=1",
     ],
     deps = [
-        "//sw/device/lib/base:mmio",
-        "@googletest//:gtest",
-    ],
-)
-
-cc_library(
-    name = "mock_abs_mmio",
-    testonly = True,
-    hdrs = [
-        "mock_abs_mmio.h",
-        "mock_mmio_test_utils.h",
-    ],
-    defines = ["MOCK_ABS_MMIO"],
-    deps = [
-        ":global_mock",
-        ":mock_mmio",
-        "//sw/device/lib/base:abs_mmio",
+        "//sw/device/lib/base",
         "@googletest//:gtest",
     ],
 )
@@ -50,7 +32,7 @@ cc_test(
         "MOCK_MMIO=1",
     ],
     deps = [
-        ":mock_mmio",
+        ":testing",
         "@googletest//:gtest_main",
     ],
 )

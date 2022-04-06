@@ -9,7 +9,6 @@
 #include "sw/device/lib/base/multibits.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
 #include "sw/device/lib/dif/dif_base.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "entropy_src_regs.h"  // Generated
 
@@ -41,18 +40,18 @@ class ConfigTest : public DifEntropySrcTest {
 };
 
 TEST_F(ConfigTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_entropy_src_configure(nullptr, {}));
+  EXPECT_EQ(dif_entropy_src_configure(nullptr, {}), kDifBadArg);
 }
 
 TEST_F(ConfigTest, InvalidFifoThreshold) {
   config_.fw_override.buffer_threshold = 65;
-  EXPECT_DIF_BADARG(dif_entropy_src_configure(&entropy_src_, config_));
+  EXPECT_EQ(dif_entropy_src_configure(&entropy_src_, config_), kDifBadArg);
 }
 
 TEST_F(ConfigTest, InvalidFwOverrideSettings) {
   config_.fw_override.enable = false;
   config_.fw_override.entropy_insert_enable = true;
-  EXPECT_DIF_BADARG(dif_entropy_src_configure(&entropy_src_, config_));
+  EXPECT_EQ(dif_entropy_src_configure(&entropy_src_, config_), kDifBadArg);
 }
 
 struct ConfigParams {
@@ -110,12 +109,17 @@ TEST_P(ConfigTestAllParams, ValidConfigurationMode) {
   uint32_t enable = test_param.expected_mode != kDifEntropySrcModeDisabled
                         ? kMultiBitBool4True
                         : kMultiBitBool4False;
+
+  uint32_t reset_ht = test_param.reset_health_test_registers
+                          ? kMultiBitBool4True
+                          : kMultiBitBool4False;
   EXPECT_WRITE32(
       ENTROPY_SRC_CONF_REG_OFFSET,
       {
           {ENTROPY_SRC_CONF_RNG_BIT_SEL_OFFSET, test_param.expected_rng_sel},
           {ENTROPY_SRC_CONF_RNG_BIT_ENABLE_OFFSET, rng_bit_enable},
-          {ENTROPY_SRC_CONF_THRESHOLD_SCOPE_OFFSET, kMultiBitBool4False},
+          {ENTROPY_SRC_CONF_HEALTH_TEST_CLR_OFFSET, reset_ht},
+          {ENTROPY_SRC_CONF_BOOT_BYPASS_DISABLE_OFFSET, kMultiBitBool4False},
           {ENTROPY_SRC_CONF_ENTROPY_DATA_REG_ENABLE_OFFSET, route_to_fw},
           {ENTROPY_SRC_CONF_FIPS_ENABLE_OFFSET, enable},
       });
@@ -125,7 +129,7 @@ TEST_P(ConfigTestAllParams, ValidConfigurationMode) {
                      {ENTROPY_SRC_MODULE_ENABLE_MODULE_ENABLE_OFFSET, enable},
                  });
 
-  EXPECT_DIF_OK(dif_entropy_src_configure(&entropy_src_, config_));
+  EXPECT_EQ(dif_entropy_src_configure(&entropy_src_, config_), kDifOk);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -163,11 +167,11 @@ class ReadTest : public DifEntropySrcTest {};
 
 TEST_F(ReadTest, EntropyBadArg) {
   uint32_t word;
-  EXPECT_DIF_BADARG(dif_entropy_src_read(nullptr, &word));
+  EXPECT_EQ(dif_entropy_src_read(nullptr, &word), kDifBadArg);
 }
 
 TEST_F(ReadTest, WordBadArg) {
-  EXPECT_DIF_BADARG(dif_entropy_src_read(&entropy_src_, nullptr));
+  EXPECT_EQ(dif_entropy_src_read(&entropy_src_, nullptr), kDifBadArg);
 }
 
 TEST_F(ReadTest, ReadDataUnAvailable) {
@@ -187,7 +191,7 @@ TEST_F(ReadTest, ReadOk) {
                  {{ENTROPY_SRC_INTR_STATE_ES_ENTROPY_VALID_BIT, true}});
 
   uint32_t got_word;
-  EXPECT_DIF_OK(dif_entropy_src_read(&entropy_src_, &got_word));
+  EXPECT_EQ(dif_entropy_src_read(&entropy_src_, &got_word), kDifOk);
   EXPECT_EQ(got_word, expected_word);
 }
 

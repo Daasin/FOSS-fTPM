@@ -2,8 +2,9 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::Result;
 use humantime::parse_duration;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::rc::Rc;
 use std::time::Duration;
 use structopt::clap::arg_enum;
@@ -14,16 +15,12 @@ use crate::app::TransportWrapper;
 use crate::io::gpio::GpioPin;
 use crate::io::spi::SpiParams;
 use crate::io::uart::UartParams;
-use crate::transport::{Capability, Result};
 
 mod legacy;
 mod primitive;
 mod rescue;
 
-pub use legacy::LegacyBootstrapError;
-pub use rescue::RescueError;
-
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error)]
 pub enum BootstrapError {
     #[error("Invalid hash length: {0}")]
     InvalidHashLength(usize),
@@ -38,7 +35,7 @@ arg_enum! {
     /// The 'Emulator' value indicates that this tool has a direct way
     /// of communicating with the OpenTitan emulator, to replace the
     /// contents of the emulated flash storage.
-    #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
     pub enum BootstrapProtocol {
         Primitive,
         Legacy,
@@ -71,7 +68,7 @@ trait UpdateProtocol {
 
 /// Options which control bootstrap behavior.
 /// The meaning of each of these values depends on the specific bootstrap protocol being used.
-#[derive(Clone, Debug, StructOpt, Serialize, Deserialize)]
+#[derive(Debug, StructOpt)]
 pub struct BootstrapOptions {
     #[structopt(flatten)]
     pub uart_params: UartParams,
@@ -114,18 +111,6 @@ impl<'a> Bootstrap<'a> {
         options: &BootstrapOptions,
         payload: &[u8],
     ) -> Result<()> {
-        if transport
-            .capabilities()?
-            .request(Capability::PROXY)
-            .ok()
-            .is_ok()
-        {
-            // The transport happens to be connection to a remove opentitan session.  Pass
-            // payload along with all relevant command line arguments to the remote session, and
-            // it will run the actual bootstrapping logic.
-            transport.proxy_ops()?.bootstrap(options, payload)?;
-            return Ok(());
-        }
         let updater: Box<dyn UpdateProtocol> = match options.protocol {
             BootstrapProtocol::Primitive => Box::new(primitive::Primitive::new(&options)),
             BootstrapProtocol::Legacy => Box::new(legacy::Legacy::new(&options)),

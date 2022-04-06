@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::{bail, ensure, Result};
+
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -13,22 +15,21 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use thiserror::Error;
+
+use crate::collection;
 use crate::io::gpio::GpioPin;
 use crate::io::i2c::Bus;
 use crate::io::spi::Target;
 use crate::io::uart::Uart;
-use crate::transport::common::uart::SerialPortUart;
-use crate::transport::{
-    Capabilities, Capability, Result, Transport, TransportError, TransportInterfaceType,
-    WrapInTransportError,
-};
+use crate::transport::{Capabilities, Capability, Transport, TransportError};
 use crate::util::usb::UsbBackend;
-use crate::{bail, collection, ensure};
 
 pub mod c2d2;
 pub mod gpio;
 pub mod i2c;
 pub mod spi;
+pub mod uart;
 
 /// Implementation of the Transport trait for HyperDebug based on the
 /// Nucleo-L552ZE-Q.
@@ -130,8 +131,7 @@ impl<T: Flavor> Hyperdebug<T> {
                         console_tty = Some(Self::find_tty(&interface_path)?)
                     } else {
                         // We found an UART forwarding USB interface.
-                        uart_ttys
-                            .insert(interface_name.to_string(), Self::find_tty(&interface_path)?);
+                        uart_ttys.insert(interface_name.to_string(), Self::find_tty(&interface_path)?);
                     }
                 }
                 if interface_desc.class_code() == Self::USB_CLASS_VENDOR
@@ -143,8 +143,7 @@ impl<T: Flavor> Hyperdebug<T> {
                     Self::find_endpoints_for_interface(
                         &mut spi_interface,
                         &interface,
-                        &interface_desc,
-                    )?;
+                        &interface_desc)?;
                 }
                 if interface_desc.class_code() == Self::USB_CLASS_VENDOR
                     && interface_desc.sub_class_code() == Self::USB_SUBCLASS_I2C
@@ -155,8 +154,7 @@ impl<T: Flavor> Hyperdebug<T> {
                     Self::find_endpoints_for_interface(
                         &mut i2c_interface,
                         &interface,
-                        &interface_desc,
-                    )?;
+                        &interface_desc)?;
                 }
             }
         }
@@ -171,18 +169,15 @@ impl<T: Flavor> Hyperdebug<T> {
         };
         let result = Hyperdebug::<T> {
             spi_names,
-            spi_interface: spi_interface.ok_or(TransportError::CommunicationError(
-                "Missing SPI interface".to_string(),
-            ))?,
+            spi_interface: spi_interface
+                .ok_or(Error::CommunicationError("Missing SPI interface"))?,
             i2c_names,
-            i2c_interface: i2c_interface.ok_or(TransportError::CommunicationError(
-                "Missing I2C interface".to_string(),
-            ))?,
+            i2c_interface: i2c_interface
+                .ok_or(Error::CommunicationError("Missing I2C interface"))?,
             uart_ttys,
             inner: Rc::new(Inner {
-                console_tty: console_tty.ok_or(TransportError::CommunicationError(
-                    "Missing console interface".to_string(),
-                ))?,
+                console_tty: console_tty
+                    .ok_or(Error::CommunicationError("Missing console interface"))?,
                 usb_device: RefCell::new(device),
                 gpio: Default::default(),
                 spis: Default::default(),
@@ -197,27 +192,22 @@ impl<T: Flavor> Hyperdebug<T> {
     /// Locates the /dev/ttyUSBn node corresponding to a given interface in the sys directory
     /// tree, e.g. /sys/bus/usb/devices/1-4/1-4:1.0 .
     fn find_tty(path: &Path) -> Result<PathBuf> {
-        for entry in fs::read_dir(path)
-            .wrap(|e| TransportError::ReadError(path.to_str().unwrap().to_string(), e))?
-        {
-            let entry =
-                entry.wrap(|e| TransportError::ReadError(path.to_str().unwrap().to_string(), e))?;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
             if let Ok(filename) = entry.file_name().into_string() {
                 if filename.starts_with("tty") {
                     return Ok(PathBuf::from("/dev").join(entry.file_name()));
                 }
             }
         }
-        Err(TransportError::CommunicationError(
-            "Did not find ttyUSBn device".to_string(),
-        ))
+        Err(Error::CommunicationError("Did not find ttyUSBn device").into())
     }
 
     fn find_endpoints_for_interface(
         interface_variable_output: &mut Option<BulkInterface>,
         interface: &rusb::Interface,
-        interface_desc: &rusb::InterfaceDescriptor,
-    ) -> Result<()> {
+        interface_desc: &rusb::InterfaceDescriptor) -> Result<()>
+    {
         let mut in_endpoint: Option<u8> = None;
         let mut out_endpoint: Option<u8> = None;
         for endpoint_desc in interface_desc.endpoint_descriptors() {
@@ -226,27 +216,21 @@ impl<T: Flavor> Hyperdebug<T> {
             }
             match endpoint_desc.direction() {
                 rusb::Direction::In => {
-                    ensure!(
-                        in_endpoint.is_none(),
-                        TransportError::CommunicationError("Multiple IN endpoints".to_string())
-                    );
+                    ensure!(in_endpoint.is_none(),
+                            Error::CommunicationError("Multiple IN endpoints"));
                     in_endpoint.replace(endpoint_desc.address());
                 }
                 rusb::Direction::Out => {
-                    ensure!(
-                        out_endpoint.is_none(),
-                        TransportError::CommunicationError("Multiple OUT endpoints".to_string())
-                    );
+                    ensure!(out_endpoint.is_none(),
+                            Error::CommunicationError("Multiple OUT endpoints"));
                     out_endpoint.replace(endpoint_desc.address());
                 }
             }
         }
         match (in_endpoint, out_endpoint) {
             (Some(in_endpoint), Some(out_endpoint)) => {
-                ensure!(
-                    interface_variable_output.is_none(),
-                    TransportError::CommunicationError("Multiple identical interfaces".to_string())
-                );
+                ensure!(interface_variable_output.is_none(),
+                        Error::CommunicationError("Multiple identical interfaces"));
                 interface_variable_output.replace(BulkInterface {
                     interface: interface.number(),
                     in_endpoint,
@@ -254,9 +238,7 @@ impl<T: Flavor> Hyperdebug<T> {
                 });
                 Ok(())
             }
-            _ => bail!(TransportError::CommunicationError(
-                "Missing one or more endpoints".to_string()
-            )),
+            _ => bail!(Error::CommunicationError("Missing one or more endpoints"))
         }
     }
 }
@@ -277,9 +259,7 @@ impl Inner {
     /// Send a command to HyperDebug firmware, with a callback to receive any output.
     pub fn execute_command(&self, cmd: &str, mut callback: impl FnMut(&str)) -> Result<()> {
         let mut port = serialport::new(
-            self.console_tty
-                .to_str()
-                .ok_or(TransportError::UnicodePathError)?,
+            self.console_tty.to_str().ok_or(Error::UnicodePathError)?,
             115_200,
         )
         .timeout(std::time::Duration::from_millis(10))
@@ -303,13 +283,12 @@ impl Inner {
                 Err(error) if error.kind() == ErrorKind::TimedOut => {
                     break;
                 }
-                Err(error) => return Err(error).wrap(TransportError::CommunicationError),
+                Err(error) => return Err(error.into()),
             }
         }
         // Send Ctrl-C, followed by the command, then newline.  This will discard any previous
         // partial input, before executing our command.
-        port.write(format!("\x03{}\n", cmd).as_bytes())
-            .wrap(TransportError::CommunicationError)?;
+        port.write(format!("\x03{}\n", cmd).as_bytes())?;
 
         // Now process response from HyperDebug.  First we expect to see the echo of the command
         // we just "typed". Then zero, one or more lines of useful output, which we want to pass
@@ -335,8 +314,7 @@ impl Inner {
                             if line_end > line_start && buf[line_end - 1] == 13 {
                                 line_end -= 1;
                             }
-                            let line = std::str::from_utf8(&buf[line_start..line_end])
-                                .wrap(TransportError::CommunicationError)?;
+                            let line = std::str::from_utf8(&buf[line_start..line_end])?;
                             if seen_echo {
                                 callback(line);
                             } else {
@@ -355,9 +333,7 @@ impl Inner {
                     }
                 }
                 Err(error) if error.kind() == ErrorKind::TimedOut => {
-                    if std::str::from_utf8(&buf[0..len]).wrap(TransportError::CommunicationError)?
-                        == "> "
-                    {
+                    if std::str::from_utf8(&buf[0..len])? == "> " {
                         // No data arrived for a while, and the last we got was a command
                         // prompt, this is what we expect when the command has finished
                         // successfully.
@@ -370,36 +346,48 @@ impl Inner {
                         // setting of the underlying serial port object.)
                         repeated_timeouts += 1;
                         if repeated_timeouts == 10 {
-                            return Err(error).wrap(TransportError::CommunicationError);
+                            return Err(error.into());
                         }
                     }
                 }
-                Err(error) => return Err(error).wrap(TransportError::CommunicationError),
+                Err(error) => return Err(error.into()),
             }
         }
     }
 }
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("USB device did not match")]
+    NoMatch,
+    #[error("Found no HyperDebug USB device")]
+    NoDevice,
+    #[error("Found multiple HyperDebug USB devices, use --serial")]
+    MultipleDevices,
+    #[error("Error communicating with HyperDebug: {0}")]
+    CommunicationError(&'static str),
+    #[error("Unsupported operation")]
+    UnsupportedOperationError,
+    #[error("Encountered non-unicode path")]
+    UnicodePathError,
+}
+
 impl<T: Flavor> Transport for Hyperdebug<T> {
-    fn capabilities(&self) -> Result<Capabilities> {
-        Ok(Capabilities::new(
-            Capability::UART | Capability::GPIO | Capability::SPI | Capability::I2C,
-        ))
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::new(Capability::UART | Capability::GPIO | Capability::SPI | Capability::I2C)
     }
 
     // Crate SPI Target instance, or return one from a cache of previously created instances.
     fn spi(&self, instance: &str) -> Result<Rc<dyn Target>> {
-        let &idx = self.spi_names.get(instance).ok_or_else(|| {
-            TransportError::InvalidInstance(TransportInterfaceType::Spi, instance.to_string())
-        })?;
+        let &idx = self
+            .spi_names
+            .get(instance)
+            .ok_or_else(|| TransportError::InvalidInstance("spi", instance.to_string()))?;
         if let Some(instance) = self.inner.spis.borrow().get(&idx) {
             return Ok(Rc::clone(instance));
         }
         let instance: Rc<dyn Target> = Rc::new(spi::HyperdebugSpiTarget::open(
-            &self.inner,
-            &self.spi_interface,
-            idx,
-        )?);
+            &self.inner, &self.spi_interface, idx)?);
         self.inner
             .spis
             .borrow_mut()
@@ -409,17 +397,15 @@ impl<T: Flavor> Transport for Hyperdebug<T> {
 
     // Crate I2C Target instance, or return one from a cache of previously created instances.
     fn i2c(&self, instance: &str) -> Result<Rc<dyn Bus>> {
-        let &idx = self.i2c_names.get(instance).ok_or_else(|| {
-            TransportError::InvalidInstance(TransportInterfaceType::I2c, instance.to_string())
-        })?;
+        let &idx = self
+            .i2c_names
+            .get(instance)
+            .ok_or_else(|| TransportError::InvalidInstance("i2c", instance.to_string()))?;
         if let Some(instance) = self.inner.i2cs.borrow().get(&idx) {
             return Ok(Rc::clone(instance));
         }
         let instance: Rc<dyn Bus> = Rc::new(i2c::HyperdebugI2cBus::open(
-            &self.inner,
-            &self.i2c_interface,
-            idx,
-        )?);
+            &self.inner, &self.i2c_interface, idx)?);
         self.inner
             .i2cs
             .borrow_mut()
@@ -434,20 +420,14 @@ impl<T: Flavor> Transport for Hyperdebug<T> {
                 if let Some(instance) = self.inner.uarts.borrow().get(tty) {
                     return Ok(Rc::clone(instance));
                 }
-                let instance: Rc<dyn Uart> = Rc::new(SerialPortUart::open(
-                    tty.to_str().ok_or(TransportError::UnicodePathError)?,
-                )?);
+                let instance: Rc<dyn Uart> = Rc::new(uart::HyperdebugUart::open(tty)?);
                 self.inner
                     .uarts
                     .borrow_mut()
                     .insert(tty.clone(), Rc::clone(&instance));
                 Ok(instance)
             }
-            _ => Err(TransportError::InvalidInstance(
-                TransportInterfaceType::Uart,
-                instance.to_string(),
-            )
-            .into()),
+            _ => Err(TransportError::InvalidInstance("uart", instance.to_string()).into()),
         }
     }
 

@@ -81,7 +81,7 @@ module rv_core_ibex
   input  logic        debug_req_i,
 
   // Crash dump information
-  output cpu_crash_dump_t crash_dump_o,
+  output ibex_pkg::crash_dump_t crash_dump_o,
 
   // CPU Control Signals
   input lc_ctrl_pkg::lc_tx_t lc_cpu_en_i,
@@ -185,20 +185,18 @@ module rv_core_ibex
   logic [31:0] rvfi_mem_wdata;
 `endif
 
-  // errors and core alert events
+  // integrity errors and core alert events
   logic ibus_intg_err, dbus_intg_err;
-  logic alert_minor, alert_major_internal, alert_major_bus;
+  logic alert_minor, alert_major;
   logic double_fault;
-  logic fatal_intg_err, fatal_core_err, recov_core_err;
 
   // alert events to peripheral module
   logic fatal_intg_event;
   logic fatal_core_event;
   logic recov_core_event;
-  // SEC_CM: BUS.INTEGRITY
-  assign fatal_intg_event = ibus_intg_err | dbus_intg_err | alert_major_bus;
-  assign fatal_core_event = alert_major_internal | double_fault;
-  assign recov_core_event = alert_minor;
+  assign fatal_intg_event = ibus_intg_err | dbus_intg_err;
+  assign fatal_core_event = alert_major;
+  assign recov_core_event = alert_minor | double_fault;
 
   // configurations for address translation
   region_cfg_t [NumRegions-1:0] ibus_region_cfg;
@@ -311,30 +309,11 @@ module rv_core_ibex
   logic unused_nonce;
   assign unused_nonce = |icache_otp_key_i.nonce;
 
-  // Local fetch enable control.
-  // Whenever a fatal core error is seen disable local fetch enable.
-  lc_ctrl_pkg::lc_tx_t local_fetch_enable_d, local_fetch_enable_q;
 
-  assign local_fetch_enable_d = fatal_core_err ? lc_ctrl_pkg::Off : local_fetch_enable_q;
-
-  prim_lc_sender #(
-    .AsyncOn(1), // this instantiates a register
-    .ResetValueIsOn(1)
-  ) u_prim_lc_sender (
-    .clk_i,
-    .rst_ni,
-    .lc_en_i(local_fetch_enable_d),
-    .lc_en_o(local_fetch_enable_q)
-  );
-
-  // Multibit AND computation for fetch enable. Fetch is only enabled when local fetch enable,
-  // lifecycle CPU enable and power manager CPU enable are all enabled.
+  // Multibit AND computation for fetch enable.
   lc_ctrl_pkg::lc_tx_t fetch_enable;
-  assign fetch_enable = lc_ctrl_pkg::lc_tx_and_hi(local_fetch_enable_q,
-                                                  lc_ctrl_pkg::lc_tx_and_hi(lc_cpu_en[0],
-                                                                            pwrmgr_cpu_en[0]));
+  assign fetch_enable = lc_ctrl_pkg::lc_tx_and_hi(lc_cpu_en[0], pwrmgr_cpu_en[0]);
 
-  ibex_pkg::crash_dump_t crash_dump;
   ibex_top #(
     .PMPEnable                ( PMPEnable                ),
     .PMPGranularity           ( PMPGranularity           ),
@@ -399,7 +378,7 @@ module rv_core_ibex
     .irq_nm_i           ( irq_nm           ),
 
     .debug_req_i,
-    .crash_dump_o       ( crash_dump       ),
+    .crash_dump_o,
 
     // icache scramble interface
     .scramble_key_valid_i (key_ack),
@@ -435,30 +414,13 @@ module rv_core_ibex
     .rvfi_mem_rdata,
     .rvfi_mem_wdata,
 `endif
-    // SEC_CM: FETCH.CTRL.LC_GATED
-    .fetch_enable_i         (fetch_enable),
-    .alert_minor_o          (alert_minor),
-    .alert_major_internal_o (alert_major_internal),
-    .alert_major_bus_o      (alert_major_bus),
-    .core_sleep_o           (pwrmgr_o.core_sleeping)
+    // TODO(D2S): this needs to be pulled into both the primary core and into the shadow core
+    // before decoding it to a single bit.
+    .fetch_enable_i   (lc_ctrl_pkg::lc_tx_test_true_strict(fetch_enable)),
+    .alert_minor_o    (alert_minor),
+    .alert_major_o    (alert_major),
+    .core_sleep_o     (pwrmgr_o.core_sleeping)
   );
-
-  ibex_pkg::crash_dump_t crash_dump_previous;
-  logic previous_valid;
-
-  assign crash_dump_o.current = crash_dump;
-  assign crash_dump_o.previous = crash_dump_previous;
-  assign crash_dump_o.previous_valid = previous_valid;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      previous_valid <= '0;
-    end else if (double_fault) begin
-      previous_valid <= '1;
-      crash_dump_previous <= crash_dump;
-    end
-  end
-
 
   //
   // Convert ibex data/instruction bus to TL-UL
@@ -479,7 +441,6 @@ module rv_core_ibex
   logic [top_pkg::TL_DW-1:0] unused_data;
   // tl_adapter_host_i_ibex only reads instruction. a_data is always 0
   assign {instr_wdata_intg, unused_data} = prim_secded_pkg::prim_secded_inv_39_32_enc('0);
-  // SEC_CM: BUS.INTEGRITY
   tlul_adapter_host #(
     .MAX_REQS(NumOutstandingReqs),
     // if secure ibex is not set, data integrity is not generated
@@ -534,7 +495,6 @@ module rv_core_ibex
     .addr_o(data_addr_trans)
   );
 
-  // SEC_CM: BUS.INTEGRITY
   tlul_adapter_host #(
     .MAX_REQS(2),
     .EnableDataIntgGen(~SecureIbex)
@@ -658,6 +618,7 @@ module rv_core_ibex
   ///////////////////////
   // Error assignment
   ///////////////////////
+  logic fatal_intg_err, fatal_core_err, recov_core_err;
 
   assign fatal_intg_err = fatal_intg_event;
   assign fatal_core_err = fatal_core_event;
@@ -773,7 +734,6 @@ module rv_core_ibex
     .ack_o(edn_ack),
     .data_o(edn_data),
     .fips_o(edn_fips),
-    .err_o(),
     .clk_edn_i,
     .rst_edn_ni,
     .edn_o,

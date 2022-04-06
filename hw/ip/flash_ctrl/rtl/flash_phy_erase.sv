@@ -13,27 +13,23 @@ module flash_phy_erase import flash_phy_pkg::*; (
   // interface with controller
   input pg_erase_req_i,
   input bk_erase_req_i,
-  input suspend_req_i,
   output logic ack_o,
 
   // interface with flash
   output logic pg_erase_req_o,
   output logic bk_erase_req_o,
-  output logic suspend_req_o,
   input ack_i,
   input done_i
 );
 
-  typedef enum logic [1:0] {
+  typedef enum logic {
     StEraseIdle,
-    StEraseBusy,
-    StEraseSuspend
+    StEraseBusy
   } erase_state_e;
 
   erase_state_e state_d, state_q;
 
   logic req_valid;
-  logic suspend_valid;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -45,7 +41,6 @@ module flash_phy_erase import flash_phy_pkg::*; (
 
   always_comb begin
     req_valid = 1'b0;
-    suspend_valid = 1'b0;
     ack_o = 1'b0;
     state_d = state_q;
 
@@ -59,17 +54,6 @@ module flash_phy_erase import flash_phy_pkg::*; (
       end
 
       StEraseBusy: begin
-        suspend_valid = '1;
-
-        if (suspend_req_i && ack_i) begin
-          state_d = StEraseSuspend;
-        end else if (done_i) begin
-          ack_o = 1'b1;
-          state_d = StEraseIdle;
-        end
-      end
-
-      StEraseSuspend: begin
         if (done_i) begin
           ack_o = 1'b1;
           state_d = StEraseIdle;
@@ -82,6 +66,5 @@ module flash_phy_erase import flash_phy_pkg::*; (
 
   assign pg_erase_req_o = pg_erase_req_i & req_valid;
   assign bk_erase_req_o = bk_erase_req_i & req_valid;
-  assign suspend_req_o = suspend_req_i & suspend_valid;
 
 endmodule

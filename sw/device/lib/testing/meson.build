@@ -86,21 +86,6 @@ sw_lib_testing_entropy_testutils = declare_dependency(
   ),
 )
 
-# flash_ctrl test utilities
-sw_lib_testing_flash_ctrl_testutils = declare_dependency(
-  link_with: static_library(
-    'sw_lib_testing_flash_ctrl_testutils',
-    sources: [
-      'flash_ctrl_testutils.c'
-    ],
-    dependencies: [
-      sw_lib_mmio,
-      sw_lib_runtime_hart,
-      sw_lib_dif_flash_ctrl,
-    ],
-  ),
-)
-
 # pwrmgr test utilities
 sw_lib_testing_pwrmgr_testutils = declare_dependency(
   link_with: static_library(
@@ -188,21 +173,5 @@ sw_lib_testing_lc_ctrl_testutils = declare_dependency(
   ),
 )
 
-# HMAC test utilities
-sw_lib_testing_hmac_testutils = declare_dependency(
-  link_with: static_library(
-    'sw_lib_testing_hmac_testutils',
-    sources: [
-      hw_ip_hmac_reg_h,
-      'hmac_testutils.c',
-    ],
-    dependencies: [
-      sw_lib_dif_hmac,
-      sw_lib_runtime_log,
-    ],
-  ),
-)
-
-subdir('autogen')
 subdir('test_framework')
 subdir('test_rom')

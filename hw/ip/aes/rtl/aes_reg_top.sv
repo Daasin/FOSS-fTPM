@@ -144,21 +144,13 @@ module aes_reg_top (
   logic [31:0] key_share1_6_wd;
   logic key_share1_7_we;
   logic [31:0] key_share1_7_wd;
-  logic iv_0_re;
   logic iv_0_we;
-  logic [31:0] iv_0_qs;
   logic [31:0] iv_0_wd;
-  logic iv_1_re;
   logic iv_1_we;
-  logic [31:0] iv_1_qs;
   logic [31:0] iv_1_wd;
-  logic iv_2_re;
   logic iv_2_we;
-  logic [31:0] iv_2_qs;
   logic [31:0] iv_2_wd;
-  logic iv_3_re;
   logic iv_3_we;
-  logic [31:0] iv_3_qs;
   logic [31:0] iv_3_wd;
   logic data_in_0_we;
   logic [31:0] data_in_0_wd;
@@ -214,9 +206,6 @@ module aes_reg_top (
 
   // Register instances
   // R[alert_test]: V(True)
-  logic alert_test_qe;
-  logic [1:0] alert_test_flds_we;
-  assign alert_test_qe = &alert_test_flds_we;
   //   F[recov_ctrl_update_err]: 0:0
   prim_subreg_ext #(
     .DW    (1)
@@ -226,11 +215,10 @@ module aes_reg_top (
     .wd     (alert_test_recov_ctrl_update_err_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[0]),
+    .qe     (reg2hw.alert_test.recov_ctrl_update_err.qe),
     .q      (reg2hw.alert_test.recov_ctrl_update_err.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.recov_ctrl_update_err.qe = alert_test_qe;
 
   //   F[fatal_fault]: 1:1
   prim_subreg_ext #(
@@ -241,18 +229,14 @@ module aes_reg_top (
     .wd     (alert_test_fatal_fault_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[1]),
+    .qe     (reg2hw.alert_test.fatal_fault.qe),
     .q      (reg2hw.alert_test.fatal_fault.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.fatal_fault.qe = alert_test_qe;
 
 
   // Subregister 0 of Multireg key_share0
   // R[key_share0_0]: V(True)
-  logic key_share0_0_qe;
-  logic [0:0] key_share0_0_flds_we;
-  assign key_share0_0_qe = &key_share0_0_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_0 (
@@ -261,18 +245,14 @@ module aes_reg_top (
     .wd     (key_share0_0_wd),
     .d      (hw2reg.key_share0[0].d),
     .qre    (),
-    .qe     (key_share0_0_flds_we[0]),
+    .qe     (reg2hw.key_share0[0].qe),
     .q      (reg2hw.key_share0[0].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[0].qe = key_share0_0_qe;
 
 
   // Subregister 1 of Multireg key_share0
   // R[key_share0_1]: V(True)
-  logic key_share0_1_qe;
-  logic [0:0] key_share0_1_flds_we;
-  assign key_share0_1_qe = &key_share0_1_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_1 (
@@ -281,18 +261,14 @@ module aes_reg_top (
     .wd     (key_share0_1_wd),
     .d      (hw2reg.key_share0[1].d),
     .qre    (),
-    .qe     (key_share0_1_flds_we[0]),
+    .qe     (reg2hw.key_share0[1].qe),
     .q      (reg2hw.key_share0[1].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[1].qe = key_share0_1_qe;
 
 
   // Subregister 2 of Multireg key_share0
   // R[key_share0_2]: V(True)
-  logic key_share0_2_qe;
-  logic [0:0] key_share0_2_flds_we;
-  assign key_share0_2_qe = &key_share0_2_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_2 (
@@ -301,18 +277,14 @@ module aes_reg_top (
     .wd     (key_share0_2_wd),
     .d      (hw2reg.key_share0[2].d),
     .qre    (),
-    .qe     (key_share0_2_flds_we[0]),
+    .qe     (reg2hw.key_share0[2].qe),
     .q      (reg2hw.key_share0[2].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[2].qe = key_share0_2_qe;
 
 
   // Subregister 3 of Multireg key_share0
   // R[key_share0_3]: V(True)
-  logic key_share0_3_qe;
-  logic [0:0] key_share0_3_flds_we;
-  assign key_share0_3_qe = &key_share0_3_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_3 (
@@ -321,18 +293,14 @@ module aes_reg_top (
     .wd     (key_share0_3_wd),
     .d      (hw2reg.key_share0[3].d),
     .qre    (),
-    .qe     (key_share0_3_flds_we[0]),
+    .qe     (reg2hw.key_share0[3].qe),
     .q      (reg2hw.key_share0[3].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[3].qe = key_share0_3_qe;
 
 
   // Subregister 4 of Multireg key_share0
   // R[key_share0_4]: V(True)
-  logic key_share0_4_qe;
-  logic [0:0] key_share0_4_flds_we;
-  assign key_share0_4_qe = &key_share0_4_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_4 (
@@ -341,18 +309,14 @@ module aes_reg_top (
     .wd     (key_share0_4_wd),
     .d      (hw2reg.key_share0[4].d),
     .qre    (),
-    .qe     (key_share0_4_flds_we[0]),
+    .qe     (reg2hw.key_share0[4].qe),
     .q      (reg2hw.key_share0[4].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[4].qe = key_share0_4_qe;
 
 
   // Subregister 5 of Multireg key_share0
   // R[key_share0_5]: V(True)
-  logic key_share0_5_qe;
-  logic [0:0] key_share0_5_flds_we;
-  assign key_share0_5_qe = &key_share0_5_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_5 (
@@ -361,18 +325,14 @@ module aes_reg_top (
     .wd     (key_share0_5_wd),
     .d      (hw2reg.key_share0[5].d),
     .qre    (),
-    .qe     (key_share0_5_flds_we[0]),
+    .qe     (reg2hw.key_share0[5].qe),
     .q      (reg2hw.key_share0[5].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[5].qe = key_share0_5_qe;
 
 
   // Subregister 6 of Multireg key_share0
   // R[key_share0_6]: V(True)
-  logic key_share0_6_qe;
-  logic [0:0] key_share0_6_flds_we;
-  assign key_share0_6_qe = &key_share0_6_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_6 (
@@ -381,18 +341,14 @@ module aes_reg_top (
     .wd     (key_share0_6_wd),
     .d      (hw2reg.key_share0[6].d),
     .qre    (),
-    .qe     (key_share0_6_flds_we[0]),
+    .qe     (reg2hw.key_share0[6].qe),
     .q      (reg2hw.key_share0[6].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[6].qe = key_share0_6_qe;
 
 
   // Subregister 7 of Multireg key_share0
   // R[key_share0_7]: V(True)
-  logic key_share0_7_qe;
-  logic [0:0] key_share0_7_flds_we;
-  assign key_share0_7_qe = &key_share0_7_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share0_7 (
@@ -401,18 +357,14 @@ module aes_reg_top (
     .wd     (key_share0_7_wd),
     .d      (hw2reg.key_share0[7].d),
     .qre    (),
-    .qe     (key_share0_7_flds_we[0]),
+    .qe     (reg2hw.key_share0[7].qe),
     .q      (reg2hw.key_share0[7].q),
     .qs     ()
   );
-  assign reg2hw.key_share0[7].qe = key_share0_7_qe;
 
 
   // Subregister 0 of Multireg key_share1
   // R[key_share1_0]: V(True)
-  logic key_share1_0_qe;
-  logic [0:0] key_share1_0_flds_we;
-  assign key_share1_0_qe = &key_share1_0_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_0 (
@@ -421,18 +373,14 @@ module aes_reg_top (
     .wd     (key_share1_0_wd),
     .d      (hw2reg.key_share1[0].d),
     .qre    (),
-    .qe     (key_share1_0_flds_we[0]),
+    .qe     (reg2hw.key_share1[0].qe),
     .q      (reg2hw.key_share1[0].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[0].qe = key_share1_0_qe;
 
 
   // Subregister 1 of Multireg key_share1
   // R[key_share1_1]: V(True)
-  logic key_share1_1_qe;
-  logic [0:0] key_share1_1_flds_we;
-  assign key_share1_1_qe = &key_share1_1_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_1 (
@@ -441,18 +389,14 @@ module aes_reg_top (
     .wd     (key_share1_1_wd),
     .d      (hw2reg.key_share1[1].d),
     .qre    (),
-    .qe     (key_share1_1_flds_we[0]),
+    .qe     (reg2hw.key_share1[1].qe),
     .q      (reg2hw.key_share1[1].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[1].qe = key_share1_1_qe;
 
 
   // Subregister 2 of Multireg key_share1
   // R[key_share1_2]: V(True)
-  logic key_share1_2_qe;
-  logic [0:0] key_share1_2_flds_we;
-  assign key_share1_2_qe = &key_share1_2_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_2 (
@@ -461,18 +405,14 @@ module aes_reg_top (
     .wd     (key_share1_2_wd),
     .d      (hw2reg.key_share1[2].d),
     .qre    (),
-    .qe     (key_share1_2_flds_we[0]),
+    .qe     (reg2hw.key_share1[2].qe),
     .q      (reg2hw.key_share1[2].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[2].qe = key_share1_2_qe;
 
 
   // Subregister 3 of Multireg key_share1
   // R[key_share1_3]: V(True)
-  logic key_share1_3_qe;
-  logic [0:0] key_share1_3_flds_we;
-  assign key_share1_3_qe = &key_share1_3_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_3 (
@@ -481,18 +421,14 @@ module aes_reg_top (
     .wd     (key_share1_3_wd),
     .d      (hw2reg.key_share1[3].d),
     .qre    (),
-    .qe     (key_share1_3_flds_we[0]),
+    .qe     (reg2hw.key_share1[3].qe),
     .q      (reg2hw.key_share1[3].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[3].qe = key_share1_3_qe;
 
 
   // Subregister 4 of Multireg key_share1
   // R[key_share1_4]: V(True)
-  logic key_share1_4_qe;
-  logic [0:0] key_share1_4_flds_we;
-  assign key_share1_4_qe = &key_share1_4_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_4 (
@@ -501,18 +437,14 @@ module aes_reg_top (
     .wd     (key_share1_4_wd),
     .d      (hw2reg.key_share1[4].d),
     .qre    (),
-    .qe     (key_share1_4_flds_we[0]),
+    .qe     (reg2hw.key_share1[4].qe),
     .q      (reg2hw.key_share1[4].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[4].qe = key_share1_4_qe;
 
 
   // Subregister 5 of Multireg key_share1
   // R[key_share1_5]: V(True)
-  logic key_share1_5_qe;
-  logic [0:0] key_share1_5_flds_we;
-  assign key_share1_5_qe = &key_share1_5_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_5 (
@@ -521,18 +453,14 @@ module aes_reg_top (
     .wd     (key_share1_5_wd),
     .d      (hw2reg.key_share1[5].d),
     .qre    (),
-    .qe     (key_share1_5_flds_we[0]),
+    .qe     (reg2hw.key_share1[5].qe),
     .q      (reg2hw.key_share1[5].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[5].qe = key_share1_5_qe;
 
 
   // Subregister 6 of Multireg key_share1
   // R[key_share1_6]: V(True)
-  logic key_share1_6_qe;
-  logic [0:0] key_share1_6_flds_we;
-  assign key_share1_6_qe = &key_share1_6_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_6 (
@@ -541,18 +469,14 @@ module aes_reg_top (
     .wd     (key_share1_6_wd),
     .d      (hw2reg.key_share1[6].d),
     .qre    (),
-    .qe     (key_share1_6_flds_we[0]),
+    .qe     (reg2hw.key_share1[6].qe),
     .q      (reg2hw.key_share1[6].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[6].qe = key_share1_6_qe;
 
 
   // Subregister 7 of Multireg key_share1
   // R[key_share1_7]: V(True)
-  logic key_share1_7_qe;
-  logic [0:0] key_share1_7_flds_we;
-  assign key_share1_7_qe = &key_share1_7_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_key_share1_7 (
@@ -561,106 +485,78 @@ module aes_reg_top (
     .wd     (key_share1_7_wd),
     .d      (hw2reg.key_share1[7].d),
     .qre    (),
-    .qe     (key_share1_7_flds_we[0]),
+    .qe     (reg2hw.key_share1[7].qe),
     .q      (reg2hw.key_share1[7].q),
     .qs     ()
   );
-  assign reg2hw.key_share1[7].qe = key_share1_7_qe;
 
 
   // Subregister 0 of Multireg iv
   // R[iv_0]: V(True)
-  logic iv_0_qe;
-  logic [0:0] iv_0_flds_we;
-  assign iv_0_qe = &iv_0_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_iv_0 (
-    .re     (iv_0_re),
+    .re     (1'b0),
     .we     (iv_0_we),
     .wd     (iv_0_wd),
     .d      (hw2reg.iv[0].d),
     .qre    (),
-    .qe     (iv_0_flds_we[0]),
+    .qe     (reg2hw.iv[0].qe),
     .q      (reg2hw.iv[0].q),
-    .qs     (iv_0_qs)
+    .qs     ()
   );
-  assign reg2hw.iv[0].qe = iv_0_qe;
 
 
   // Subregister 1 of Multireg iv
   // R[iv_1]: V(True)
-  logic iv_1_qe;
-  logic [0:0] iv_1_flds_we;
-  assign iv_1_qe = &iv_1_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_iv_1 (
-    .re     (iv_1_re),
+    .re     (1'b0),
     .we     (iv_1_we),
     .wd     (iv_1_wd),
     .d      (hw2reg.iv[1].d),
     .qre    (),
-    .qe     (iv_1_flds_we[0]),
+    .qe     (reg2hw.iv[1].qe),
     .q      (reg2hw.iv[1].q),
-    .qs     (iv_1_qs)
+    .qs     ()
   );
-  assign reg2hw.iv[1].qe = iv_1_qe;
 
 
   // Subregister 2 of Multireg iv
   // R[iv_2]: V(True)
-  logic iv_2_qe;
-  logic [0:0] iv_2_flds_we;
-  assign iv_2_qe = &iv_2_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_iv_2 (
-    .re     (iv_2_re),
+    .re     (1'b0),
     .we     (iv_2_we),
     .wd     (iv_2_wd),
     .d      (hw2reg.iv[2].d),
     .qre    (),
-    .qe     (iv_2_flds_we[0]),
+    .qe     (reg2hw.iv[2].qe),
     .q      (reg2hw.iv[2].q),
-    .qs     (iv_2_qs)
+    .qs     ()
   );
-  assign reg2hw.iv[2].qe = iv_2_qe;
 
 
   // Subregister 3 of Multireg iv
   // R[iv_3]: V(True)
-  logic iv_3_qe;
-  logic [0:0] iv_3_flds_we;
-  assign iv_3_qe = &iv_3_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_iv_3 (
-    .re     (iv_3_re),
+    .re     (1'b0),
     .we     (iv_3_we),
     .wd     (iv_3_wd),
     .d      (hw2reg.iv[3].d),
     .qre    (),
-    .qe     (iv_3_flds_we[0]),
+    .qe     (reg2hw.iv[3].qe),
     .q      (reg2hw.iv[3].q),
-    .qs     (iv_3_qs)
+    .qs     ()
   );
-  assign reg2hw.iv[3].qe = iv_3_qe;
 
 
   // Subregister 0 of Multireg data_in
   // R[data_in_0]: V(False)
-  logic data_in_0_qe;
-  logic [0:0] data_in_0_flds_we;
-  prim_flop #(
-    .Width(1),
-    .ResetValue(0)
-  ) u_data_in0_qe (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .d_i(&data_in_0_flds_we),
-    .q_o(data_in_0_qe)
-  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -678,28 +574,16 @@ module aes_reg_top (
     .d      (hw2reg.data_in[0].d),
 
     // to internal hardware
-    .qe     (data_in_0_flds_we[0]),
+    .qe     (reg2hw.data_in[0].qe),
     .q      (reg2hw.data_in[0].q),
 
     // to register interface (read)
     .qs     ()
   );
-  assign reg2hw.data_in[0].qe = data_in_0_qe;
 
 
   // Subregister 1 of Multireg data_in
   // R[data_in_1]: V(False)
-  logic data_in_1_qe;
-  logic [0:0] data_in_1_flds_we;
-  prim_flop #(
-    .Width(1),
-    .ResetValue(0)
-  ) u_data_in1_qe (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .d_i(&data_in_1_flds_we),
-    .q_o(data_in_1_qe)
-  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -717,28 +601,16 @@ module aes_reg_top (
     .d      (hw2reg.data_in[1].d),
 
     // to internal hardware
-    .qe     (data_in_1_flds_we[0]),
+    .qe     (reg2hw.data_in[1].qe),
     .q      (reg2hw.data_in[1].q),
 
     // to register interface (read)
     .qs     ()
   );
-  assign reg2hw.data_in[1].qe = data_in_1_qe;
 
 
   // Subregister 2 of Multireg data_in
   // R[data_in_2]: V(False)
-  logic data_in_2_qe;
-  logic [0:0] data_in_2_flds_we;
-  prim_flop #(
-    .Width(1),
-    .ResetValue(0)
-  ) u_data_in2_qe (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .d_i(&data_in_2_flds_we),
-    .q_o(data_in_2_qe)
-  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -756,28 +628,16 @@ module aes_reg_top (
     .d      (hw2reg.data_in[2].d),
 
     // to internal hardware
-    .qe     (data_in_2_flds_we[0]),
+    .qe     (reg2hw.data_in[2].qe),
     .q      (reg2hw.data_in[2].q),
 
     // to register interface (read)
     .qs     ()
   );
-  assign reg2hw.data_in[2].qe = data_in_2_qe;
 
 
   // Subregister 3 of Multireg data_in
   // R[data_in_3]: V(False)
-  logic data_in_3_qe;
-  logic [0:0] data_in_3_flds_we;
-  prim_flop #(
-    .Width(1),
-    .ResetValue(0)
-  ) u_data_in3_qe (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .d_i(&data_in_3_flds_we),
-    .q_o(data_in_3_qe)
-  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -795,13 +655,12 @@ module aes_reg_top (
     .d      (hw2reg.data_in[3].d),
 
     // to internal hardware
-    .qe     (data_in_3_flds_we[0]),
+    .qe     (reg2hw.data_in[3].qe),
     .q      (reg2hw.data_in[3].q),
 
     // to register interface (read)
     .qs     ()
   );
-  assign reg2hw.data_in[3].qe = data_in_3_qe;
 
 
   // Subregister 0 of Multireg data_out
@@ -869,9 +728,6 @@ module aes_reg_top (
 
 
   // R[ctrl_shadowed]: V(True)
-  logic ctrl_shadowed_qe;
-  logic [6:0] ctrl_shadowed_flds_we;
-  assign ctrl_shadowed_qe = &ctrl_shadowed_flds_we;
   //   F[operation]: 1:0
   prim_subreg_ext #(
     .DW    (2)
@@ -881,11 +737,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_operation_wd),
     .d      (hw2reg.ctrl_shadowed.operation.d),
     .qre    (reg2hw.ctrl_shadowed.operation.re),
-    .qe     (ctrl_shadowed_flds_we[0]),
+    .qe     (reg2hw.ctrl_shadowed.operation.qe),
     .q      (reg2hw.ctrl_shadowed.operation.q),
     .qs     (ctrl_shadowed_operation_qs)
   );
-  assign reg2hw.ctrl_shadowed.operation.qe = ctrl_shadowed_qe;
 
   //   F[mode]: 7:2
   prim_subreg_ext #(
@@ -896,11 +751,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_mode_wd),
     .d      (hw2reg.ctrl_shadowed.mode.d),
     .qre    (reg2hw.ctrl_shadowed.mode.re),
-    .qe     (ctrl_shadowed_flds_we[1]),
+    .qe     (reg2hw.ctrl_shadowed.mode.qe),
     .q      (reg2hw.ctrl_shadowed.mode.q),
     .qs     (ctrl_shadowed_mode_qs)
   );
-  assign reg2hw.ctrl_shadowed.mode.qe = ctrl_shadowed_qe;
 
   //   F[key_len]: 10:8
   prim_subreg_ext #(
@@ -911,11 +765,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_key_len_wd),
     .d      (hw2reg.ctrl_shadowed.key_len.d),
     .qre    (reg2hw.ctrl_shadowed.key_len.re),
-    .qe     (ctrl_shadowed_flds_we[2]),
+    .qe     (reg2hw.ctrl_shadowed.key_len.qe),
     .q      (reg2hw.ctrl_shadowed.key_len.q),
     .qs     (ctrl_shadowed_key_len_qs)
   );
-  assign reg2hw.ctrl_shadowed.key_len.qe = ctrl_shadowed_qe;
 
   //   F[sideload]: 11:11
   prim_subreg_ext #(
@@ -926,11 +779,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_sideload_wd),
     .d      (hw2reg.ctrl_shadowed.sideload.d),
     .qre    (reg2hw.ctrl_shadowed.sideload.re),
-    .qe     (ctrl_shadowed_flds_we[3]),
+    .qe     (reg2hw.ctrl_shadowed.sideload.qe),
     .q      (reg2hw.ctrl_shadowed.sideload.q),
     .qs     (ctrl_shadowed_sideload_qs)
   );
-  assign reg2hw.ctrl_shadowed.sideload.qe = ctrl_shadowed_qe;
 
   //   F[prng_reseed_rate]: 14:12
   prim_subreg_ext #(
@@ -941,11 +793,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_prng_reseed_rate_wd),
     .d      (hw2reg.ctrl_shadowed.prng_reseed_rate.d),
     .qre    (reg2hw.ctrl_shadowed.prng_reseed_rate.re),
-    .qe     (ctrl_shadowed_flds_we[4]),
+    .qe     (reg2hw.ctrl_shadowed.prng_reseed_rate.qe),
     .q      (reg2hw.ctrl_shadowed.prng_reseed_rate.q),
     .qs     (ctrl_shadowed_prng_reseed_rate_qs)
   );
-  assign reg2hw.ctrl_shadowed.prng_reseed_rate.qe = ctrl_shadowed_qe;
 
   //   F[manual_operation]: 15:15
   prim_subreg_ext #(
@@ -956,11 +807,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_manual_operation_wd),
     .d      (hw2reg.ctrl_shadowed.manual_operation.d),
     .qre    (reg2hw.ctrl_shadowed.manual_operation.re),
-    .qe     (ctrl_shadowed_flds_we[5]),
+    .qe     (reg2hw.ctrl_shadowed.manual_operation.qe),
     .q      (reg2hw.ctrl_shadowed.manual_operation.q),
     .qs     (ctrl_shadowed_manual_operation_qs)
   );
-  assign reg2hw.ctrl_shadowed.manual_operation.qe = ctrl_shadowed_qe;
 
   //   F[force_zero_masks]: 16:16
   prim_subreg_ext #(
@@ -971,11 +821,10 @@ module aes_reg_top (
     .wd     (ctrl_shadowed_force_zero_masks_wd),
     .d      (hw2reg.ctrl_shadowed.force_zero_masks.d),
     .qre    (reg2hw.ctrl_shadowed.force_zero_masks.re),
-    .qe     (ctrl_shadowed_flds_we[6]),
+    .qe     (reg2hw.ctrl_shadowed.force_zero_masks.qe),
     .q      (reg2hw.ctrl_shadowed.force_zero_masks.q),
     .qs     (ctrl_shadowed_force_zero_masks_qs)
   );
-  assign reg2hw.ctrl_shadowed.force_zero_masks.qe = ctrl_shadowed_qe;
 
 
   // R[ctrl_aux_shadowed]: V(False)
@@ -1451,19 +1300,15 @@ module aes_reg_top (
   assign key_share1_7_we = addr_hit[16] & reg_we & !reg_error;
 
   assign key_share1_7_wd = reg_wdata[31:0];
-  assign iv_0_re = addr_hit[17] & reg_re & !reg_error;
   assign iv_0_we = addr_hit[17] & reg_we & !reg_error;
 
   assign iv_0_wd = reg_wdata[31:0];
-  assign iv_1_re = addr_hit[18] & reg_re & !reg_error;
   assign iv_1_we = addr_hit[18] & reg_we & !reg_error;
 
   assign iv_1_wd = reg_wdata[31:0];
-  assign iv_2_re = addr_hit[19] & reg_re & !reg_error;
   assign iv_2_we = addr_hit[19] & reg_we & !reg_error;
 
   assign iv_2_wd = reg_wdata[31:0];
-  assign iv_3_re = addr_hit[20] & reg_re & !reg_error;
   assign iv_3_we = addr_hit[20] & reg_we & !reg_error;
 
   assign iv_3_wd = reg_wdata[31:0];
@@ -1590,19 +1435,19 @@ module aes_reg_top (
       end
 
       addr_hit[17]: begin
-        reg_rdata_next[31:0] = iv_0_qs;
+        reg_rdata_next[31:0] = '0;
       end
 
       addr_hit[18]: begin
-        reg_rdata_next[31:0] = iv_1_qs;
+        reg_rdata_next[31:0] = '0;
       end
 
       addr_hit[19]: begin
-        reg_rdata_next[31:0] = iv_2_qs;
+        reg_rdata_next[31:0] = '0;
       end
 
       addr_hit[20]: begin
-        reg_rdata_next[31:0] = iv_3_qs;
+        reg_rdata_next[31:0] = '0;
       end
 
       addr_hit[21]: begin

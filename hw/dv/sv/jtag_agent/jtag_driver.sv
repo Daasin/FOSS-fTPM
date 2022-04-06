@@ -13,9 +13,10 @@ class jtag_driver extends dv_base_driver #(jtag_item, jtag_agent_cfg);
 
   `uvm_component_new
 
-  // If the same IR was already selected earlier, then don't resend IR based on seq item knob.
-  logic [JTAG_IRW-1:0]  selected_ir;
-  uint                  selected_ir_len;
+  virtual task run_phase(uvm_phase phase);
+    // base class forks off reset_signals() and get_and_drive() tasks
+    super.run_phase(phase);
+  endtask
 
   // reset signals
   virtual task reset_signals();
@@ -25,12 +26,11 @@ class jtag_driver extends dv_base_driver #(jtag_item, jtag_agent_cfg);
         cfg.vif.tck_en <= 1'b0;
         `HOST_CB.tms <= 1'b0;
         `HOST_CB.tdi <= 1'b0;
-        selected_ir = '{default:0};
-        selected_ir_len = 0;
       end
       else begin
         `DEVICE_CB.tdo <= 1'b0;
       end
+
       @(posedge cfg.vif.trst_n);
     end
   endtask
@@ -41,7 +41,7 @@ class jtag_driver extends dv_base_driver #(jtag_item, jtag_agent_cfg);
       get_and_drive_host_mode();
     end
     else begin
-      `uvm_fatal(`gfn, "Device mode driver is not supported yet.")
+      `uvm_fatal(`gfn, "jtag driver in device mode is not supported yet")
     end
   endtask
 
@@ -51,28 +51,29 @@ class jtag_driver extends dv_base_driver #(jtag_item, jtag_agent_cfg);
       seq_item_port.get_next_item(req);
       $cast(rsp, req.clone());
       rsp.set_id_info(req);
-      `uvm_info(`gfn, req.sprint(uvm_default_line_printer), UVM_HIGH)
+      `uvm_info(`gfn, $sformatf("rcvd item:\n%0s", req.sprint()), UVM_HIGH)
+
       `DV_SPINWAIT_EXIT(drive_jtag_req(req, rsp);,
                         wait (!cfg.vif.trst_n);)
+
+      `uvm_info(`gfn, "item sent", UVM_HIGH)
       seq_item_port.item_done(rsp);
     end
   endtask
 
   // drive jtag req and retrieve rsp
   virtual task drive_jtag_req(jtag_item req, jtag_item rsp);
-    cfg.vif.tck_en <= 1'b1;
-    @(`HOST_CB); // wait one cycle to ensure clock is stable. TODO: remove.
-    if (req.ir_len) begin
-      if (!(req.skip_reselected_ir && req.ir == selected_ir && req.ir_len == selected_ir_len)) begin
-        drive_jtag_ir(req.ir_len, req.ir);
-      end else begin
-        `uvm_info(`gfn, $sformatf("UpdateIR for 0x%0h skipped", selected_ir), UVM_HIGH)
-      end
-    end
-    if (req.dr_len) drive_jtag_dr(req.dr_len, req.dr, rsp.dout);
-    cfg.vif.tck_en <= 1'b0;
+    logic [JTAG_DRW-1:0] dout;
+
+    cfg.set_tck_en(1'b1);
+    @(`HOST_CB); // wait one cycle to ensure clock is stable
+    if (req.select_ir) drive_jtag_ir(req.ir_len, req.ir);
+    else               drive_jtag_dr(req.dr_len, req.dr, dout);
+    rsp.dout = dout;
+    cfg.set_tck_en(1'b0);
   endtask
 
+  // task to drive req into the instruction register
   task drive_jtag_ir(int len, bit [JTAG_DRW-1:0] ir);
     // Assume starting in RTI state
     // SelectDR
@@ -105,10 +106,9 @@ class jtag_driver extends dv_base_driver #(jtag_item, jtag_agent_cfg);
     `HOST_CB.tms <= 1'b0;
     `HOST_CB.tdi <= 1'b0;
     @(`HOST_CB);
-    selected_ir = ir;
-    selected_ir_len = len;
   endtask
 
+  // task to drive req into the data register and collect data register output
   task drive_jtag_dr(input  int                  len,
                      input  logic [JTAG_DRW-1:0] dr,
                      output logic [JTAG_DRW-1:0] dout);
@@ -129,24 +129,24 @@ class jtag_driver extends dv_base_driver #(jtag_item, jtag_agent_cfg);
       // stay in ShiftDR
       `HOST_CB.tms <= 1'b0;
       `HOST_CB.tdi <= dr[i];
-      dout = {`HOST_CB.tdo, dout[JTAG_DRW-1:1]};
+      // tdo is updated at negedge clock
+      if (i > 0) dout[i - 1] = `HOST_CB.tdo;
     end
     @(`HOST_CB);
     // go to Exit1DR
     `HOST_CB.tms <= 1'b1;
     `HOST_CB.tdi <= dr[len - 1];
-    dout = {`HOST_CB.tdo, dout[JTAG_DRW-1:1]};
+    dout[len - 2] = `HOST_CB.tdo;
     @(`HOST_CB);
+    dout[len - 1] = `HOST_CB.tdo;
     // go to UpdateIR
     `HOST_CB.tms <= 1'b1;
     `HOST_CB.tdi <= 1'b0;
-    dout = {`HOST_CB.tdo, dout[JTAG_DRW-1:1]};
     @(`HOST_CB);
     // go to RTI
     `HOST_CB.tms <= 1'b0;
     `HOST_CB.tdi <= 1'b0;
     @(`HOST_CB);
-    dout >>= (JTAG_DRW - len);
   endtask
 
 endclass

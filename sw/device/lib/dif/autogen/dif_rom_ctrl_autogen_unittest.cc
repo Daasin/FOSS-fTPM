@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "rom_ctrl_regs.h"  // Generated.
 
@@ -29,29 +28,32 @@ class RomCtrlTest : public Test, public MmioTest {
 class InitTest : public RomCtrlTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_rom_ctrl_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_rom_ctrl_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_rom_ctrl_init(dev().region(), &rom_ctrl_));
+  EXPECT_EQ(dif_rom_ctrl_init(dev().region(), &rom_ctrl_), kDifOk);
 }
 
 class AlertForceTest : public RomCtrlTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_rom_ctrl_alert_force(nullptr, kDifRomCtrlAlertFatal));
+  EXPECT_EQ(dif_rom_ctrl_alert_force(nullptr, kDifRomCtrlAlertFatal),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_rom_ctrl_alert_force(nullptr, static_cast<dif_rom_ctrl_alert_t>(32)));
+  EXPECT_EQ(
+      dif_rom_ctrl_alert_force(nullptr, static_cast<dif_rom_ctrl_alert_t>(32)),
+      kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(ROM_CTRL_ALERT_TEST_REG_OFFSET,
                  {{ROM_CTRL_ALERT_TEST_FATAL_BIT, true}});
-  EXPECT_DIF_OK(dif_rom_ctrl_alert_force(&rom_ctrl_, kDifRomCtrlAlertFatal));
+  EXPECT_EQ(dif_rom_ctrl_alert_force(&rom_ctrl_, kDifRomCtrlAlertFatal),
+            kDifOk);
 }
 
 }  // namespace

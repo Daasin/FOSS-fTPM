@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "sysrst_ctrl_regs.h"  // Generated.
 
@@ -29,31 +28,33 @@ class SysrstCtrlTest : public Test, public MmioTest {
 class InitTest : public SysrstCtrlTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_sysrst_ctrl_init(dev().region(), &sysrst_ctrl_));
+  EXPECT_EQ(dif_sysrst_ctrl_init(dev().region(), &sysrst_ctrl_), kDifOk);
 }
 
 class AlertForceTest : public SysrstCtrlTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_sysrst_ctrl_alert_force(nullptr, kDifSysrstCtrlAlertFatalFault));
+  EXPECT_EQ(dif_sysrst_ctrl_alert_force(nullptr, kDifSysrstCtrlAlertFatalFault),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_alert_force(
-      nullptr, static_cast<dif_sysrst_ctrl_alert_t>(32)));
+  EXPECT_EQ(dif_sysrst_ctrl_alert_force(
+                nullptr, static_cast<dif_sysrst_ctrl_alert_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(SYSRST_CTRL_ALERT_TEST_REG_OFFSET,
                  {{SYSRST_CTRL_ALERT_TEST_FATAL_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_sysrst_ctrl_alert_force(&sysrst_ctrl_,
-                                            kDifSysrstCtrlAlertFatalFault));
+  EXPECT_EQ(
+      dif_sysrst_ctrl_alert_force(&sysrst_ctrl_, kDifSysrstCtrlAlertFatalFault),
+      kDifOk);
 }
 
 class IrqGetStateTest : public SysrstCtrlTest {};
@@ -61,11 +62,11 @@ class IrqGetStateTest : public SysrstCtrlTest {};
 TEST_F(IrqGetStateTest, NullArgs) {
   dif_sysrst_ctrl_irq_state_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_state(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_state(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_state(&sysrst_ctrl_, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_state(&sysrst_ctrl_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_state(nullptr, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_state(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqGetStateTest, SuccessAllRaised) {
@@ -73,7 +74,8 @@ TEST_F(IrqGetStateTest, SuccessAllRaised) {
 
   EXPECT_READ32(SYSRST_CTRL_INTR_STATE_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_get_state(&sysrst_ctrl_, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_state(&sysrst_ctrl_, &irq_snapshot),
+            kDifOk);
   EXPECT_EQ(irq_snapshot, std::numeric_limits<uint32_t>::max());
 }
 
@@ -81,7 +83,8 @@ TEST_F(IrqGetStateTest, SuccessNoneRaised) {
   dif_sysrst_ctrl_irq_state_snapshot_t irq_snapshot = 0;
 
   EXPECT_READ32(SYSRST_CTRL_INTR_STATE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_get_state(&sysrst_ctrl_, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_state(&sysrst_ctrl_, &irq_snapshot),
+            kDifOk);
   EXPECT_EQ(irq_snapshot, 0);
 }
 
@@ -90,21 +93,26 @@ class IrqIsPendingTest : public SysrstCtrlTest {};
 TEST_F(IrqIsPendingTest, NullArgs) {
   bool is_pending;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_is_pending(
-      nullptr, kDifSysrstCtrlIrqSysrstCtrl, &is_pending));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_is_pending(nullptr, kDifSysrstCtrlIrqSysrstCtrl,
+                                           &is_pending),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_is_pending(
-      &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_is_pending(
+                &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_is_pending(
-      nullptr, kDifSysrstCtrlIrqSysrstCtrl, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_is_pending(nullptr, kDifSysrstCtrlIrqSysrstCtrl,
+                                           nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IrqIsPendingTest, BadIrq) {
   bool is_pending;
   // All interrupt CSRs are 32 bit so interrupt 32 will be invalid.
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_is_pending(
-      &sysrst_ctrl_, static_cast<dif_sysrst_ctrl_irq_t>(32), &is_pending));
+  EXPECT_EQ(
+      dif_sysrst_ctrl_irq_is_pending(
+          &sysrst_ctrl_, static_cast<dif_sysrst_ctrl_irq_t>(32), &is_pending),
+      kDifBadArg);
 }
 
 TEST_F(IrqIsPendingTest, Success) {
@@ -114,62 +122,68 @@ TEST_F(IrqIsPendingTest, Success) {
   irq_state = false;
   EXPECT_READ32(SYSRST_CTRL_INTR_STATE_REG_OFFSET,
                 {{SYSRST_CTRL_INTR_STATE_SYSRST_CTRL_BIT, true}});
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_is_pending(
-      &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, &irq_state));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_is_pending(
+                &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, &irq_state),
+            kDifOk);
   EXPECT_TRUE(irq_state);
 }
 
 class AcknowledgeAllTest : public SysrstCtrlTest {};
 
 TEST_F(AcknowledgeAllTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_acknowledge_all(nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_acknowledge_all(nullptr), kDifBadArg);
 }
 
 TEST_F(AcknowledgeAllTest, Success) {
   EXPECT_WRITE32(SYSRST_CTRL_INTR_STATE_REG_OFFSET,
                  std::numeric_limits<uint32_t>::max());
 
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_acknowledge_all(&sysrst_ctrl_));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_acknowledge_all(&sysrst_ctrl_), kDifOk);
 }
 
 class IrqAcknowledgeTest : public SysrstCtrlTest {};
 
 TEST_F(IrqAcknowledgeTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_sysrst_ctrl_irq_acknowledge(nullptr, kDifSysrstCtrlIrqSysrstCtrl));
+  EXPECT_EQ(
+      dif_sysrst_ctrl_irq_acknowledge(nullptr, kDifSysrstCtrlIrqSysrstCtrl),
+      kDifBadArg);
 }
 
 TEST_F(IrqAcknowledgeTest, BadIrq) {
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_acknowledge(
-      nullptr, static_cast<dif_sysrst_ctrl_irq_t>(32)));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_acknowledge(
+                nullptr, static_cast<dif_sysrst_ctrl_irq_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(IrqAcknowledgeTest, Success) {
   // Clear the first IRQ state.
   EXPECT_WRITE32(SYSRST_CTRL_INTR_STATE_REG_OFFSET,
                  {{SYSRST_CTRL_INTR_STATE_SYSRST_CTRL_BIT, true}});
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_acknowledge(&sysrst_ctrl_,
-                                                kDifSysrstCtrlIrqSysrstCtrl));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_acknowledge(&sysrst_ctrl_,
+                                            kDifSysrstCtrlIrqSysrstCtrl),
+            kDifOk);
 }
 
 class IrqForceTest : public SysrstCtrlTest {};
 
 TEST_F(IrqForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_sysrst_ctrl_irq_force(nullptr, kDifSysrstCtrlIrqSysrstCtrl));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_force(nullptr, kDifSysrstCtrlIrqSysrstCtrl),
+            kDifBadArg);
 }
 
 TEST_F(IrqForceTest, BadIrq) {
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_force(
-      nullptr, static_cast<dif_sysrst_ctrl_irq_t>(32)));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_force(nullptr,
+                                      static_cast<dif_sysrst_ctrl_irq_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(IrqForceTest, Success) {
   // Force first IRQ.
   EXPECT_WRITE32(SYSRST_CTRL_INTR_TEST_REG_OFFSET,
                  {{SYSRST_CTRL_INTR_TEST_SYSRST_CTRL_BIT, true}});
-  EXPECT_DIF_OK(
-      dif_sysrst_ctrl_irq_force(&sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl));
+  EXPECT_EQ(
+      dif_sysrst_ctrl_irq_force(&sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl),
+      kDifOk);
 }
 
 class IrqGetEnabledTest : public SysrstCtrlTest {};
@@ -177,21 +191,26 @@ class IrqGetEnabledTest : public SysrstCtrlTest {};
 TEST_F(IrqGetEnabledTest, NullArgs) {
   dif_toggle_t irq_state;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_enabled(
-      nullptr, kDifSysrstCtrlIrqSysrstCtrl, &irq_state));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_enabled(
+                nullptr, kDifSysrstCtrlIrqSysrstCtrl, &irq_state),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_enabled(
-      &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_enabled(
+                &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_enabled(
-      nullptr, kDifSysrstCtrlIrqSysrstCtrl, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_enabled(
+                nullptr, kDifSysrstCtrlIrqSysrstCtrl, nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IrqGetEnabledTest, BadIrq) {
   dif_toggle_t irq_state;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_get_enabled(
-      &sysrst_ctrl_, static_cast<dif_sysrst_ctrl_irq_t>(32), &irq_state));
+  EXPECT_EQ(
+      dif_sysrst_ctrl_irq_get_enabled(
+          &sysrst_ctrl_, static_cast<dif_sysrst_ctrl_irq_t>(32), &irq_state),
+      kDifBadArg);
 }
 
 TEST_F(IrqGetEnabledTest, Success) {
@@ -201,8 +220,9 @@ TEST_F(IrqGetEnabledTest, Success) {
   irq_state = kDifToggleDisabled;
   EXPECT_READ32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET,
                 {{SYSRST_CTRL_INTR_ENABLE_SYSRST_CTRL_BIT, true}});
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_get_enabled(
-      &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, &irq_state));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_get_enabled(
+                &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, &irq_state),
+            kDifOk);
   EXPECT_EQ(irq_state, kDifToggleEnabled);
 }
 
@@ -211,15 +231,18 @@ class IrqSetEnabledTest : public SysrstCtrlTest {};
 TEST_F(IrqSetEnabledTest, NullArgs) {
   dif_toggle_t irq_state = kDifToggleEnabled;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_set_enabled(
-      nullptr, kDifSysrstCtrlIrqSysrstCtrl, irq_state));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_set_enabled(
+                nullptr, kDifSysrstCtrlIrqSysrstCtrl, irq_state),
+            kDifBadArg);
 }
 
 TEST_F(IrqSetEnabledTest, BadIrq) {
   dif_toggle_t irq_state = kDifToggleEnabled;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_set_enabled(
-      &sysrst_ctrl_, static_cast<dif_sysrst_ctrl_irq_t>(32), irq_state));
+  EXPECT_EQ(
+      dif_sysrst_ctrl_irq_set_enabled(
+          &sysrst_ctrl_, static_cast<dif_sysrst_ctrl_irq_t>(32), irq_state),
+      kDifBadArg);
 }
 
 TEST_F(IrqSetEnabledTest, Success) {
@@ -229,8 +252,9 @@ TEST_F(IrqSetEnabledTest, Success) {
   irq_state = kDifToggleEnabled;
   EXPECT_MASK32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET,
                 {{SYSRST_CTRL_INTR_ENABLE_SYSRST_CTRL_BIT, 0x1, true}});
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_set_enabled(
-      &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, irq_state));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_set_enabled(
+                &sysrst_ctrl_, kDifSysrstCtrlIrqSysrstCtrl, irq_state),
+            kDifOk);
 }
 
 class IrqDisableAllTest : public SysrstCtrlTest {};
@@ -238,14 +262,15 @@ class IrqDisableAllTest : public SysrstCtrlTest {};
 TEST_F(IrqDisableAllTest, NullArgs) {
   dif_sysrst_ctrl_irq_enable_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_disable_all(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_disable_all(nullptr, &irq_snapshot),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_disable_all(nullptr, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_disable_all(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqDisableAllTest, SuccessNoSnapshot) {
   EXPECT_WRITE32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_disable_all(&sysrst_ctrl_, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_disable_all(&sysrst_ctrl_, nullptr), kDifOk);
 }
 
 TEST_F(IrqDisableAllTest, SuccessSnapshotAllDisabled) {
@@ -253,7 +278,8 @@ TEST_F(IrqDisableAllTest, SuccessSnapshotAllDisabled) {
 
   EXPECT_READ32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET, 0);
   EXPECT_WRITE32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_disable_all(&sysrst_ctrl_, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_disable_all(&sysrst_ctrl_, &irq_snapshot),
+            kDifOk);
   EXPECT_EQ(irq_snapshot, 0);
 }
 
@@ -263,7 +289,8 @@ TEST_F(IrqDisableAllTest, SuccessSnapshotAllEnabled) {
   EXPECT_READ32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
   EXPECT_WRITE32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_disable_all(&sysrst_ctrl_, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_disable_all(&sysrst_ctrl_, &irq_snapshot),
+            kDifOk);
   EXPECT_EQ(irq_snapshot, std::numeric_limits<uint32_t>::max());
 }
 
@@ -272,11 +299,13 @@ class IrqRestoreAllTest : public SysrstCtrlTest {};
 TEST_F(IrqRestoreAllTest, NullArgs) {
   dif_sysrst_ctrl_irq_enable_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_restore_all(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_restore_all(nullptr, &irq_snapshot),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_restore_all(&sysrst_ctrl_, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_restore_all(&sysrst_ctrl_, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_sysrst_ctrl_irq_restore_all(nullptr, nullptr));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_restore_all(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqRestoreAllTest, SuccessAllEnabled) {
@@ -285,14 +314,16 @@ TEST_F(IrqRestoreAllTest, SuccessAllEnabled) {
 
   EXPECT_WRITE32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET,
                  std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_restore_all(&sysrst_ctrl_, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_restore_all(&sysrst_ctrl_, &irq_snapshot),
+            kDifOk);
 }
 
 TEST_F(IrqRestoreAllTest, SuccessAllDisabled) {
   dif_sysrst_ctrl_irq_enable_snapshot_t irq_snapshot = 0;
 
   EXPECT_WRITE32(SYSRST_CTRL_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_sysrst_ctrl_irq_restore_all(&sysrst_ctrl_, &irq_snapshot));
+  EXPECT_EQ(dif_sysrst_ctrl_irq_restore_all(&sysrst_ctrl_, &irq_snapshot),
+            kDifOk);
 }
 
 }  // namespace

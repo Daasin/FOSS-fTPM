@@ -53,7 +53,6 @@ rust_library(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=syscall",
         "manual",
     ],
     version = "0.2.10",

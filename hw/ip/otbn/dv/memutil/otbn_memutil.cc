@@ -308,7 +308,7 @@ void OtbnMemUtilGetLoopWarpByIndex(
   assert(0 <= idx);
 
   auto &warps = mem_util->GetLoopWarps();
-  assert((unsigned)idx < warps.size());
+  assert(idx < warps.size());
 
   auto it = std::next(warps.begin(), idx);
 

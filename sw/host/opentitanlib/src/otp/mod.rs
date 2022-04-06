@@ -8,6 +8,8 @@ pub mod otp_img;
 pub mod otp_mmap;
 pub mod vmem_serialize;
 
+mod num_de;
+
 #[cfg(test)]
 mod tests {
     use super::*;

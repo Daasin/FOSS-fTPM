@@ -44,3 +44,5 @@ class chip_common_vseq extends chip_stub_cpu_base_vseq;
   endtask : body
 
 endclass
+
+`undef add_ip_csr_exclusions

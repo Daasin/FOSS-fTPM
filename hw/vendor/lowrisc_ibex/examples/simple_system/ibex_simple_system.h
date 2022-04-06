@@ -11,10 +11,6 @@ class SimpleSystem {
   virtual ~SimpleSystem() {}
   virtual int Main(int argc, char **argv);
 
-  // Return an ISA string, as understood by Spike, for the system being
-  // simulated.
-  std::string GetIsaString() const;
-
  protected:
   ibex_simple_system _top;
   VerilatorMemUtil _memutil;

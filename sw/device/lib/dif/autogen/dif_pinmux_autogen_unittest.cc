@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "pinmux_regs.h"  // Generated.
 
@@ -29,29 +28,32 @@ class PinmuxTest : public Test, public MmioTest {
 class InitTest : public PinmuxTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pinmux_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_pinmux_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_pinmux_init(dev().region(), &pinmux_));
+  EXPECT_EQ(dif_pinmux_init(dev().region(), &pinmux_), kDifOk);
 }
 
 class AlertForceTest : public PinmuxTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pinmux_alert_force(nullptr, kDifPinmuxAlertFatalFault));
+  EXPECT_EQ(dif_pinmux_alert_force(nullptr, kDifPinmuxAlertFatalFault),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_pinmux_alert_force(nullptr, static_cast<dif_pinmux_alert_t>(32)));
+  EXPECT_EQ(
+      dif_pinmux_alert_force(nullptr, static_cast<dif_pinmux_alert_t>(32)),
+      kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(PINMUX_ALERT_TEST_REG_OFFSET,
                  {{PINMUX_ALERT_TEST_FATAL_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_pinmux_alert_force(&pinmux_, kDifPinmuxAlertFatalFault));
+  EXPECT_EQ(dif_pinmux_alert_force(&pinmux_, kDifPinmuxAlertFatalFault),
+            kDifOk);
 }
 
 }  // namespace

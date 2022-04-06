@@ -6,7 +6,6 @@
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_BOOT_DATA_H_
 
 #include "sw/device/lib/base/macros.h"
-#include "sw/device/silicon_creator/lib/drivers/flash_ctrl.h"
 #include "sw/device/silicon_creator/lib/drivers/hmac.h"
 #include "sw/device/silicon_creator/lib/drivers/lifecycle.h"
 #include "sw/device/silicon_creator/lib/error.h"
@@ -83,6 +82,12 @@ enum {
    */
   kBootDataInvalidEntry = 0,
   /**
+   * Value of a word in flash after erase.
+   *
+   * This value is used to determine if an entry is empty or not.
+   */
+  kBootDataEmptyWordValue = UINT32_MAX,
+  /**
    * Size of `boot_data_t` in words.
    */
   kBootDataNumWords = sizeof(boot_data_t) / sizeof(uint32_t),
@@ -112,8 +117,8 @@ enum {
 static_assert(kBootDataInvalidEntry != kBootDataValidEntry,
               "Invalidation values cannot be equal.");
 static_assert(kBootDataValidEntry ==
-                  ((uint64_t)kFlashCtrlErasedWord << 32 | kFlashCtrlErasedWord),
-              "kBootDataValidEntry words must be kFlashCtrlErasedWord");
+                  (kBootDataEmptyWordValue << 32 | kBootDataEmptyWordValue),
+              "kBootDataValidEntry words must be kBootDataEmptyWordValue");
 
 /**
  * Reads the boot data stored in the flash info partition.

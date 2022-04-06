@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "pwrmgr_regs.h"  // Generated.
 
@@ -29,29 +28,32 @@ class PwrmgrTest : public Test, public MmioTest {
 class InitTest : public PwrmgrTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pwrmgr_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_pwrmgr_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_pwrmgr_init(dev().region(), &pwrmgr_));
+  EXPECT_EQ(dif_pwrmgr_init(dev().region(), &pwrmgr_), kDifOk);
 }
 
 class AlertForceTest : public PwrmgrTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pwrmgr_alert_force(nullptr, kDifPwrmgrAlertFatalFault));
+  EXPECT_EQ(dif_pwrmgr_alert_force(nullptr, kDifPwrmgrAlertFatalFault),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_alert_force(nullptr, static_cast<dif_pwrmgr_alert_t>(32)));
+  EXPECT_EQ(
+      dif_pwrmgr_alert_force(nullptr, static_cast<dif_pwrmgr_alert_t>(32)),
+      kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(PWRMGR_ALERT_TEST_REG_OFFSET,
                  {{PWRMGR_ALERT_TEST_FATAL_FAULT_BIT, true}});
-  EXPECT_DIF_OK(dif_pwrmgr_alert_force(&pwrmgr_, kDifPwrmgrAlertFatalFault));
+  EXPECT_EQ(dif_pwrmgr_alert_force(&pwrmgr_, kDifPwrmgrAlertFatalFault),
+            kDifOk);
 }
 
 class IrqGetStateTest : public PwrmgrTest {};
@@ -59,11 +61,11 @@ class IrqGetStateTest : public PwrmgrTest {};
 TEST_F(IrqGetStateTest, NullArgs) {
   dif_pwrmgr_irq_state_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_get_state(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_get_state(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_get_state(&pwrmgr_, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_get_state(&pwrmgr_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_get_state(nullptr, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_get_state(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqGetStateTest, SuccessAllRaised) {
@@ -71,7 +73,7 @@ TEST_F(IrqGetStateTest, SuccessAllRaised) {
 
   EXPECT_READ32(PWRMGR_INTR_STATE_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_pwrmgr_irq_get_state(&pwrmgr_, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_get_state(&pwrmgr_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, std::numeric_limits<uint32_t>::max());
 }
 
@@ -79,7 +81,7 @@ TEST_F(IrqGetStateTest, SuccessNoneRaised) {
   dif_pwrmgr_irq_state_snapshot_t irq_snapshot = 0;
 
   EXPECT_READ32(PWRMGR_INTR_STATE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_pwrmgr_irq_get_state(&pwrmgr_, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_get_state(&pwrmgr_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, 0);
 }
 
@@ -88,21 +90,23 @@ class IrqIsPendingTest : public PwrmgrTest {};
 TEST_F(IrqIsPendingTest, NullArgs) {
   bool is_pending;
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_is_pending(nullptr, kDifPwrmgrIrqWakeup, &is_pending));
+  EXPECT_EQ(
+      dif_pwrmgr_irq_is_pending(nullptr, kDifPwrmgrIrqWakeup, &is_pending),
+      kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_is_pending(&pwrmgr_, kDifPwrmgrIrqWakeup, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_is_pending(&pwrmgr_, kDifPwrmgrIrqWakeup, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_is_pending(nullptr, kDifPwrmgrIrqWakeup, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_is_pending(nullptr, kDifPwrmgrIrqWakeup, nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IrqIsPendingTest, BadIrq) {
   bool is_pending;
   // All interrupt CSRs are 32 bit so interrupt 32 will be invalid.
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_is_pending(
-      &pwrmgr_, static_cast<dif_pwrmgr_irq_t>(32), &is_pending));
+  EXPECT_EQ(dif_pwrmgr_irq_is_pending(
+                &pwrmgr_, static_cast<dif_pwrmgr_irq_t>(32), &is_pending),
+            kDifBadArg);
 }
 
 TEST_F(IrqIsPendingTest, Success) {
@@ -112,58 +116,61 @@ TEST_F(IrqIsPendingTest, Success) {
   irq_state = false;
   EXPECT_READ32(PWRMGR_INTR_STATE_REG_OFFSET,
                 {{PWRMGR_INTR_STATE_WAKEUP_BIT, true}});
-  EXPECT_DIF_OK(
-      dif_pwrmgr_irq_is_pending(&pwrmgr_, kDifPwrmgrIrqWakeup, &irq_state));
+  EXPECT_EQ(
+      dif_pwrmgr_irq_is_pending(&pwrmgr_, kDifPwrmgrIrqWakeup, &irq_state),
+      kDifOk);
   EXPECT_TRUE(irq_state);
 }
 
 class AcknowledgeAllTest : public PwrmgrTest {};
 
 TEST_F(AcknowledgeAllTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_acknowledge_all(nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_acknowledge_all(nullptr), kDifBadArg);
 }
 
 TEST_F(AcknowledgeAllTest, Success) {
   EXPECT_WRITE32(PWRMGR_INTR_STATE_REG_OFFSET,
                  std::numeric_limits<uint32_t>::max());
 
-  EXPECT_DIF_OK(dif_pwrmgr_irq_acknowledge_all(&pwrmgr_));
+  EXPECT_EQ(dif_pwrmgr_irq_acknowledge_all(&pwrmgr_), kDifOk);
 }
 
 class IrqAcknowledgeTest : public PwrmgrTest {};
 
 TEST_F(IrqAcknowledgeTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_acknowledge(nullptr, kDifPwrmgrIrqWakeup));
+  EXPECT_EQ(dif_pwrmgr_irq_acknowledge(nullptr, kDifPwrmgrIrqWakeup),
+            kDifBadArg);
 }
 
 TEST_F(IrqAcknowledgeTest, BadIrq) {
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_acknowledge(nullptr, static_cast<dif_pwrmgr_irq_t>(32)));
+  EXPECT_EQ(
+      dif_pwrmgr_irq_acknowledge(nullptr, static_cast<dif_pwrmgr_irq_t>(32)),
+      kDifBadArg);
 }
 
 TEST_F(IrqAcknowledgeTest, Success) {
   // Clear the first IRQ state.
   EXPECT_WRITE32(PWRMGR_INTR_STATE_REG_OFFSET,
                  {{PWRMGR_INTR_STATE_WAKEUP_BIT, true}});
-  EXPECT_DIF_OK(dif_pwrmgr_irq_acknowledge(&pwrmgr_, kDifPwrmgrIrqWakeup));
+  EXPECT_EQ(dif_pwrmgr_irq_acknowledge(&pwrmgr_, kDifPwrmgrIrqWakeup), kDifOk);
 }
 
 class IrqForceTest : public PwrmgrTest {};
 
 TEST_F(IrqForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_force(nullptr, kDifPwrmgrIrqWakeup));
+  EXPECT_EQ(dif_pwrmgr_irq_force(nullptr, kDifPwrmgrIrqWakeup), kDifBadArg);
 }
 
 TEST_F(IrqForceTest, BadIrq) {
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_force(nullptr, static_cast<dif_pwrmgr_irq_t>(32)));
+  EXPECT_EQ(dif_pwrmgr_irq_force(nullptr, static_cast<dif_pwrmgr_irq_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(IrqForceTest, Success) {
   // Force first IRQ.
   EXPECT_WRITE32(PWRMGR_INTR_TEST_REG_OFFSET,
                  {{PWRMGR_INTR_TEST_WAKEUP_BIT, true}});
-  EXPECT_DIF_OK(dif_pwrmgr_irq_force(&pwrmgr_, kDifPwrmgrIrqWakeup));
+  EXPECT_EQ(dif_pwrmgr_irq_force(&pwrmgr_, kDifPwrmgrIrqWakeup), kDifOk);
 }
 
 class IrqGetEnabledTest : public PwrmgrTest {};
@@ -171,21 +178,23 @@ class IrqGetEnabledTest : public PwrmgrTest {};
 TEST_F(IrqGetEnabledTest, NullArgs) {
   dif_toggle_t irq_state;
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_get_enabled(nullptr, kDifPwrmgrIrqWakeup, &irq_state));
+  EXPECT_EQ(
+      dif_pwrmgr_irq_get_enabled(nullptr, kDifPwrmgrIrqWakeup, &irq_state),
+      kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_get_enabled(&pwrmgr_, kDifPwrmgrIrqWakeup, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_get_enabled(&pwrmgr_, kDifPwrmgrIrqWakeup, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_get_enabled(nullptr, kDifPwrmgrIrqWakeup, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_get_enabled(nullptr, kDifPwrmgrIrqWakeup, nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IrqGetEnabledTest, BadIrq) {
   dif_toggle_t irq_state;
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_get_enabled(
-      &pwrmgr_, static_cast<dif_pwrmgr_irq_t>(32), &irq_state));
+  EXPECT_EQ(dif_pwrmgr_irq_get_enabled(
+                &pwrmgr_, static_cast<dif_pwrmgr_irq_t>(32), &irq_state),
+            kDifBadArg);
 }
 
 TEST_F(IrqGetEnabledTest, Success) {
@@ -195,8 +204,9 @@ TEST_F(IrqGetEnabledTest, Success) {
   irq_state = kDifToggleDisabled;
   EXPECT_READ32(PWRMGR_INTR_ENABLE_REG_OFFSET,
                 {{PWRMGR_INTR_ENABLE_WAKEUP_BIT, true}});
-  EXPECT_DIF_OK(
-      dif_pwrmgr_irq_get_enabled(&pwrmgr_, kDifPwrmgrIrqWakeup, &irq_state));
+  EXPECT_EQ(
+      dif_pwrmgr_irq_get_enabled(&pwrmgr_, kDifPwrmgrIrqWakeup, &irq_state),
+      kDifOk);
   EXPECT_EQ(irq_state, kDifToggleEnabled);
 }
 
@@ -205,15 +215,16 @@ class IrqSetEnabledTest : public PwrmgrTest {};
 TEST_F(IrqSetEnabledTest, NullArgs) {
   dif_toggle_t irq_state = kDifToggleEnabled;
 
-  EXPECT_DIF_BADARG(
-      dif_pwrmgr_irq_set_enabled(nullptr, kDifPwrmgrIrqWakeup, irq_state));
+  EXPECT_EQ(dif_pwrmgr_irq_set_enabled(nullptr, kDifPwrmgrIrqWakeup, irq_state),
+            kDifBadArg);
 }
 
 TEST_F(IrqSetEnabledTest, BadIrq) {
   dif_toggle_t irq_state = kDifToggleEnabled;
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_set_enabled(
-      &pwrmgr_, static_cast<dif_pwrmgr_irq_t>(32), irq_state));
+  EXPECT_EQ(dif_pwrmgr_irq_set_enabled(
+                &pwrmgr_, static_cast<dif_pwrmgr_irq_t>(32), irq_state),
+            kDifBadArg);
 }
 
 TEST_F(IrqSetEnabledTest, Success) {
@@ -223,8 +234,9 @@ TEST_F(IrqSetEnabledTest, Success) {
   irq_state = kDifToggleEnabled;
   EXPECT_MASK32(PWRMGR_INTR_ENABLE_REG_OFFSET,
                 {{PWRMGR_INTR_ENABLE_WAKEUP_BIT, 0x1, true}});
-  EXPECT_DIF_OK(
-      dif_pwrmgr_irq_set_enabled(&pwrmgr_, kDifPwrmgrIrqWakeup, irq_state));
+  EXPECT_EQ(
+      dif_pwrmgr_irq_set_enabled(&pwrmgr_, kDifPwrmgrIrqWakeup, irq_state),
+      kDifOk);
 }
 
 class IrqDisableAllTest : public PwrmgrTest {};
@@ -232,14 +244,14 @@ class IrqDisableAllTest : public PwrmgrTest {};
 TEST_F(IrqDisableAllTest, NullArgs) {
   dif_pwrmgr_irq_enable_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_disable_all(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_disable_all(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_disable_all(nullptr, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_disable_all(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqDisableAllTest, SuccessNoSnapshot) {
   EXPECT_WRITE32(PWRMGR_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_pwrmgr_irq_disable_all(&pwrmgr_, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_disable_all(&pwrmgr_, nullptr), kDifOk);
 }
 
 TEST_F(IrqDisableAllTest, SuccessSnapshotAllDisabled) {
@@ -247,7 +259,7 @@ TEST_F(IrqDisableAllTest, SuccessSnapshotAllDisabled) {
 
   EXPECT_READ32(PWRMGR_INTR_ENABLE_REG_OFFSET, 0);
   EXPECT_WRITE32(PWRMGR_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_pwrmgr_irq_disable_all(&pwrmgr_, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_disable_all(&pwrmgr_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, 0);
 }
 
@@ -257,7 +269,7 @@ TEST_F(IrqDisableAllTest, SuccessSnapshotAllEnabled) {
   EXPECT_READ32(PWRMGR_INTR_ENABLE_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
   EXPECT_WRITE32(PWRMGR_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_pwrmgr_irq_disable_all(&pwrmgr_, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_disable_all(&pwrmgr_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, std::numeric_limits<uint32_t>::max());
 }
 
@@ -266,11 +278,11 @@ class IrqRestoreAllTest : public PwrmgrTest {};
 TEST_F(IrqRestoreAllTest, NullArgs) {
   dif_pwrmgr_irq_enable_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_restore_all(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_restore_all(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_restore_all(&pwrmgr_, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_restore_all(&pwrmgr_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_pwrmgr_irq_restore_all(nullptr, nullptr));
+  EXPECT_EQ(dif_pwrmgr_irq_restore_all(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqRestoreAllTest, SuccessAllEnabled) {
@@ -279,14 +291,14 @@ TEST_F(IrqRestoreAllTest, SuccessAllEnabled) {
 
   EXPECT_WRITE32(PWRMGR_INTR_ENABLE_REG_OFFSET,
                  std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_pwrmgr_irq_restore_all(&pwrmgr_, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_restore_all(&pwrmgr_, &irq_snapshot), kDifOk);
 }
 
 TEST_F(IrqRestoreAllTest, SuccessAllDisabled) {
   dif_pwrmgr_irq_enable_snapshot_t irq_snapshot = 0;
 
   EXPECT_WRITE32(PWRMGR_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_pwrmgr_irq_restore_all(&pwrmgr_, &irq_snapshot));
+  EXPECT_EQ(dif_pwrmgr_irq_restore_all(&pwrmgr_, &irq_snapshot), kDifOk);
 }
 
 }  // namespace
