@@ -11,9 +11,7 @@ module otp_ctrl_kdi
   import otp_ctrl_pkg::*;
   import otp_ctrl_reg_pkg::*;
   import otp_ctrl_part_pkg::*;
-#(
-  parameter scrmbl_key_init_t RndCnstScrmblKeyInit = RndCnstScrmblKeyInitDefault
-) (
+(
   input                                              clk_i,
   input                                              rst_ni,
   // Pulse to enable this module after OTP partitions have
@@ -73,8 +71,15 @@ module otp_ctrl_kdi
   // Make sure EDN interface has compatible width.
   `ASSERT_INIT(EntropyWidthDividesDigestBlockWidth_A, (ScrmblKeyWidth % EdnDataWidth) == 0)
 
-  // Currently the assumption is that the SRAM nonce is the widest.
-  `ASSERT_INIT(NonceWidth_A, NumNonceChunks * ScrmblBlockWidth == SramNonceWidth)
+  localparam int OtbnNonceSel  = OtbnNonceWidth / ScrmblBlockWidth;
+  localparam int FlashNonceSel = FlashKeyWidth / ScrmblBlockWidth;
+  localparam int SramNonceSel  = SramNonceWidth / ScrmblBlockWidth;
+
+  // Get maximum nonce width
+  localparam int NumNonceChunks =
+    (OtbnNonceWidth > FlashKeyWidth) ?
+    ((OtbnNonceWidth > SramNonceSel) ? OtbnNonceWidth : SramNonceSel) :
+    ((FlashKeyWidth > SramNonceSel)  ? FlashKeyWidth  : SramNonceSel);
 
   ///////////////////////////////////
   // Input Mapping and Arbitration //
@@ -271,7 +276,7 @@ module otp_ctrl_kdi
   // Connect keys/nonce outputs to output regs.
   prim_sec_anchor_flop #(
     .Width(ScrmblKeyWidth),
-    .ResetValue(RndCnstScrmblKeyInit.key)
+    .ResetValue('0)
   ) u_key_out_anchor (
     .clk_i,
     .rst_ni,
@@ -551,7 +556,6 @@ module otp_ctrl_kdi
       // error state, where an alert will be triggered.
       default: begin
         state_d = ErrorSt;
-        fsm_err_o = 1'b1;
       end
       ///////////////////////////////////////////////////////////////////
     endcase // state_q
@@ -560,7 +564,6 @@ module otp_ctrl_kdi
     // SEC_CM: KDI.FSM.LOCAL_ESC, KDI.FSM.GLOBAL_ESC
     if (escalate_en_i != lc_ctrl_pkg::Off || seed_cnt_err || entropy_cnt_err) begin
       state_d = ErrorSt;
-      fsm_err_o = 1'b1;
     end
   end
 
@@ -585,7 +588,7 @@ module otp_ctrl_kdi
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : p_regs
     if (!rst_ni) begin
-      nonce_out_q   <= RndCnstScrmblKeyInit.nonce;
+      nonce_out_q   <= '0;
       seed_valid_q  <= 1'b0;
       edn_req_q     <= 1'b0;
     end else begin

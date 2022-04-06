@@ -399,7 +399,7 @@ CIP contains reusable security verification components, sequences and function c
 This section describes the details of them and the steps to enable them.
 
 ### Security Verification for bus integrity
-The countermeasure of bus integrity can be fully verified via importing [tl_access_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/tl_access_tests.hjson) and [tl_device_access_types_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/tl_device_access_types_testplan.hjson).
+The countermeasure of bus integrity can be fully verified via importing [tl_access_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests//tl_access_tests.hjson) and [tl_device_access_types_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/tl_device_access_types_testplan.hjson).
 The `tl_intg_err` test injects errors on control, data, or the ECC bits and verifies that the integrity error will trigger a fatal alert (provided via `cfg.tl_intg_alert_name`) and error status (provided via `cfg.tl_intg_alert_fields`) is set.
 Refer to section [cip_base_env_cfg](#cip_base_env_cfg) for more information on these 2 variables.
 The user may update these 2 variables as follows.
@@ -412,37 +412,9 @@ class ip_env_cfg extends cip_base_env_cfg #(.RAL_T(ip_reg_block));
     tl_intg_alert_fields[ral.fault_status.intg_err] = 1;
 ```
 
-### Security Verification for memory integrity
-The memory integrity countermeasure stores the data integrity in the memory rather than generating the integrity on-the-fly during a read.
-The [passthru_mem_intg_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/passthru_mem_intg_tests.hjson) can fully verify this countermeasure.
-The details of the test sequences are described in the [tl_device_access_types_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/passthru_mem_intg_testplan.hjson). Users need to override the task `inject_intg_fault_in_passthru_mem` to inject an integrity fault to the memory in the block common_vseq.
-
-The following is an example from `sram_ctrl`, in which it flips up to `MAX_TL_ECC_ERRORS` bits of the data and generates a backdoor write to the memory.
-```systemverilog
-class sram_ctrl_common_vseq extends sram_ctrl_base_vseq;
-  ...
-  virtual function void inject_intg_fault_in_passthru_mem(dv_base_mem mem,
-                                                          bit [bus_params_pkg::BUS_AW-1:0] addr);
-    bit[bus_params_pkg::BUS_DW-1:0] rdata;
-    bit[tlul_pkg::DataIntgWidth+bus_params_pkg::BUS_DW-1:0] flip_bits;
-
-    rdata = cfg.mem_bkdr_util_h.sram_encrypt_read32_integ(addr, cfg.scb.key, cfg.scb.nonce);
-
-    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(flip_bits,
-        $countones(flip_bits) inside {[1:cip_base_pkg::MAX_TL_ECC_ERRORS]};)
-
-    `uvm_info(`gfn, $sformatf("Backdoor change mem (addr 0x%0h) value 0x%0h by flipping bits %0h",
-                              addr, rdata, flip_bits), UVM_LOW)
-
-    cfg.mem_bkdr_util_h.sram_encrypt_write32_integ(addr, rdata, cfg.scb.key, cfg.scb.nonce,
-                                                   flip_bits);
-  endfunction
-endclass
-```
-
 ### Security Verification for shadow CSRs
 The countermeasure of shadow CSRs can be fully verified via importing [shadow_reg_errors_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/shadow_reg_errors_tests.hjson) and [shadow_reg_errors_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/shadow_reg_errors_testplan.hjson).
-The details of the test sequences are described in the testplan. Users need to assign the status CSR fields to `cfg.shadow_update_err_status_fields` and `cfg.shadow_storage_err_status_fields` for update error and storage error respectively.
+The details of the test sequences are described in the testplan, users need to assign the status CSR fields to `cfg.shadow_update_err_status_fields` and `cfg.shadow_storage_err_status_fields` for update error and storage error respectively.
 ```systemverilog
 class ip_env_cfg extends cip_base_env_cfg #(.RAL_T(ip_reg_block));
   virtual function void initialize(bit [31:0] csr_base_addr = '1);
@@ -453,50 +425,20 @@ class ip_env_cfg extends cip_base_env_cfg #(.RAL_T(ip_reg_block));
 ```
 
 ### Security Verification for REGWEN CSRs
-If the REGWEN CSR meets the following criteria, it can be fully verified by the common [csr_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/csr_tests.hjson).
- - The REGWEN CSR and its related lockable CSRs are HW read-only registers.
- - The related lockable CSRs are not WO type, otherwise the read value is always 0 and CSR tests can't really verify if the write value is taken or not.
- - No CSR exclusions have been added to the REGWEN CSR and its related lockable CSRs.
-If not, users need to write a test to verify it separately since cip_lib and dv_base_reg can't predict its value.
-For example, the [sram_ctrl_regwen_vseq](https://github.com/lowRISC/opentitan/blob/master/hw/ip/sram_ctrl/dv/env/seq_lib/sram_ctrl_regwen_vseq.sv) has been added to verify `ctrl_regwen` and the the lockable register `ctrl` since `ctrl` is a `WO` register and excluded in CSR tests.
+If the REGWEN CSR is HW read-only, it can be fully verified by the common [csr_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/csr_tests.hjson).
+If it’s a HW updated CSR, users need to write a test to verify it separately since cip_lib and dv_base_reg can’t predict its value.
 
 Functional coverage for REGWEN CSRs and their related lockable CSRs is generated automatically in dv_base_reg.
 The details of functional coverage is described in [csr_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/csr_testplan.hjson).
 
 ### Security Verification for MUBI type CSRs
-A functional covergroup of MUBI type CSR is automatically created in the RAL model for each MUBI CSR, which ensures `True`, `False` and at least N of other values (N = width of the MUBI type) have been collected.
-This covergroup won't be sampled in CSR tests, since CSR tests only test the correctness of the value of register read / write but it won't check the block behavior when a different value is supplied to the MUBI CSR.
-Users should randomize the values of all the MUBI CSRs in non-CSR tests and check the design behaves correctly.
-The helper functions `cip_base_pkg::get_rand_mubi4|8|12|16_val(t_weight, f_weight, other_weight)` can be used to get the random values.
+TODO, add soon
 
-### Security Verification for MUBI/LC_TX type ports
-In OpenTitan [Design Verification Methodology]({{< relref "doc/ug/dv_methodology" >}}), it's mandatory to have 100% toggle coverage on all the ports.
-However, the MUBI defined values (`True` and `False`) are complement numbers.
-If users only test with `True` and `False` without using other values, toggle coverage can be 100%.
-Hence, user should add a functional covergroup for each MUBI type input port, via binding the interface `cip_mubi_cov_if` which contains a covergroup for MUBI.
-The type `lc_ctrl_pkg::lc_tx_t` is different than the Mubi4 type, as its defined values are different.
-So, it needs to be bound with the interface `cip_lc_tx_cov_if`.
-The helper functions `cip_base_pkg::get_rand_mubi4|8|12|16_val(t_weight, f_weight, other_weight)` and `cip_base_pkg::get_rand_lc_tx_val` can be used to get the random values.
-
-The following is an example from `sram_ctrl`, in which it binds the coverage interface to 2 MUBI input ports.
-```systemverilog
-module sram_ctrl_cov_bind;
-
-  bind sram_ctrl cip_mubi_cov_if #(.Width(4)) u_hw_debug_en_mubi_cov_if (
-    .rst_ni (rst_ni),
-    .mubi   (lc_hw_debug_en_i)
-  );
-
-  bind sram_ctrl cip_lc_tx_cov_if u_lc_escalate_en_cov_if (
-    .rst_ni (rst_ni),
-    .val    (lc_escalate_en_i)
-  );
-endmodule
-```
-Note: The `sim_tops` in sim_cfg.hjson should be updated to include this bind file.
+### Security Verification for MUBI type ports
+TODO, add soon
 
 ### Security Verification for common countermeasure primitives
-A [security countermeasure verification framework]({{< relref "doc/ug/sec_cm_dv_framework" >}}) is implemented in cip_lib to verify common countermeasure primitives in a semi-uutomated way.
+TODO, add methodology docs for security verification and add the link here
 
 cip_lib imports [sec_cm_pkg](https://github.com/lowRISC/opentitan/tree/master/hw/dv/sv/sec_cm), which automatically locates all the common countermeasure primitives and binds an interface to each of them.
 In the cib_base_vseq, it injects a fault to each of these primitives and verifies that the fault will lead to a fatal alert.

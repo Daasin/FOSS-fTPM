@@ -59,13 +59,9 @@ typedef enum dif_flash_ctrl_alert {
    */
   kDifFlashCtrlAlertRecovErr = 0,
   /**
-   * Flash standard fatal errors
-   */
-  kDifFlashCtrlAlertFatalStdErr = 1,
-  /**
    * Flash fatal errors
    */
-  kDifFlashCtrlAlertFatalErr = 2,
+  kDifFlashCtrlAlertFatalErr = 1,
 } dif_flash_ctrl_alert_t;
 
 /**

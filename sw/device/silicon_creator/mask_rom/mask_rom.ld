@@ -9,6 +9,7 @@
  */
 
 OUTPUT_ARCH(riscv)
+GROUP(-lgcc)
 
 /**
  * Indicate that there are no dynamic libraries, whatsoever.

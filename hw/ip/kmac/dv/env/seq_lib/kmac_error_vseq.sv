@@ -30,12 +30,7 @@ class kmac_error_vseq extends kmac_app_vseq;
 
   constraint kmac_err_type_c {
     if (en_kmac_err) {
-      (kmac_err_type inside
-          {kmac_pkg::ErrNone,
-           // Below error cases are verified in separate testbench.
-           kmac_pkg::ErrKeyNotValid,
-           kmac_pkg::ErrWaitTimerExpired,
-           kmac_pkg::ErrIncorrectEntropyMode}) == 0;
+      kmac_err_type != kmac_pkg::ErrNone;
     } else {
       kmac_err_type == kmac_pkg::ErrNone;
     }
@@ -49,6 +44,11 @@ class kmac_error_vseq extends kmac_app_vseq;
     (kmac_err_type == kmac_pkg::ErrUnexpectedModeStrength) -> (en_app == 0);
 
     (kmac_err_type == kmac_pkg::ErrSwCmdSequence) -> (en_app == 0);
+
+    if (kmac_err_type == kmac_pkg::ErrKeyNotValid) {
+      en_app == 1;
+      app_mode == AppKeymgr;
+    }
   }
 
 endclass

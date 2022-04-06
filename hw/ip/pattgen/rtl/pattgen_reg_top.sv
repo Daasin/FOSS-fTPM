@@ -266,9 +266,6 @@ module pattgen_reg_top (
 
 
   // R[intr_test]: V(True)
-  logic intr_test_qe;
-  logic [1:0] intr_test_flds_we;
-  assign intr_test_qe = &intr_test_flds_we;
   //   F[done_ch0]: 0:0
   prim_subreg_ext #(
     .DW    (1)
@@ -278,11 +275,10 @@ module pattgen_reg_top (
     .wd     (intr_test_done_ch0_wd),
     .d      ('0),
     .qre    (),
-    .qe     (intr_test_flds_we[0]),
+    .qe     (reg2hw.intr_test.done_ch0.qe),
     .q      (reg2hw.intr_test.done_ch0.q),
     .qs     ()
   );
-  assign reg2hw.intr_test.done_ch0.qe = intr_test_qe;
 
   //   F[done_ch1]: 1:1
   prim_subreg_ext #(
@@ -293,17 +289,13 @@ module pattgen_reg_top (
     .wd     (intr_test_done_ch1_wd),
     .d      ('0),
     .qre    (),
-    .qe     (intr_test_flds_we[1]),
+    .qe     (reg2hw.intr_test.done_ch1.qe),
     .q      (reg2hw.intr_test.done_ch1.q),
     .qs     ()
   );
-  assign reg2hw.intr_test.done_ch1.qe = intr_test_qe;
 
 
   // R[alert_test]: V(True)
-  logic alert_test_qe;
-  logic [0:0] alert_test_flds_we;
-  assign alert_test_qe = &alert_test_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test (
@@ -312,11 +304,10 @@ module pattgen_reg_top (
     .wd     (alert_test_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[0]),
+    .qe     (reg2hw.alert_test.qe),
     .q      (reg2hw.alert_test.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.qe = alert_test_qe;
 
 
   // R[ctrl]: V(False)

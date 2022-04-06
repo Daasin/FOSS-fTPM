@@ -97,8 +97,6 @@ class SimCfg(FlowCfg):
             self.en_build_modes.append("gui")
         if args.waves is not None:
             self.en_build_modes.append("waves")
-        else:
-            self.en_build_modes.append("waves_off")
         if self.cov is True:
             self.en_build_modes.append("cov")
         if args.profile is not None:
@@ -617,10 +615,6 @@ class SimCfg(FlowCfg):
             results_str += f"### [Testplan]({testplan})\n"
 
         results_str += f"### Simulator: {self.tool.upper()}\n"
-
-        # Print the build seed used for clarity.
-        if not self.run_only:
-            results_str += f"### Build seed: {CompileSim.seed}\n"
 
         if not results.table:
             results_str += "No results to display.\n"

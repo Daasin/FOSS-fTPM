@@ -24,7 +24,7 @@ module lc_ctrl_reg_top (
 
   import lc_ctrl_reg_pkg::* ;
 
-  localparam int AW = 8;
+  localparam int AW = 7;
   localparam int DW = 32;
   localparam int DBW = DW/8;                    // Byte Width
 
@@ -167,9 +167,6 @@ module lc_ctrl_reg_top (
   logic [4:0] lc_transition_cnt_qs;
   logic lc_id_state_re;
   logic [31:0] lc_id_state_qs;
-  logic hw_rev_re;
-  logic [15:0] hw_rev_chip_rev_qs;
-  logic [15:0] hw_rev_chip_gen_qs;
   logic device_id_0_re;
   logic [31:0] device_id_0_qs;
   logic device_id_1_re;
@@ -205,9 +202,6 @@ module lc_ctrl_reg_top (
 
   // Register instances
   // R[alert_test]: V(True)
-  logic alert_test_qe;
-  logic [2:0] alert_test_flds_we;
-  assign alert_test_qe = &alert_test_flds_we;
   //   F[fatal_prog_error]: 0:0
   prim_subreg_ext #(
     .DW    (1)
@@ -217,11 +211,10 @@ module lc_ctrl_reg_top (
     .wd     (alert_test_fatal_prog_error_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[0]),
+    .qe     (reg2hw.alert_test.fatal_prog_error.qe),
     .q      (reg2hw.alert_test.fatal_prog_error.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.fatal_prog_error.qe = alert_test_qe;
 
   //   F[fatal_state_error]: 1:1
   prim_subreg_ext #(
@@ -232,11 +225,10 @@ module lc_ctrl_reg_top (
     .wd     (alert_test_fatal_state_error_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[1]),
+    .qe     (reg2hw.alert_test.fatal_state_error.qe),
     .q      (reg2hw.alert_test.fatal_state_error.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.fatal_state_error.qe = alert_test_qe;
 
   //   F[fatal_bus_integ_error]: 2:2
   prim_subreg_ext #(
@@ -247,11 +239,10 @@ module lc_ctrl_reg_top (
     .wd     (alert_test_fatal_bus_integ_error_wd),
     .d      ('0),
     .qre    (),
-    .qe     (alert_test_flds_we[2]),
+    .qe     (reg2hw.alert_test.fatal_bus_integ_error.qe),
     .q      (reg2hw.alert_test.fatal_bus_integ_error.q),
     .qs     ()
   );
-  assign reg2hw.alert_test.fatal_bus_integ_error.qe = alert_test_qe;
 
 
   // R[status]: V(True)
@@ -397,9 +388,6 @@ module lc_ctrl_reg_top (
 
 
   // R[claim_transition_if]: V(True)
-  logic claim_transition_if_qe;
-  logic [0:0] claim_transition_if_flds_we;
-  assign claim_transition_if_qe = &claim_transition_if_flds_we;
   prim_subreg_ext #(
     .DW    (8)
   ) u_claim_transition_if (
@@ -408,11 +396,10 @@ module lc_ctrl_reg_top (
     .wd     (claim_transition_if_wd),
     .d      (hw2reg.claim_transition_if.d),
     .qre    (),
-    .qe     (claim_transition_if_flds_we[0]),
+    .qe     (reg2hw.claim_transition_if.qe),
     .q      (reg2hw.claim_transition_if.q),
     .qs     (claim_transition_if_qs)
   );
-  assign reg2hw.claim_transition_if.qe = claim_transition_if_qe;
 
 
   // R[transition_regwen]: V(True)
@@ -431,9 +418,6 @@ module lc_ctrl_reg_top (
 
 
   // R[transition_cmd]: V(True)
-  logic transition_cmd_qe;
-  logic [0:0] transition_cmd_flds_we;
-  assign transition_cmd_qe = &transition_cmd_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_transition_cmd (
@@ -442,17 +426,13 @@ module lc_ctrl_reg_top (
     .wd     (transition_cmd_wd),
     .d      ('0),
     .qre    (),
-    .qe     (transition_cmd_flds_we[0]),
+    .qe     (reg2hw.transition_cmd.qe),
     .q      (reg2hw.transition_cmd.q),
     .qs     ()
   );
-  assign reg2hw.transition_cmd.qe = transition_cmd_qe;
 
 
   // R[transition_ctrl]: V(True)
-  logic transition_ctrl_qe;
-  logic [0:0] transition_ctrl_flds_we;
-  assign transition_ctrl_qe = &transition_ctrl_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_transition_ctrl (
@@ -461,18 +441,14 @@ module lc_ctrl_reg_top (
     .wd     (transition_ctrl_wd),
     .d      (hw2reg.transition_ctrl.d),
     .qre    (),
-    .qe     (transition_ctrl_flds_we[0]),
+    .qe     (reg2hw.transition_ctrl.qe),
     .q      (reg2hw.transition_ctrl.q),
     .qs     (transition_ctrl_qs)
   );
-  assign reg2hw.transition_ctrl.qe = transition_ctrl_qe;
 
 
   // Subregister 0 of Multireg transition_token
   // R[transition_token_0]: V(True)
-  logic transition_token_0_qe;
-  logic [0:0] transition_token_0_flds_we;
-  assign transition_token_0_qe = &transition_token_0_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_transition_token_0 (
@@ -481,18 +457,14 @@ module lc_ctrl_reg_top (
     .wd     (transition_token_0_wd),
     .d      (hw2reg.transition_token[0].d),
     .qre    (),
-    .qe     (transition_token_0_flds_we[0]),
+    .qe     (reg2hw.transition_token[0].qe),
     .q      (reg2hw.transition_token[0].q),
     .qs     (transition_token_0_qs)
   );
-  assign reg2hw.transition_token[0].qe = transition_token_0_qe;
 
 
   // Subregister 1 of Multireg transition_token
   // R[transition_token_1]: V(True)
-  logic transition_token_1_qe;
-  logic [0:0] transition_token_1_flds_we;
-  assign transition_token_1_qe = &transition_token_1_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_transition_token_1 (
@@ -501,18 +473,14 @@ module lc_ctrl_reg_top (
     .wd     (transition_token_1_wd),
     .d      (hw2reg.transition_token[1].d),
     .qre    (),
-    .qe     (transition_token_1_flds_we[0]),
+    .qe     (reg2hw.transition_token[1].qe),
     .q      (reg2hw.transition_token[1].q),
     .qs     (transition_token_1_qs)
   );
-  assign reg2hw.transition_token[1].qe = transition_token_1_qe;
 
 
   // Subregister 2 of Multireg transition_token
   // R[transition_token_2]: V(True)
-  logic transition_token_2_qe;
-  logic [0:0] transition_token_2_flds_we;
-  assign transition_token_2_qe = &transition_token_2_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_transition_token_2 (
@@ -521,18 +489,14 @@ module lc_ctrl_reg_top (
     .wd     (transition_token_2_wd),
     .d      (hw2reg.transition_token[2].d),
     .qre    (),
-    .qe     (transition_token_2_flds_we[0]),
+    .qe     (reg2hw.transition_token[2].qe),
     .q      (reg2hw.transition_token[2].q),
     .qs     (transition_token_2_qs)
   );
-  assign reg2hw.transition_token[2].qe = transition_token_2_qe;
 
 
   // Subregister 3 of Multireg transition_token
   // R[transition_token_3]: V(True)
-  logic transition_token_3_qe;
-  logic [0:0] transition_token_3_flds_we;
-  assign transition_token_3_qe = &transition_token_3_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_transition_token_3 (
@@ -541,17 +505,13 @@ module lc_ctrl_reg_top (
     .wd     (transition_token_3_wd),
     .d      (hw2reg.transition_token[3].d),
     .qre    (),
-    .qe     (transition_token_3_flds_we[0]),
+    .qe     (reg2hw.transition_token[3].qe),
     .q      (reg2hw.transition_token[3].q),
     .qs     (transition_token_3_qs)
   );
-  assign reg2hw.transition_token[3].qe = transition_token_3_qe;
 
 
   // R[transition_target]: V(True)
-  logic transition_target_qe;
-  logic [0:0] transition_target_flds_we;
-  assign transition_target_qe = &transition_target_flds_we;
   prim_subreg_ext #(
     .DW    (30)
   ) u_transition_target (
@@ -560,17 +520,13 @@ module lc_ctrl_reg_top (
     .wd     (transition_target_wd),
     .d      (hw2reg.transition_target.d),
     .qre    (),
-    .qe     (transition_target_flds_we[0]),
+    .qe     (reg2hw.transition_target.qe),
     .q      (reg2hw.transition_target.q),
     .qs     (transition_target_qs)
   );
-  assign reg2hw.transition_target.qe = transition_target_qe;
 
 
   // R[otp_vendor_test_ctrl]: V(True)
-  logic otp_vendor_test_ctrl_qe;
-  logic [0:0] otp_vendor_test_ctrl_flds_we;
-  assign otp_vendor_test_ctrl_qe = &otp_vendor_test_ctrl_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_otp_vendor_test_ctrl (
@@ -579,11 +535,10 @@ module lc_ctrl_reg_top (
     .wd     (otp_vendor_test_ctrl_wd),
     .d      (hw2reg.otp_vendor_test_ctrl.d),
     .qre    (),
-    .qe     (otp_vendor_test_ctrl_flds_we[0]),
+    .qe     (reg2hw.otp_vendor_test_ctrl.qe),
     .q      (reg2hw.otp_vendor_test_ctrl.q),
     .qs     (otp_vendor_test_ctrl_qs)
   );
-  assign reg2hw.otp_vendor_test_ctrl.qe = otp_vendor_test_ctrl_qe;
 
 
   // R[otp_vendor_test_status]: V(True)
@@ -643,36 +598,6 @@ module lc_ctrl_reg_top (
     .qe     (),
     .q      (),
     .qs     (lc_id_state_qs)
-  );
-
-
-  // R[hw_rev]: V(True)
-  //   F[chip_rev]: 15:0
-  prim_subreg_ext #(
-    .DW    (16)
-  ) u_hw_rev_chip_rev (
-    .re     (hw_rev_re),
-    .we     (1'b0),
-    .wd     ('0),
-    .d      (hw2reg.hw_rev.chip_rev.d),
-    .qre    (),
-    .qe     (),
-    .q      (),
-    .qs     (hw_rev_chip_rev_qs)
-  );
-
-  //   F[chip_gen]: 31:16
-  prim_subreg_ext #(
-    .DW    (16)
-  ) u_hw_rev_chip_gen (
-    .re     (hw_rev_re),
-    .we     (1'b0),
-    .wd     ('0),
-    .d      (hw2reg.hw_rev.chip_gen.d),
-    .qre    (),
-    .qe     (),
-    .q      (),
-    .qs     (hw_rev_chip_gen_qs)
   );
 
 
@@ -933,7 +858,7 @@ module lc_ctrl_reg_top (
 
 
 
-  logic [32:0] addr_hit;
+  logic [31:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == LC_CTRL_ALERT_TEST_OFFSET);
@@ -952,23 +877,22 @@ module lc_ctrl_reg_top (
     addr_hit[13] = (reg_addr == LC_CTRL_LC_STATE_OFFSET);
     addr_hit[14] = (reg_addr == LC_CTRL_LC_TRANSITION_CNT_OFFSET);
     addr_hit[15] = (reg_addr == LC_CTRL_LC_ID_STATE_OFFSET);
-    addr_hit[16] = (reg_addr == LC_CTRL_HW_REV_OFFSET);
-    addr_hit[17] = (reg_addr == LC_CTRL_DEVICE_ID_0_OFFSET);
-    addr_hit[18] = (reg_addr == LC_CTRL_DEVICE_ID_1_OFFSET);
-    addr_hit[19] = (reg_addr == LC_CTRL_DEVICE_ID_2_OFFSET);
-    addr_hit[20] = (reg_addr == LC_CTRL_DEVICE_ID_3_OFFSET);
-    addr_hit[21] = (reg_addr == LC_CTRL_DEVICE_ID_4_OFFSET);
-    addr_hit[22] = (reg_addr == LC_CTRL_DEVICE_ID_5_OFFSET);
-    addr_hit[23] = (reg_addr == LC_CTRL_DEVICE_ID_6_OFFSET);
-    addr_hit[24] = (reg_addr == LC_CTRL_DEVICE_ID_7_OFFSET);
-    addr_hit[25] = (reg_addr == LC_CTRL_MANUF_STATE_0_OFFSET);
-    addr_hit[26] = (reg_addr == LC_CTRL_MANUF_STATE_1_OFFSET);
-    addr_hit[27] = (reg_addr == LC_CTRL_MANUF_STATE_2_OFFSET);
-    addr_hit[28] = (reg_addr == LC_CTRL_MANUF_STATE_3_OFFSET);
-    addr_hit[29] = (reg_addr == LC_CTRL_MANUF_STATE_4_OFFSET);
-    addr_hit[30] = (reg_addr == LC_CTRL_MANUF_STATE_5_OFFSET);
-    addr_hit[31] = (reg_addr == LC_CTRL_MANUF_STATE_6_OFFSET);
-    addr_hit[32] = (reg_addr == LC_CTRL_MANUF_STATE_7_OFFSET);
+    addr_hit[16] = (reg_addr == LC_CTRL_DEVICE_ID_0_OFFSET);
+    addr_hit[17] = (reg_addr == LC_CTRL_DEVICE_ID_1_OFFSET);
+    addr_hit[18] = (reg_addr == LC_CTRL_DEVICE_ID_2_OFFSET);
+    addr_hit[19] = (reg_addr == LC_CTRL_DEVICE_ID_3_OFFSET);
+    addr_hit[20] = (reg_addr == LC_CTRL_DEVICE_ID_4_OFFSET);
+    addr_hit[21] = (reg_addr == LC_CTRL_DEVICE_ID_5_OFFSET);
+    addr_hit[22] = (reg_addr == LC_CTRL_DEVICE_ID_6_OFFSET);
+    addr_hit[23] = (reg_addr == LC_CTRL_DEVICE_ID_7_OFFSET);
+    addr_hit[24] = (reg_addr == LC_CTRL_MANUF_STATE_0_OFFSET);
+    addr_hit[25] = (reg_addr == LC_CTRL_MANUF_STATE_1_OFFSET);
+    addr_hit[26] = (reg_addr == LC_CTRL_MANUF_STATE_2_OFFSET);
+    addr_hit[27] = (reg_addr == LC_CTRL_MANUF_STATE_3_OFFSET);
+    addr_hit[28] = (reg_addr == LC_CTRL_MANUF_STATE_4_OFFSET);
+    addr_hit[29] = (reg_addr == LC_CTRL_MANUF_STATE_5_OFFSET);
+    addr_hit[30] = (reg_addr == LC_CTRL_MANUF_STATE_6_OFFSET);
+    addr_hit[31] = (reg_addr == LC_CTRL_MANUF_STATE_7_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -1007,8 +931,7 @@ module lc_ctrl_reg_top (
                (addr_hit[28] & (|(LC_CTRL_PERMIT[28] & ~reg_be))) |
                (addr_hit[29] & (|(LC_CTRL_PERMIT[29] & ~reg_be))) |
                (addr_hit[30] & (|(LC_CTRL_PERMIT[30] & ~reg_be))) |
-               (addr_hit[31] & (|(LC_CTRL_PERMIT[31] & ~reg_be))) |
-               (addr_hit[32] & (|(LC_CTRL_PERMIT[32] & ~reg_be)))));
+               (addr_hit[31] & (|(LC_CTRL_PERMIT[31] & ~reg_be)))));
   end
   assign alert_test_we = addr_hit[0] & reg_we & !reg_error;
 
@@ -1058,23 +981,22 @@ module lc_ctrl_reg_top (
   assign lc_state_re = addr_hit[13] & reg_re & !reg_error;
   assign lc_transition_cnt_re = addr_hit[14] & reg_re & !reg_error;
   assign lc_id_state_re = addr_hit[15] & reg_re & !reg_error;
-  assign hw_rev_re = addr_hit[16] & reg_re & !reg_error;
-  assign device_id_0_re = addr_hit[17] & reg_re & !reg_error;
-  assign device_id_1_re = addr_hit[18] & reg_re & !reg_error;
-  assign device_id_2_re = addr_hit[19] & reg_re & !reg_error;
-  assign device_id_3_re = addr_hit[20] & reg_re & !reg_error;
-  assign device_id_4_re = addr_hit[21] & reg_re & !reg_error;
-  assign device_id_5_re = addr_hit[22] & reg_re & !reg_error;
-  assign device_id_6_re = addr_hit[23] & reg_re & !reg_error;
-  assign device_id_7_re = addr_hit[24] & reg_re & !reg_error;
-  assign manuf_state_0_re = addr_hit[25] & reg_re & !reg_error;
-  assign manuf_state_1_re = addr_hit[26] & reg_re & !reg_error;
-  assign manuf_state_2_re = addr_hit[27] & reg_re & !reg_error;
-  assign manuf_state_3_re = addr_hit[28] & reg_re & !reg_error;
-  assign manuf_state_4_re = addr_hit[29] & reg_re & !reg_error;
-  assign manuf_state_5_re = addr_hit[30] & reg_re & !reg_error;
-  assign manuf_state_6_re = addr_hit[31] & reg_re & !reg_error;
-  assign manuf_state_7_re = addr_hit[32] & reg_re & !reg_error;
+  assign device_id_0_re = addr_hit[16] & reg_re & !reg_error;
+  assign device_id_1_re = addr_hit[17] & reg_re & !reg_error;
+  assign device_id_2_re = addr_hit[18] & reg_re & !reg_error;
+  assign device_id_3_re = addr_hit[19] & reg_re & !reg_error;
+  assign device_id_4_re = addr_hit[20] & reg_re & !reg_error;
+  assign device_id_5_re = addr_hit[21] & reg_re & !reg_error;
+  assign device_id_6_re = addr_hit[22] & reg_re & !reg_error;
+  assign device_id_7_re = addr_hit[23] & reg_re & !reg_error;
+  assign manuf_state_0_re = addr_hit[24] & reg_re & !reg_error;
+  assign manuf_state_1_re = addr_hit[25] & reg_re & !reg_error;
+  assign manuf_state_2_re = addr_hit[26] & reg_re & !reg_error;
+  assign manuf_state_3_re = addr_hit[27] & reg_re & !reg_error;
+  assign manuf_state_4_re = addr_hit[28] & reg_re & !reg_error;
+  assign manuf_state_5_re = addr_hit[29] & reg_re & !reg_error;
+  assign manuf_state_6_re = addr_hit[30] & reg_re & !reg_error;
+  assign manuf_state_7_re = addr_hit[31] & reg_re & !reg_error;
 
   // Read data return
   always_comb begin
@@ -1156,71 +1078,66 @@ module lc_ctrl_reg_top (
       end
 
       addr_hit[16]: begin
-        reg_rdata_next[15:0] = hw_rev_chip_rev_qs;
-        reg_rdata_next[31:16] = hw_rev_chip_gen_qs;
-      end
-
-      addr_hit[17]: begin
         reg_rdata_next[31:0] = device_id_0_qs;
       end
 
-      addr_hit[18]: begin
+      addr_hit[17]: begin
         reg_rdata_next[31:0] = device_id_1_qs;
       end
 
-      addr_hit[19]: begin
+      addr_hit[18]: begin
         reg_rdata_next[31:0] = device_id_2_qs;
       end
 
-      addr_hit[20]: begin
+      addr_hit[19]: begin
         reg_rdata_next[31:0] = device_id_3_qs;
       end
 
-      addr_hit[21]: begin
+      addr_hit[20]: begin
         reg_rdata_next[31:0] = device_id_4_qs;
       end
 
-      addr_hit[22]: begin
+      addr_hit[21]: begin
         reg_rdata_next[31:0] = device_id_5_qs;
       end
 
-      addr_hit[23]: begin
+      addr_hit[22]: begin
         reg_rdata_next[31:0] = device_id_6_qs;
       end
 
-      addr_hit[24]: begin
+      addr_hit[23]: begin
         reg_rdata_next[31:0] = device_id_7_qs;
       end
 
-      addr_hit[25]: begin
+      addr_hit[24]: begin
         reg_rdata_next[31:0] = manuf_state_0_qs;
       end
 
-      addr_hit[26]: begin
+      addr_hit[25]: begin
         reg_rdata_next[31:0] = manuf_state_1_qs;
       end
 
-      addr_hit[27]: begin
+      addr_hit[26]: begin
         reg_rdata_next[31:0] = manuf_state_2_qs;
       end
 
-      addr_hit[28]: begin
+      addr_hit[27]: begin
         reg_rdata_next[31:0] = manuf_state_3_qs;
       end
 
-      addr_hit[29]: begin
+      addr_hit[28]: begin
         reg_rdata_next[31:0] = manuf_state_4_qs;
       end
 
-      addr_hit[30]: begin
+      addr_hit[29]: begin
         reg_rdata_next[31:0] = manuf_state_5_qs;
       end
 
-      addr_hit[31]: begin
+      addr_hit[30]: begin
         reg_rdata_next[31:0] = manuf_state_6_qs;
       end
 
-      addr_hit[32]: begin
+      addr_hit[31]: begin
         reg_rdata_next[31:0] = manuf_state_7_qs;
       end
 

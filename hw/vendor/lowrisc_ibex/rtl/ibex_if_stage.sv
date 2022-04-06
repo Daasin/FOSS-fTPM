@@ -25,9 +25,7 @@ module ibex_if_stage import ibex_pkg::*; #(
   parameter bit          ResetAll          = 1'b0,
   parameter lfsr_seed_t  RndCnstLfsrSeed   = RndCnstLfsrSeedDefault,
   parameter lfsr_perm_t  RndCnstLfsrPerm   = RndCnstLfsrPermDefault,
-  parameter bit          BranchPredictor   = 1'b0,
-  parameter bit          MemECC            = 1'b0,
-  parameter int unsigned MemDataWidth      = MemECC ? 32 + 7 : 32
+  parameter bit          BranchPredictor   = 1'b0
 ) (
   input  logic                         clk_i,
   input  logic                         rst_ni,
@@ -40,9 +38,8 @@ module ibex_if_stage import ibex_pkg::*; #(
   output logic [31:0]                 instr_addr_o,
   input  logic                        instr_gnt_i,
   input  logic                        instr_rvalid_i,
-  input  logic [MemDataWidth-1:0]     instr_rdata_i,
-  input  logic                        instr_bus_err_i,
-  output logic                        instr_intg_err_o,
+  input  logic [31:0]                 instr_rdata_i,
+  input  logic                        instr_err_i,
 
   // ICache RAM IO
   output logic [IC_NUM_WAYS-1:0]      ic_tag_req_o,
@@ -90,13 +87,12 @@ module ibex_if_stage import ibex_pkg::*; #(
   input  exc_pc_sel_e                 exc_pc_mux_i,             // selects ISR address
   input  exc_cause_e                  exc_cause,                // selects ISR address for
                                                                 // vectorized interrupt lines
-  input  logic                        dummy_instr_en_i,
-  input  logic [2:0]                  dummy_instr_mask_i,
-  input  logic                        dummy_instr_seed_en_i,
-  input  logic [31:0]                 dummy_instr_seed_i,
-  input  logic                        icache_enable_i,
-  input  logic                        icache_inval_i,
-  output logic                        icache_ecc_error_o,
+  input logic                         dummy_instr_en_i,
+  input logic [2:0]                   dummy_instr_mask_i,
+  input logic                         dummy_instr_seed_en_i,
+  input logic [31:0]                  dummy_instr_seed_i,
+  input logic                         icache_enable_i,
+  input logic                         icache_inval_i,
 
   // jump and branch target
   input  logic [31:0]                 branch_target_ex_i,       // branch/jump target address
@@ -119,8 +115,6 @@ module ibex_if_stage import ibex_pkg::*; #(
 
   logic              instr_valid_id_d, instr_valid_id_q;
   logic              instr_new_id_d, instr_new_id_q;
-
-  logic              instr_err, instr_intg_err;
 
   // prefetch buffer related signals
   logic              prefetch_busy;
@@ -210,32 +204,6 @@ module ibex_if_stage import ibex_pkg::*; #(
   // tell CS register file to initialize mtvec on boot
   assign csr_mtvec_init_o = (pc_mux_i == PC_BOOT) & pc_set_i;
 
-  // SEC_CM: BUS.INTEGRITY
-  if (MemECC) begin : g_mem_ecc
-    logic [1:0] ecc_err;
-    logic [MemDataWidth-1:0] instr_rdata_buf;
-
-    prim_buf #(.Width(MemDataWidth)) u_prim_buf_instr_rdata (
-      .in_i (instr_rdata_i),
-      .out_o(instr_rdata_buf)
-    );
-
-    prim_secded_inv_39_32_dec u_instr_intg_dec (
-      .data_i     (instr_rdata_buf),
-      .data_o     (),
-      .syndrome_o (),
-      .err_o      (ecc_err)
-    );
-
-    // Don't care if error is correctable or not, they're all treated the same
-    assign instr_intg_err = |ecc_err;
-  end else begin : g_no_mem_ecc
-    assign instr_intg_err            = 1'b0;
-  end
-
-  assign instr_err        = instr_intg_err | instr_bus_err_i;
-  assign instr_intg_err_o = instr_intg_err & instr_rvalid_i;
-
   if (ICache) begin : gen_icache
     // Full I-Cache option
     ibex_icache #(
@@ -266,8 +234,8 @@ module ibex_if_stage import ibex_pkg::*; #(
         .instr_addr_o        ( instr_addr_o               ),
         .instr_gnt_i         ( instr_gnt_i                ),
         .instr_rvalid_i      ( instr_rvalid_i             ),
-        .instr_rdata_i       ( instr_rdata_i[31:0]        ),
-        .instr_err_i         ( instr_err                  ),
+        .instr_rdata_i       ( instr_rdata_i              ),
+        .instr_err_i         ( instr_err_i                ),
 
         .ic_tag_req_o        ( ic_tag_req_o               ),
         .ic_tag_write_o      ( ic_tag_write_o             ),
@@ -283,8 +251,7 @@ module ibex_if_stage import ibex_pkg::*; #(
 
         .icache_enable_i     ( icache_enable_i            ),
         .icache_inval_i      ( icache_inval_i             ),
-        .busy_o              ( prefetch_busy              ),
-        .ecc_error_o         ( icache_ecc_error_o         )
+        .busy_o              ( prefetch_busy              )
     );
   end else begin : gen_prefetch_buffer
     // prefetch buffer, caches a fixed number of instructions
@@ -312,8 +279,8 @@ module ibex_if_stage import ibex_pkg::*; #(
         .instr_addr_o        ( instr_addr_o               ),
         .instr_gnt_i         ( instr_gnt_i                ),
         .instr_rvalid_i      ( instr_rvalid_i             ),
-        .instr_rdata_i       ( instr_rdata_i[31:0]        ),
-        .instr_err_i         ( instr_err                  ),
+        .instr_rdata_i       ( instr_rdata_i              ),
+        .instr_err_i         ( instr_err_i                ),
 
         .busy_o              ( prefetch_busy              )
     );
@@ -334,23 +301,6 @@ module ibex_if_stage import ibex_pkg::*; #(
     assign ic_data_write_o       = 'b0;
     assign ic_data_addr_o        = 'b0;
     assign ic_data_wdata_o       = 'b0;
-    assign icache_ecc_error_o    = 'b0;
-
-`ifndef SYNTHESIS
-    // If we don't instantiate an icache and this is a simulation then we have a problem because the
-    // simulator might discard the icache module entirely, including some DPI exports that it
-    // implies. This then causes problems for linking against C++ testbench code that expected them.
-    // As a slightly ugly hack, let's define the DPI functions here (the real versions are defined
-    // in prim_util_get_scramble_params.svh)
-    export "DPI-C" function simutil_get_scramble_key;
-    export "DPI-C" function simutil_get_scramble_nonce;
-    function automatic int simutil_get_scramble_key(output bit [127:0] val);
-      return 0;
-    endfunction
-    function automatic int simutil_get_scramble_nonce(output bit [319:0] nonce);
-      return 0;
-    endfunction
-`endif
   end
 
   assign unused_fetch_addr_n0 = fetch_addr_n[0];
@@ -390,7 +340,6 @@ module ibex_if_stage import ibex_pkg::*; #(
 
   // Dummy instruction insertion
   if (DummyInstructions) begin : gen_dummy_instr
-    // SEC_CM: CTRL_FLOW.UNPREDICTABLE
     logic        insert_dummy_instr;
     logic [31:0] dummy_instr_data;
 
@@ -513,8 +462,7 @@ module ibex_if_stage import ibex_pkg::*; #(
 
   // Check for expected increments of the PC when security hardening enabled
   if (PCIncrCheck) begin : g_secure_pc
-    // SEC_CM: PC.CTRL_FLOW.CONSISTENCY
-    logic [31:0] prev_instr_addr_incr, prev_instr_addr_incr_buf;
+    logic [31:0] prev_instr_addr_incr;
     logic        prev_instr_seq_q, prev_instr_seq_d;
 
     // Do not check for sequential increase after a branch, jump, exception, interrupt or debug
@@ -532,14 +480,8 @@ module ibex_if_stage import ibex_pkg::*; #(
 
     assign prev_instr_addr_incr = pc_id_o + (instr_is_compressed_id_o ? 32'd2 : 32'd4);
 
-    // Buffer anticipated next PC address to ensure optimiser cannot remove the check.
-    prim_buf #(.Width(32)) u_prev_instr_addr_incr_buf (
-      .in_i (prev_instr_addr_incr),
-      .out_o(prev_instr_addr_incr_buf)
-    );
-
     // Check that the address equals the previous address +2/+4
-    assign pc_mismatch_alert_o = prev_instr_seq_q & (pc_if_o != prev_instr_addr_incr_buf);
+    assign pc_mismatch_alert_o = prev_instr_seq_q & (pc_if_o != prev_instr_addr_incr);
 
   end else begin : g_no_secure_pc
     assign pc_mismatch_alert_o = 1'b0;

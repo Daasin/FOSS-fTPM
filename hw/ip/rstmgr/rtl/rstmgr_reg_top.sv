@@ -378,9 +378,6 @@ module rstmgr_reg_top (
 
   // Subregister 0 of Multireg sw_rst_ctrl_n
   // R[sw_rst_ctrl_n]: V(True)
-  logic sw_rst_ctrl_n_qe;
-  logic [1:0] sw_rst_ctrl_n_flds_we;
-  assign sw_rst_ctrl_n_qe = &sw_rst_ctrl_n_flds_we;
   //   F[val_0]: 0:0
   prim_subreg_ext #(
     .DW    (1)
@@ -390,11 +387,10 @@ module rstmgr_reg_top (
     .wd     (sw_rst_ctrl_n_val_0_wd),
     .d      (hw2reg.sw_rst_ctrl_n[0].d),
     .qre    (),
-    .qe     (sw_rst_ctrl_n_flds_we[0]),
+    .qe     (reg2hw.sw_rst_ctrl_n[0].qe),
     .q      (reg2hw.sw_rst_ctrl_n[0].q),
     .qs     (sw_rst_ctrl_n_val_0_qs)
   );
-  assign reg2hw.sw_rst_ctrl_n[0].qe = sw_rst_ctrl_n_qe;
 
   //   F[val_1]: 1:1
   prim_subreg_ext #(
@@ -405,11 +401,10 @@ module rstmgr_reg_top (
     .wd     (sw_rst_ctrl_n_val_1_wd),
     .d      (hw2reg.sw_rst_ctrl_n[1].d),
     .qre    (),
-    .qe     (sw_rst_ctrl_n_flds_we[1]),
+    .qe     (reg2hw.sw_rst_ctrl_n[1].qe),
     .q      (reg2hw.sw_rst_ctrl_n[1].q),
     .qs     (sw_rst_ctrl_n_val_1_qs)
   );
-  assign reg2hw.sw_rst_ctrl_n[1].qe = sw_rst_ctrl_n_qe;
 
 
 

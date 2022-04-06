@@ -25,15 +25,9 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
 
   `uvm_object_new
 
-  virtual function void set_sva_check_rstreqs(bit enable);
-    `uvm_info(`gfn, $sformatf("Remote setting check_rstreqs_en=%b", enable), UVM_MEDIUM)
-    uvm_config_db#(bit)::set(null, "pwrmgr_rstmgr_sva_if", "check_rstreqs_en", enable);
-  endfunction
-
   task post_start();
     do_clear_all_interrupts = 0;
     super.post_start();
-    set_sva_check_rstreqs(0);
   endtask
 
   virtual task apply_reset(string kind = "HARD");
@@ -47,11 +41,9 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
     // TODO: Cannot assert different types of resets in parallel; due to randomization
     // resets de-assert at different times. If the main rst_n de-asserts before others,
     // the CPU starts executing right away which can cause breakages.
-    cfg.m_jtag_riscv_agent_cfg.m_jtag_agent_cfg.vif.do_trst_n();
+    cfg.m_jtag_riscv_agent_cfg.do_trst_n();
     super.apply_reset(kind);
   endtask
-
-  chip_callback_vseq callback_vseq;
 
   virtual task dut_init(string reset_kind = "HARD");
     // Initialize gpio pin default states
@@ -61,13 +53,10 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
     cfg.mem_bkdr_util_h[FlashBank1Info].set_mem();
     // Backdoor load the OTP image.
     cfg.mem_bkdr_util_h[Otp].load_mem_from_file(cfg.otp_images[cfg.use_otp_image]);
-    initialize_otp_creator_sw_cfg_ast_cfg();
-    callback_vseq.pre_dut_init();
     // Randomize the ROM image. Subclasses that have an actual ROM image will load it later.
     cfg.mem_bkdr_util_h[Rom].randomize_mem();
     // Bring the chip out of reset.
     super.dut_init(reset_kind);
-    callback_vseq.post_dut_init();
   endtask
 
   virtual task dut_shutdown();
@@ -79,8 +68,6 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
     // Do DUT init after some additional settings.
     bit do_dut_init_save = do_dut_init;
     do_dut_init = 1'b0;
-    `uvm_create_on(callback_vseq, p_sequencer);
-    `DV_CHECK_RANDOMIZE_FATAL(callback_vseq)
     super.pre_start();
     do_dut_init = do_dut_init_save;
 
@@ -104,25 +91,5 @@ class chip_base_vseq #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_ba
       uart_tx_data_q.push_back(item.data);
     end
   endtask
-
-  // Initialize the OTP creator SW cfg region with AST configuration data.
-  virtual function void initialize_otp_creator_sw_cfg_ast_cfg();
-    // The knob controls whether the AST is actually programmed.
-    if (cfg.do_creator_sw_cfg_ast_cfg) begin
-      cfg.mem_bkdr_util_h[Otp].write32(otp_ctrl_reg_pkg::CreatorSwCfgAstInitEnOffset,
-                                       prim_mubi_pkg::MuBi4True);
-    end
-
-    // Ensure that the allocated size of the AST cfg region in OTP is equal to the number of AST
-    // registers to be programmed.
-    `DV_CHECK_EQ_FATAL(otp_ctrl_reg_pkg::CreatorSwCfgAstCfgSize, ast_pkg::AstRegsNum * 4)
-    foreach (cfg.creator_sw_cfg_ast_cfg_data[i]) begin
-      `uvm_info(`gfn, $sformatf({"OTP: Preloading creator_sw_cfg_ast_cfg_data[%0d] with 0x%0h ",
-                                 "via backdoor"}, i, cfg.creator_sw_cfg_ast_cfg_data[i]),
-                UVM_MEDIUM)
-      cfg.mem_bkdr_util_h[Otp].write32(
-          otp_ctrl_reg_pkg::CreatorSwCfgAstCfgOffset + i * 4, cfg.creator_sw_cfg_ast_cfg_data[i]);
-    end
-  endfunction
 
 endclass : chip_base_vseq

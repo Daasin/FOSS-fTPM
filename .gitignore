@@ -1,7 +1,5 @@
 *~
 *.bak
-*.swp
-*.swo
 tags
 __pycache__
 /.vscode

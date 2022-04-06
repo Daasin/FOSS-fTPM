@@ -18,7 +18,7 @@ module prim_sparse_fsm_flop #(
   output logic [Width-1:0] state_o
 );
 
-  logic unused_err_o;
+  logic unused_valid_st;
 
   prim_flop #(
     .Width(Width),
@@ -31,17 +31,10 @@ module prim_sparse_fsm_flop #(
   );
 
   `ifdef INC_ASSERT
-  assign unused_err_o = is_undefined_state(state_o);
-
-  function automatic logic is_undefined_state(logic [Width-1:0] sig);
-    for (int i = 0, StateEnumT t = t.first(); i < t.num(); i += 1, t = t.next()) begin
-      if (StateEnumT'(sig) === t) return 0;
-    end
-    return 1;
-  endfunction
-
+    StateEnumT tmp;
+    assign unused_valid_st = $cast(tmp, state_o);
   `else
-    assign unused_err_o = 1'b0;
+    assign unused_valid_st = 1'b1;
   `endif
 
   // If ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT is declared, the unused_assert_connected signal will
@@ -54,3 +47,9 @@ module prim_sparse_fsm_flop #(
   `endif
 
 endmodule
+
+`define ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(NAME_, PRIM_HIER_, ALERT_, MAX_CYCLES_ = 5) \
+  `ASSERT(NAME_, $fell(PRIM_HIER_.unused_valid_st) |-> ##[1:MAX_CYCLES_] $rose(ALERT_.alert_p)) \
+  `ifdef INC_ASSERT \
+  assign PRIM_HIER_.unused_assert_connected = 1'b1; \
+  `endif

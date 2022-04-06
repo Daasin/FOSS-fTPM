@@ -24,12 +24,10 @@
 `endif
 
 interface otp_ctrl_if(input clk_i, input rst_ni);
-  import uvm_pkg::*;
   import otp_ctrl_env_pkg::*;
   import otp_ctrl_pkg::*;
   import otp_ctrl_reg_pkg::*;
   import otp_ctrl_part_pkg::*;
-  import cip_base_pkg::*;
 
   // Output from DUT
   otp_hw_cfg_t       otp_hw_cfg_o;
@@ -39,7 +37,7 @@ interface otp_ctrl_if(input clk_i, input rst_ni);
   logic              pwr_otp_done_o, pwr_otp_idle_o;
 
   // Inputs to DUT
-  logic                  pwr_otp_init_i, scan_en_i, scan_rst_ni, ext_voltage_h_io;
+  logic                  pwr_otp_init_i, scan_en_i, scan_rst_ni;
   lc_ctrl_pkg::lc_tx_t   lc_dft_en_i, lc_escalate_en_i, lc_check_byp_en_i,
                          lc_creator_seed_sw_rw_en_i, lc_seed_hw_rd_en_i;
   prim_mubi_pkg::mubi4_t scanmode_i;
@@ -88,7 +86,7 @@ interface otp_ctrl_if(input clk_i, input rst_ni);
       lc_prog_err_dly1  <= 0;
       lc_esc_dly1       <= lc_ctrl_pkg::Off;
       lc_esc_dly2       <= lc_ctrl_pkg::Off;
-      lc_check_byp_en_i <= get_rand_lc_tx_val();
+      lc_check_byp_en_i <= randomize_lc_tx_t_val();
       lc_esc_on         <= 0;
     end else begin
       lc_prog_err_dly1 <= lc_prog_err;
@@ -97,7 +95,7 @@ interface otp_ctrl_if(input clk_i, input rst_ni);
       if (lc_prog_req) begin
         lc_check_byp_en_i <= lc_check_byp_en ? lc_ctrl_pkg::On : lc_ctrl_pkg::Off;
       end
-      if (lc_esc_dly2 != lc_ctrl_pkg::Off && !lc_esc_on) begin
+      if (lc_esc_dly2 == lc_ctrl_pkg::On && !lc_esc_on) begin
         lc_esc_on <= 1;
       end
     end
@@ -107,10 +105,6 @@ interface otp_ctrl_if(input clk_i, input rst_ni);
 
   function automatic void drive_pwr_otp_init(logic val);
     pwr_otp_init_i = val;
-  endfunction
-
-  function automatic void drive_ext_voltage_h_io(logic val);
-    ext_voltage_h_io = val;
   endfunction
 
   function automatic void drive_lc_creator_seed_sw_rw_en(lc_ctrl_pkg::lc_tx_t val);
@@ -217,47 +211,14 @@ interface otp_ctrl_if(input clk_i, input rst_ni);
     endcase
   endtask
 
-  // This task forces otp_ctrl's internal mubi signals to values that are not mubi::true or mubi::
-  // false. Then scb will check if design treats these values as locking the partition access.
-  task automatic force_part_access_mubi(otp_part_access_lock_t forced_part_access_sel[NumPart-1]);
-    static part_access_t [NumPart-1:0] part_access_val, part_access_dai_val;
-    @(posedge clk_i);
-
-    part_access_val = tb.dut.part_access;
-    part_access_dai_val = tb.dut.part_access_dai;
-
-    foreach (forced_part_access_sel[i]) begin
-      if (forced_part_access_sel[i].read_lock) begin
-        part_access_val[i].read_lock = get_rand_mubi8_val(.t_weight(0), .f_weight(0));
-        part_access_dai_val[i].read_lock = get_rand_mubi8_val(.t_weight(0), .f_weight(0));
-      end
-      if (forced_part_access_sel[i].write_lock) begin
-        part_access_val[i].write_lock = get_rand_mubi8_val(.t_weight(0), .f_weight(0));
-        part_access_dai_val[i].write_lock = get_rand_mubi8_val(.t_weight(0), .f_weight(0));
-      end
-   end
-
-   force tb.dut.part_access = part_access_val;
-   force tb.dut.part_access_dai = part_access_dai_val;
-  endtask
-
-  task automatic release_part_access_mubi();
-    @(posedge clk_i);
-    release tb.dut.part_access;
-    release tb.dut.part_access_dai;
-  endtask
-
-  // In open source environment, `otp_alert_o` to is tied to 2'b01 (alert_p is 0 and alert_n is 1).
-  if (`PRIM_DEFAULT_IMPL == prim_pkg::ImplGeneric) `ASSERT(OtpAstAlertO_A, otp_alert_o == 2'b01)
-
   // Connectivity assertions for test related I/Os.
   `ASSERT(LcOtpTestStatusO_A, otp_vendor_test_status_o == `PRIM_GENERIC_OTP_PATH.test_status_o)
   `ASSERT(LcOtpTestCtrlI_A, otp_vendor_test_ctrl_i == `PRIM_GENERIC_OTP_PATH.test_ctrl_i)
 
-  `ASSERT(CioTestOWithDftOn_A, lc_dft_en_i == lc_ctrl_pkg::On |->
-                               ##2 cio_test_o == `PRIM_GENERIC_OTP_PATH.test_vect_o)
-  `ASSERT(CioTestOWithDftOff_A, lc_dft_en_i != lc_ctrl_pkg::On |-> ##2 cio_test_o == 0)
-  `ASSERT(CioTestEnOWithDftOn_A, lc_dft_en_i == lc_ctrl_pkg::On |-> ##2 cio_test_en_o == '1)
+  `ASSERT(CioTestOWithDftOn_A,    lc_dft_en_i == lc_ctrl_pkg::On |->
+                                  ##2 cio_test_o == `PRIM_GENERIC_OTP_PATH.test_vect_o)
+  `ASSERT(CioTestOWithDftOff_A,   lc_dft_en_i != lc_ctrl_pkg::On |-> ##2 cio_test_o == 0)
+  `ASSERT(CioTestEnOWithDftOn_A,  lc_dft_en_i == lc_ctrl_pkg::On |-> ##2 cio_test_en_o == '1)
   `ASSERT(CioTestEnOWithDftOff_A, lc_dft_en_i != lc_ctrl_pkg::On |-> ##2 cio_test_en_o == 0)
 
 

@@ -15,17 +15,6 @@ _targets_compatible_with = {
     OPENTITAN_PLATFORM: [OPENTITAN_CPU],
 }
 
-# This constant holds a dictionary of per-device dependencies which are used to
-# generate slightly different binaries for each hardware target, including two
-# simulation platforms (DV and Verilator), and two FPGA platforms (NexysVideo
-# and CW310).
-PER_DEVICE_DEPS = {
-    "sim_verilator": ["//sw/device/lib/arch:sim_verilator"],
-    "sim_dv": ["//sw/device/lib/arch:sim_dv"],
-    "fpga_nexysvideo": ["//sw/device/lib/arch:fpga_nexysvideo"],
-    "fpga_cw310": ["//sw/device/lib/arch:fpga_cw310"],
-}
-
 def _opentitan_transition_impl(settings, attr):
     return {"//command_line_option:platforms": attr.platform}
 
@@ -35,7 +24,7 @@ opentitan_transition = transition(
     outputs = ["//command_line_option:platforms"],
 )
 
-def _obj_transform_impl(ctx):
+def _obj_transform(ctx):
     cc_toolchain = find_cc_toolchain(ctx)
     outputs = []
     for src in ctx.files.srcs:
@@ -55,7 +44,7 @@ def _obj_transform_impl(ctx):
     return [DefaultInfo(files = depset(outputs), data_runfiles = ctx.runfiles(files = outputs))]
 
 obj_transform = rule(
-    implementation = _obj_transform_impl,
+    implementation = _obj_transform,
     cfg = opentitan_transition,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
@@ -70,63 +59,7 @@ obj_transform = rule(
     toolchains = ["@rules_cc//cc:toolchain_type"],
 )
 
-def _sign_bin_impl(ctx):
-    outputs = []
-    signed_image = ctx.actions.declare_file(
-        "{0}.{1}.signed.bin".format(
-            # Remove ".bin" from file basename.
-            ctx.file.bin.basename.replace("." + ctx.file.bin.extension, ""),
-            ctx.attr.key_name,
-        ),
-    )
-    outputs.append(signed_image)
-    ctx.actions.run(
-        outputs = [signed_image],
-        inputs = [
-            ctx.file.bin,
-            ctx.file.elf,
-            ctx.file.key,
-            ctx.file._tool,
-        ],
-        arguments = [
-            "rom_ext",
-            ctx.file.bin.path,
-            ctx.file.key.path,
-            ctx.file.elf.path,
-            signed_image.path,
-        ],
-        executable = ctx.file._tool.path,
-    )
-    return [DefaultInfo(
-        files = depset(outputs),
-        data_runfiles = ctx.runfiles(files = outputs),
-    )]
-
-sign_bin = rule(
-    implementation = _sign_bin_impl,
-    cfg = opentitan_transition,
-    attrs = {
-        "bin": attr.label(allow_single_file = True),
-        "elf": attr.label(allow_single_file = True),
-        "key": attr.label(
-            default = "//sw/device/silicon_creator/mask_rom/keys:test_private_key_0",
-            allow_single_file = True,
-        ),
-        "key_name": attr.string(),
-        # TODO(lowRISC/opentitan:#11199): explore other options to side-step the
-        # need for this transition, in order to build the ROM_EXT signer tool.
-        "platform": attr.string(default = "@local_config_platform//:host"),
-        "_tool": attr.label(
-            default = "//sw/host/rom_ext_image_tools/signer:rom_ext_signer",
-            allow_single_file = True,
-        ),
-        "_allowlist_function_transition": attr.label(
-            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-        ),
-    },
-)
-
-def _elf_to_disassembly_impl(ctx):
+def _elf_to_disassembly(ctx):
     cc_toolchain = find_cc_toolchain(ctx)
     outputs = []
     for src in ctx.files.srcs:
@@ -145,7 +78,7 @@ def _elf_to_disassembly_impl(ctx):
         return [DefaultInfo(files = depset(outputs), data_runfiles = ctx.runfiles(files = outputs))]
 
 elf_to_disassembly = rule(
-    implementation = _elf_to_disassembly_impl,
+    implementation = _elf_to_disassembly,
     cfg = opentitan_transition,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
@@ -159,15 +92,10 @@ elf_to_disassembly = rule(
     incompatible_use_toolchain_transition = True,
 )
 
-def _elf_to_scrambled_rom_impl(ctx):
+def _elf_to_scrambled(ctx):
     outputs = []
     for src in ctx.files.srcs:
-        scrambled = ctx.actions.declare_file(
-            "{}.scr.39.vmem".format(
-                # Remove ".elf" from file basename.
-                src.basename.replace("." + src.extension, ""),
-            ),
-        )
+        scrambled = ctx.actions.declare_file("{}.scr.40.vmem".format(src.basename))
         outputs.append(scrambled)
         ctx.actions.run(
             outputs = [scrambled],
@@ -185,166 +113,14 @@ def _elf_to_scrambled_rom_impl(ctx):
         )
         return [DefaultInfo(files = depset(outputs), data_runfiles = ctx.runfiles(files = outputs))]
 
-elf_to_scrambled_rom_vmem = rule(
-    implementation = _elf_to_scrambled_rom_impl,
+elf_to_scrambled = rule(
+    implementation = _elf_to_scrambled,
     cfg = opentitan_transition,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "platform": attr.string(default = OPENTITAN_PLATFORM),
-        "_tool": attr.label(
-            default = "//hw/ip/rom_ctrl/util:scramble_image.py",
-            allow_files = True,
-        ),
-        "_config": attr.label(
-            default = "//hw/top_earlgrey/data:autogen/top_earlgrey.gen.hjson",
-            allow_files = True,
-        ),
-        "_allowlist_function_transition": attr.label(
-            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-        ),
-    },
-)
-
-def _bin_to_flash_vmem_impl(ctx):
-    outputs = []
-    vmem = ctx.actions.declare_file("{}.{}.vmem".format(
-        # Remove ".bin" from file basename.
-        ctx.file.bin.basename.replace("." + ctx.file.bin.extension, ""),
-        ctx.attr.word_size,
-    ))
-    outputs.append(vmem)
-    ctx.actions.run(
-        outputs = [vmem],
-        inputs = [
-            ctx.file.bin,
-        ],
-        arguments = [
-            ctx.file.bin.path,
-            "--binary",
-            # Reverse the endianness of every word.
-            "--offset",
-            "0x0",
-            "--byte-swap",
-            str(ctx.attr.word_size // 8),
-            # Pad to word alignment.
-            "--fill",
-            "0xff",
-            "-within",
-            ctx.file.bin.path,
-            "-binary",
-            "-range-pad",
-            str(ctx.attr.word_size // 8),
-            # Output a VMEM file with specified word size
-            "--output",
-            vmem.path,
-            "--vmem",
-            str(ctx.attr.word_size),
-        ],
-        # This this executable is expected to be installed (as required by the
-        # srecord package in apt-requirements.txt).
-        executable = "srec_cat",
-    )
-    return [DefaultInfo(
-        files = depset(outputs),
-        data_runfiles = ctx.runfiles(files = outputs),
-    )]
-
-bin_to_flash_vmem = rule(
-    implementation = _bin_to_flash_vmem_impl,
-    cfg = opentitan_transition,
-    attrs = {
-        "bin": attr.label(allow_single_file = True),
-        "platform": attr.string(default = OPENTITAN_PLATFORM),
-        "word_size": attr.int(
-            default = 64,
-            doc = "Word size of VMEM file.",
-            mandatory = True,
-            values = [32, 64],
-        ),
-        "_allowlist_function_transition": attr.label(
-            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-        ),
-    },
-)
-
-def _scramble_flash_vmem_impl(ctx):
-    outputs = []
-    scrambled_vmem = ctx.actions.declare_file("{}.scr.vmem".format(
-        # Remove ".vmem" from file basename.
-        ctx.file.vmem.basename.replace("." + ctx.file.vmem.extension, ""),
-    ))
-    outputs.append(scrambled_vmem)
-    ctx.actions.run(
-        outputs = [scrambled_vmem],
-        inputs = [
-            ctx.file.vmem,
-            ctx.file._tool,
-        ],
-        arguments = [
-            ctx.file.vmem.path,
-            scrambled_vmem.path,
-        ],
-        executable = ctx.file._tool.path,
-    )
-    return [DefaultInfo(
-        files = depset(outputs),
-        data_runfiles = ctx.runfiles(files = outputs),
-    )]
-
-scramble_flash_vmem = rule(
-    implementation = _scramble_flash_vmem_impl,
-    cfg = opentitan_transition,
-    attrs = {
-        "vmem": attr.label(allow_single_file = True),
-        "platform": attr.string(default = OPENTITAN_PLATFORM),
-        "_tool": attr.label(
-            default = "//util/design:gen-flash-img.py",
-            allow_single_file = True,
-        ),
-        "_allowlist_function_transition": attr.label(
-            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-        ),
-    },
-)
-
-def _bin_to_spiflash_frames_impl(ctx):
-    outputs = []
-    frames_bin = ctx.actions.declare_file("{}.frames.bin".format(
-        # Remove ".bin" from file basename.
-        ctx.file.bin.basename.replace("." + ctx.file.bin.extension, ""),
-    ))
-    outputs.append(frames_bin)
-    ctx.actions.run(
-        outputs = [frames_bin],
-        inputs = [
-            ctx.file.bin,
-            ctx.file._tool,
-        ],
-        arguments = [
-            "--input",
-            ctx.file.bin.path,
-            "--dump-frames",
-            frames_bin.path,
-        ],
-        executable = ctx.file._tool.path,
-    )
-    return [DefaultInfo(
-        files = depset(outputs),
-        data_runfiles = ctx.runfiles(files = outputs),
-    )]
-
-bin_to_spiflash_frames = rule(
-    implementation = _bin_to_spiflash_frames_impl,
-    cfg = opentitan_transition,
-    attrs = {
-        "bin": attr.label(allow_single_file = True),
-        # TODO(lowRISC/opentitan:#11199): explore other options to side-step the
-        # need for this transition, in order to build the spiflash tool.
-        "platform": attr.string(default = "@local_config_platform//:host"),
-        "_tool": attr.label(
-            default = "//sw/host/spiflash",
-            allow_single_file = True,
-        ),
+        "_tool": attr.label(default = "//hw/ip/rom_ctrl/util:scramble_image.py", allow_files = True),
+        "_config": attr.label(default = "//hw/top_earlgrey/data:autogen/top_earlgrey.gen.hjson", allow_files = True),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
@@ -354,28 +130,39 @@ bin_to_spiflash_frames = rule(
 def opentitan_binary(
         name,
         platform = OPENTITAN_PLATFORM,
+        per_device_deps = {
+            "verilator": ["//sw/device/lib/arch:sim_verilator"],
+            "dv": ["//sw/device/lib/arch:sim_dv"],
+            "fpga_nexysvideo": ["//sw/device/lib/arch:fpga_nexysvideo"],
+            "cw310": ["//sw/device/lib/arch:fpga_cw310"],
+        },
         output_bin = True,
         output_disassembly = True,
+        output_scrambled = False,
         **kwargs):
     """A helper macro for generating OpenTitan binary artifacts.
-
     This macro is mostly a wrapper around cc_binary, but creates artifacts
-    compatible with OpenTitan binaries. The actual artifacts created are an ELF
-    file, a BIN file, and the disassembly. Each of these output targets performs
-    a bazel transition to the RV32I toolchain to build the target under the
-    correct compiler.
+    for each of the keys in `per_device_deps`.  The actual artifacts
+    created are an ELF file, a BIN file, the disassembly and the scrambled
+    ROM image.  Each of these output targets performs a bazel transition to
+    the RV32I toolchain to build the target under the correct compiler.
     Args:
       @param name: The name of this rule.
       @param platform: The target platform for the artifacts.
+      @param per_device_deps: The deps for each of the execution environments.
       @param output_bin: Whether or not to emit a BIN file.
       @param output_disassembly: Whether or not to emit a disassembly file.
+      @param output_scrambled: Whether or not to emit a SCR file.
       @param **kwargs: Arguments to forward to `cc_binary`.
     Emits rules:
-      cc_binary             named: <name>
-      optionally:
-        obj_transform       named: <name>_bin
-        elf_to_dissassembly named: <name>_dis
-      filegroup             named: <name>
+      For each device in per_device_deps entry:
+        cc_binary     named: name_device
+        obj_transform named: name_device_elf
+        optionally:
+          obj_transform       named: name_device_bin
+          elf_to_dissassembly named: name_device_dis
+          elf_to_scrambled    named: name_device_scr
+      filegroup named: name
           with all the generated rules
     """
 
@@ -389,237 +176,45 @@ def opentitan_binary(
     ]
     deps = kwargs.pop("deps", [])
     targets = []
-
-    # Generate ELF
-    native.cc_binary(
-        name = name,
-        deps = deps,
-        target_compatible_with = _targets_compatible_with[platform],
-        copts = copts,
-        linkopts = linkopts,
-        **kwargs
-    )
-    elf_name = "{}_{}".format(name, "elf")
-    targets.append(":" + elf_name)
-    obj_transform(
-        name = elf_name,
-        srcs = [name],
-        format = "elf32-little",
-        suffix = "elf",
-        platform = platform,
-    )
-
-    # Generate Binary
-    if output_bin:
-        bin_name = "{}_{}".format(name, "bin")
-        targets.append(":" + bin_name)
+    for (device, dev_deps) in per_device_deps.items():
+        devname = "{}_{}".format(name, device)
+        native.cc_binary(
+            name = devname,
+            deps = deps + dev_deps,
+            target_compatible_with = _targets_compatible_with[platform],
+            copts = copts,
+            linkopts = linkopts,
+            **kwargs
+        )
+        targets.append(":" + devname + "_elf")
         obj_transform(
-            name = bin_name,
-            srcs = [name],
+            name = devname + "_elf",
+            srcs = [devname],
+            format = "elf32-little",
+            suffix = "elf",
             platform = platform,
         )
 
-    # Generate Disassembly
-    if output_disassembly:
-        dis_name = "{}_{}".format(name, "dis")
-        targets.append(":" + dis_name)
-        elf_to_disassembly(
-            name = dis_name,
-            srcs = [name],
-            platform = platform,
-        )
-
-    native.filegroup(
-        name = name + "_base_bins",
-        srcs = targets,
-    )
-
-    return targets
-
-def opentitan_rom_binary(
-        name,
-        platform = OPENTITAN_PLATFORM,
-        per_device_deps = PER_DEVICE_DEPS,
-        **kwargs):
-    """A helper macro for generating OpenTitan binary artifacts for ROM.
-
-    This macro is mostly a wrapper around a opentitan_binary macro, which itself
-    is a wrapper around cc_binary, but also creates artifacts for each of the
-    keys in `per_device_deps`. The actual artifacts created are an ELF file, a
-    BIN file, the disassembly, and the scrambled (ROM) VMEM file. Each of these
-    output targets performs a bazel transition to the RV32I toolchain to build
-    the target under the correct compiler.
-    Args:
-      @param name: The name of this rule.
-      @param platform: The target platform for the artifacts.
-      @param per_device_deps: The deps for each of the hardware target.
-      @param **kwargs: Arguments to forward to `opentitan_binary`.
-    Emits rules:
-      For each device in per_device_deps entry:
-        cc_binary                 named: <name>_<device>
-        obj_transform             named: <name>_<device>_elf
-        obj_transform             named: <name>_<device>_bin
-        elf_to_dissassembly       named: <name>_<device>_dis
-        elf_to_scrambled_rom_vmem named: <name>_<device>_scr_vmem
-      filegroup named: <name>
-          with all the generated rules
-    """
-
-    deps = kwargs.pop("deps", [])
-    targets = []
-    for (device, dev_deps) in per_device_deps.items():
-        devname = "{}_{}".format(name, device)
-
-        # Generate ELF, Binary, and Disassembly
-        targets.extend(opentitan_binary(
-            name = devname,
-            deps = deps + dev_deps,
-            **kwargs
-        ))
-        elf_name = "{}_{}".format(devname, "elf")
-
-        # Generate Scrambled ROM VMEM
-        scr_vmem_name = "{}_scr_vmem".format(devname)
-        targets.append(":" + scr_vmem_name)
-        elf_to_scrambled_rom_vmem(
-            name = scr_vmem_name,
-            srcs = [elf_name],
-            platform = platform,
-        )
-
-    native.filegroup(
-        name = name,
-        srcs = targets,
-    )
-
-def opentitan_flash_binary(
-        name,
-        platform = OPENTITAN_PLATFORM,
-        signing_keys = {
-            "test_key_0": "//sw/device/silicon_creator/mask_rom/keys:test_private_key_0",
-        },
-        per_device_deps = PER_DEVICE_DEPS,
-        output_signed = False,
-        **kwargs):
-    """A helper macro for generating OpenTitan binary artifacts for flash.
-
-    This macro is mostly a wrapper around a opentitan_binary macro, which itself
-    is a wrapper around cc_binary, but also creates artifacts for each of the
-    keys in `per_device_deps`, and if signing is enabled, each of the keys in
-    `signing_keys`. The actual artifacts created are an ELF file, a (signed and)
-    unsigned BIN file, a (signed and) unsigned flash VMEM file, and a (signed
-    and) unsigned scrambled flash VMEM file. Some of these output targets
-    perform a bazel transition to the RV32I toolchain to build the target under
-    the correct compiler.
-    Args:
-      @param name: The name of this rule.
-      @param platform: The target platform for the artifacts.
-      @param signing_keys: The signing keys for to sign each BIN file with.
-      @param per_device_deps: The deps for each of the hardware target.
-      @param output_signed: Whether or not to emit signed binary/VMEM files.
-      @param **kwargs: Arguments to forward to `opentitan_binary`.
-    Emits rules:
-      For each device in per_device_deps entry:
-        cc_binary              named: <name>_<device>
-        obj_transform          named: <name>_<device>_elf
-        obj_transform          named: <name>_<device>_bin
-        elf_to_dissassembly    named: <name>_<device>_dis
-        bin_to_flash_vmem      named: <name>_<device>_flash_vmem
-        scrambled_flash_vmem   named: <name>_<device>_scr_flash_vmem
-        optionally:
-          sign_bin             named: <name>_<device>_bin_signed_<key_name>
-          bin_to_flash_vmem    named: <name>_<device>_flash_vmem_signed_<key_name>
-          scrambled_flash_vmem named: <name>_<device>_scr_flash_vmem_signed_<key_name>
-      filegroup named: <name>
-          with all the generated rules
-    """
-
-    deps = kwargs.pop("deps", [])
-    targets = []
-    for (device, dev_deps) in per_device_deps.items():
-        devname = "{}_{}".format(name, device)
-
-        # Generate ELF, Binary, and Disassembly
-        targets.extend(opentitan_binary(
-            name = devname,
-            deps = deps + dev_deps,
-            **kwargs
-        ))
-        elf_name = "{}_{}".format(devname, "elf")
-        bin_name = "{}_{}".format(devname, "bin")
-
-        # Generate SPI flash frames binary for bootstrap in DV sim.
-        if device == "sim_dv":
-            frames_bin_name = "{}_frames_bin".format(devname)
-            targets.append(":" + frames_bin_name)
-            bin_to_spiflash_frames(
-                name = frames_bin_name,
-                bin = bin_name,
-            )
-            frames_vmem_name = "{}_frames_vmem".format(devname)
-            targets.append(":" + frames_vmem_name)
-            bin_to_flash_vmem(
-                name = frames_vmem_name,
-                bin = frames_bin_name,
+        if output_bin:
+            targets.append(":" + devname + "_bin")
+            obj_transform(
+                name = devname + "_bin",
+                srcs = [devname],
                 platform = platform,
-                word_size = 32,  # Bootstrap VMEM image uses 32-bit words
             )
 
-        # Sign BIN (if required) and generate scrambled VMEM images.
-        if output_signed:
-            for (key_name, key) in signing_keys.items():
-                # Sign the Binary.
-                signed_bin_name = "{}_bin_signed_{}".format(devname, key_name)
-                targets.append(":" + signed_bin_name)
-                sign_bin(
-                    name = signed_bin_name,
-                    bin = bin_name,
-                    elf = elf_name,
-                    key = key,
-                    key_name = key_name,
-                )
-
-                # Generate a VMEM64 from the signed binary.
-                signed_vmem_name = "{}_vmem64_signed_{}".format(
-                    devname,
-                    key_name,
-                )
-                targets.append(":" + signed_vmem_name)
-                bin_to_flash_vmem(
-                    name = signed_vmem_name,
-                    bin = signed_bin_name,
-                    platform = platform,
-                    word_size = 64,  # Backdoor-load VMEM image uses 64-bit words
-                )
-
-                # Scramble signed VMEM64.
-                scr_signed_vmem_name = "{}_scr_vmem64_signed_{}".format(
-                    devname,
-                    key_name,
-                )
-                targets.append(":" + scr_signed_vmem_name)
-                scramble_flash_vmem(
-                    name = scr_signed_vmem_name,
-                    vmem = signed_vmem_name,
-                    platform = platform,
-                )
-        else:
-            # Generate a VMEM64 from the binary.
-            vmem_name = "{}_vmem64".format(devname)
-            targets.append(":" + vmem_name)
-            bin_to_flash_vmem(
-                name = vmem_name,
-                bin = bin_name,
+        if output_disassembly:
+            targets.append(":" + devname + "_dis")
+            elf_to_disassembly(
+                name = devname + "_dis",
+                srcs = [devname],
                 platform = platform,
-                word_size = 64,  # Backdoor-load VMEM image uses 64-bit words
             )
-
-            # Scramble VMEM64.
-            scr_vmem_name = "{}_scr_vmem64".format(devname)
-            targets.append(":" + scr_vmem_name)
-            scramble_flash_vmem(
-                name = scr_vmem_name,
-                vmem = vmem_name,
+        if output_scrambled:
+            targets.append(":" + devname + "_scr")
+            elf_to_scrambled(
+                name = devname + "_scr",
+                srcs = [devname],
                 platform = platform,
             )
 
@@ -629,12 +224,12 @@ def opentitan_flash_binary(
     )
 
 def verilator_params(
-        rom = "//sw/device/lib/testing/test_rom:test_rom_sim_verilator_scr_vmem",
+        rom = "//sw/device/lib/testing/test_rom:test_rom_verilator_scr",
         otp = "//hw/ip/otp_ctrl/data:rma_image_verilator",
         tags = [
             "cpu:4",
         ],
-        timeout = "moderate",  # 5 minutes
+        timeout = "moderate",
         local = True,
         args = [
             "console",
@@ -644,34 +239,26 @@ def verilator_params(
         ],
         data = [],
         **kwargs):
-    """A macro to create Verilator sim parameters for OpenTitan functional tests.
+    """A macro to create verilator parameters for OpenTitan functional tests.
 
     This macro emits a dictionary of parameters which are pasted into the
-    Verilator specific test rule.
+    verilator specific test rule.
 
     Args:
-        @param rom: The ROM to use when running a Verilator simulation.
-        @param otp: The OTP image to use when running a Verilator simulation.
+        @param rom: The ROM to use when booting verilator.
+        @param otp: The OTP image to use when booting verilator.
         @param tags: The test tags to apply to the test rule.
         @param timeout: The timeout to apply to the test rule.
         @param local: Whether the test should be run locally and without sandboxing.
-        @param args: Extra arguments to pass to `opentitantool`.
+        @param args: Arguments to pass to the test.
         @param data: Data dependencies of the test.
     """
-    kwargs.update(
-        rom = rom,
-        otp = otp,
-        tags = tags + ["verilator"],
-        timeout = timeout,
-        local = local,
-        args = args,
-        data = data,
-    )
+    kwargs.update(rom = rom, otp = otp, tags = tags + ["verilator"], timeout = timeout, local = local, args = args, data = data)
     return kwargs
 
 def cw310_params(
         tags = [],
-        timeout = "moderate",  # 5 minutes
+        timeout = "moderate",
         local = True,
         args = [
             "--exec=\"console -q -t0\"",
@@ -692,16 +279,10 @@ def cw310_params(
         @param tags: The test tags to apply to the test rule.
         @param timeout: The timeout to apply to the test rule.
         @param local: Whether the test should be run locally and without sandboxing.
-        @param args: Extra arguments to pass to `opentitantool`.
+        @param args: Arguments to pass to the test.
         @param data: Data dependencies of the test.
     """
-    kwargs.update(
-        tags = tags + ["cw310", "exclusive"],
-        timeout = timeout,
-        local = local,
-        args = args,
-        data = data,
-    )
+    kwargs.update(tags = tags + ["cw310", "exclusive"], timeout = timeout, local = local, args = args, data = data)
     return kwargs
 
 def _format_list(name, list1, datadict, **kwargs):
@@ -721,9 +302,7 @@ def _format_list(name, list1, datadict, **kwargs):
 
 _OTTF_DEPS = [
     "//sw/device/lib/arch:device",
-    "//sw/device/lib/base:macros",
-    "//sw/device/lib/base:csr",
-    "//sw/device/lib/base:mmio",
+    "//sw/device/lib/base",
     "//sw/device/lib/runtime:hart",
     "//sw/device/lib/runtime:log",
     "//sw/device/lib/runtime:print",
@@ -742,55 +321,41 @@ def _unique_deps(*deplists):
 
 def opentitan_functest(
         name,
+        platform = OPENTITAN_PLATFORM,
         targets = ["verilator", "cw310"],
         args = [],
         data = [],
         ottf = _OTTF_DEPS,
-        test_in_rom = False,
-        signed = False,
-        key = "test_key_0",
         verilator = None,
         cw310 = None,
         **kwargs):
     """A helper macro for generating OpenTitan functional tests.
-
-    This macro is mostly a wrapper around opentitan_flash_binary, but creates
-    testing artifacts for each of the hardware targets in `targets`. The testing
-    artifacts are then given to an `sh_test` rule which dispatches the test to
-    the corresponding hardware target via opentitantool.
+    This macro is mostly a wrapper around opentitan_binary, but creates
+    testing artifacts for each of the keys in `per_device_deps`.
+    The testing artifacts are then given to an `sh_test` rule which
+    dispatches the test via opentitantool.
     Args:
       @param name: The name of this rule.
-      @param targets: A list of hardware targets on which to dispatch tests.
+      @param platform: The target platform for the artifacts.
+      @param targets: A list of targets on which to dispatch tests.
       @param args: Extra arguments to pass to `opentitantool`.
       @param data: Extra data dependencies needed while executing the test.
-      @param ottf: Default dependencies for OTTF tests. Set to empty list if
+      @param ottf: Default dependencies for OTTF tests.  Set to empty list if
                    your test doesn't use the OTTF.
-      @param test_in_rom: Whether to run the test from ROM, Runs from flash by
-                          default.
-      @param signed: Whether to sign the test image. Unsigned by default.
-      @param key: Which signed test image (by key) to use.
-      @param verilator: Verilator test parameters.
-      @param cw310: CW310 test parameters.
-      @param **kwargs: Arguments to forward to `opentitan_flash_binary`.
+      @param **kwargs: Arguments to forward to `opentitan_binary`.
 
     This macro emits the following rules:
-        opentitan_flash_binary named: {name}_prog (and all emitted rules).
-        sh_test                named: verilator_{name}
-        sh_test                named: cw310_{name}
-        test_suite             named: {name}
+        opentitan_binary named: {name}_prog (and all of its emitted rules).
+        sh_test named:          verilator_{name}
+        sh_test named:          cw310_{name}
+        test_suite named:       {name}
     """
 
-    # Generate flash artifacts for test.
     deps = _unique_deps(kwargs.pop("deps", []), ottf)
-    if test_in_rom:
-        opentitan_rom_binary(
-            name = name + "_rom_prog",
-            deps = deps,
-            **kwargs
-        )
-    opentitan_flash_binary(
+    opentitan_binary(
         name = name + "_prog",
-        output_signed = signed,
+        platform = platform,
+        output_disassembly = True,
         deps = deps,
         **kwargs
     )
@@ -798,28 +363,12 @@ def opentitan_functest(
     all_tests = []
 
     if "verilator" in targets:
-        # Set default Verilator sim parameters if none are provided.
+        test_name = "verilator_{}".format(name)
+        test_bin = "{}_prog_verilator_elf".format(name)
+
         if verilator == None:
             verilator = verilator_params()
-
-        test_name = "verilator_{}".format(name)
-
-        # If the test is unsigned, the Verilator sim can backdoor load flash
-        # with the ELF.
-        test_bin = "{}_prog_sim_verilator_elf".format(name)
-
-        # If the test is signed, the Verilator sim must backdoor load flash with
-        # the scrambled VMEM, since only the BIN can be signed by the ROM_EXT
-        # signer tool, and this is converted to a scrambled (64-bit) VMEM.
-        if signed:
-            test_bin = "{}_prog_sim_verilator_scr_vmem64_signed_{}".format(
-                name,
-                key,
-            )
-
         rom = verilator.pop("rom")
-        if test_in_rom:
-            rom = name + "_rom_prog_sim_verilator_scr_vmem"
         otp = verilator.pop("otp")
         vargs = _format_list("args", args, verilator, test_bin = test_bin)
         vdata = _format_list("data", data, verilator, test_bin = test_bin)
@@ -851,23 +400,15 @@ def opentitan_functest(
         )
 
     if "cw310" in targets:
-        # Set default CW310 FPGA parameters if none are provided.
+        test_name = "cw310_{}".format(name)
+        test_bin = "{}_prog_cw310_bin".format(name)
+
         if cw310 == None:
             cw310 = cw310_params()
-
-        if test_in_rom:
-            fail("test_in_rom only valid on simulation targets.")
-
-        test_name = "cw310_{}".format(name)
-
-        test_bin = "{}_prog_fpga_cw310_bin".format(name)
-        if signed:
-            test_bin = "{}_prog_fpga_cw310_bin_signed_{}".format(name, key)
-
         cargs = _format_list("args", args, cw310, test_bin = test_bin)
         cdata = _format_list("data", data, cw310, test_bin = test_bin)
 
-        if "manual" not in cw310.get("tags", []):
+        if "manual" not in verilator.get("tags", []):
             all_tests.append(test_name)
 
         native.sh_test(

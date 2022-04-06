@@ -385,68 +385,49 @@ def get_results(args):
             "flow_warnings": [],
             "analyze_errors": [],
             "analyze_warnings": [],
-            # Depending on the termination stage,
-            # these message lists do not exist.
-            "elab_errors": None,
-            "elab_warnings": None,
-            "compile_errors": None,
-            "compile_warnings": None,
+            "elab_errors": [],
+            "elab_warnings": [],
+            "compile_errors": [],
+            "compile_warnings": [],
         },
+        "timing": {
+            # field for each timing group with tns, wns
+            # and the period if this is a clock
+        },
+        "area": {
+            # gate equivalent of a NAND2 gate
+            "ge": float("nan"),
+            # hierchical report with "comb", "buf", "reg", "macro", "total"
+            "instances": {},
+        },
+        "power": {
+            "net": float("nan"),
+            "int": float("nan"),
+            "leak": float("nan"),
+        },
+        "units": {
+            "voltage": float("nan"),
+            "capacitance": float("nan"),
+            "time": float("nan"),
+            "dynamic": float("nan"),
+            "static": float("nan"),
+        }
     }
 
     results["top"] = args.dut
 
     args.expand_modules = args.expand_modules.strip().split(',')
 
-    # Check whether the termination stage is known and define the
-    # associated reports to be parsed.
-    if args.termination_stage not in ["analyze", "elab", "compile", "reports"]:
-        results['messages']['flow_errors'].append(
-            'Unknown termination stage {}'.format(args.termination_stage))
-
-    # We always run analysis, and we always look at the synthesis log.
     rep_types = [(args.log_path, 'synthesis.log', 'flow', _extract_messages),
-                 (args.rep_path, 'analyze.rpt', 'analyze', _extract_messages)]
-
-    if args.termination_stage in ["elab", "compile", "reports"]:
-        rep_types += [(args.rep_path, 'elab.rpt', 'elab', _extract_messages)]
-        results["messages"]["elab_errors"] = []
-        results["messages"]["elab_warnings"] = []
-    if args.termination_stage in ["compile", "reports"]:
-        rep_types += [(args.rep_path, 'compile.rpt', 'compile', _extract_messages)]
-        results["messages"]["compile_errors"] = []
-        results["messages"]["compile_warnings"] = []
-    if args.termination_stage in ["reports"]:
-        rep_types += [(args.rep_path, 'gate_equiv.rpt', 'area', _extract_gate_eq),
-                      (args.rep_path, 'area.rpt', 'area', _extract_area),
-                      (args.rep_path, 'clocks.rpt', 'timing', _extract_clocks),
-                      (args.rep_path, 'timing.rpt', 'timing', _extract_timing),
-                      (args.rep_path, 'power.rpt', 'power', _extract_power),
-                      (args.rep_path, 'power.rpt', 'units', _extract_units)]
-        results.update({
-            "timing": {
-                # field for each timing group with tns, wns
-                # and the period if this is a clock
-            },
-            "area": {
-                # gate equivalent of a NAND2 gate
-                "ge": float("nan"),
-                # hierchical report with "comb", "buf", "reg", "macro", "total"
-                "instances": {},
-            },
-            "power": {
-                "net": float("nan"),
-                "int": float("nan"),
-                "leak": float("nan"),
-            },
-            "units": {
-                "voltage": float("nan"),
-                "capacitance": float("nan"),
-                "time": float("nan"),
-                "dynamic": float("nan"),
-                "static": float("nan"),
-            }
-        })
+                 (args.rep_path, 'analyze.rpt', 'analyze', _extract_messages),
+                 (args.rep_path, 'elab.rpt', 'elab', _extract_messages),
+                 (args.rep_path, 'compile.rpt', 'compile', _extract_messages),
+                 (args.rep_path, 'gate_equiv.rpt', 'area', _extract_gate_eq),
+                 (args.rep_path, 'area.rpt', 'area', _extract_area),
+                 (args.rep_path, 'clocks.rpt', 'timing', _extract_clocks),
+                 (args.rep_path, 'timing.rpt', 'timing', _extract_timing),
+                 (args.rep_path, 'power.rpt', 'power', _extract_power),
+                 (args.rep_path, 'power.rpt', 'units', _extract_units)]
 
     for path, name, key, handler in rep_types:
         _parse_file(path, name, results, handler, key, args)
@@ -576,12 +557,6 @@ def main():
         default="",
         help="""Comma separated list of modules to expand in area report""")
 
-    parser.add_argument(
-        '--termination-stage',
-        type=str,
-        default="",
-        help="""Can be either 'analyze', 'elab', 'compile' or 'reports'""")
-
     args = parser.parse_args()
     results = get_results(args)
 
@@ -593,16 +568,12 @@ def main():
                    for_json=True,
                    use_decimal=True)
 
-    # helper function
-    def _getlen(x):
-        return len(x) if x is not None else 0
-
     # return nonzero status if any warnings or errors are present
     # lint infos do not count as failures
-    nr_errors = (_getlen(results["messages"]["flow_errors"]) +
-                 _getlen(results["messages"]["analyze_errors"]) +
-                 _getlen(results["messages"]["elab_errors"]) +
-                 _getlen(results["messages"]["compile_errors"]))
+    nr_errors = (len(results["messages"]["flow_errors"]) +
+                 len(results["messages"]["analyze_errors"]) +
+                 len(results["messages"]["elab_errors"]) +
+                 len(results["messages"]["compile_errors"]))
 
     print("""------------- Summary -------------
 Flow Warnings:      %s
@@ -614,14 +585,14 @@ Elab Errors:        %s
 Compile Warnings:   %s
 Compile Errors:     %s
 -----------------------------------""" %
-          (_getlen(results["messages"]["flow_warnings"]),
-           _getlen(results["messages"]["flow_errors"]),
-           _getlen(results["messages"]["analyze_warnings"]),
-           _getlen(results["messages"]["analyze_errors"]),
-           _getlen(results["messages"]["elab_warnings"]),
-           _getlen(results["messages"]["elab_errors"]),
-           _getlen(results["messages"]["compile_warnings"]),
-           _getlen(results["messages"]["compile_errors"])))
+          (len(results["messages"]["flow_warnings"]),
+           len(results["messages"]["flow_errors"]),
+           len(results["messages"]["analyze_warnings"]),
+           len(results["messages"]["analyze_errors"]),
+           len(results["messages"]["elab_warnings"]),
+           len(results["messages"]["elab_errors"]),
+           len(results["messages"]["compile_warnings"]),
+           len(results["messages"]["compile_errors"])))
 
     if nr_errors > 0:
         print("Synthesis not successful.")

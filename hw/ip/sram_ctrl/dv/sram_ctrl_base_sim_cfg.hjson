@@ -34,14 +34,13 @@
                 "{proj_root}/hw/dv/tools/dvsim/tests/alert_test.hjson",
                 "{proj_root}/hw/dv/tools/dvsim/tests/tl_access_tests.hjson"
                 "{proj_root}/hw/dv/tools/dvsim/tests/passthru_mem_intg_tests.hjson"
-                "{proj_root}/hw/dv/tools/dvsim/tests/sec_cm_tests.hjson",
                 "{proj_root}/hw/dv/tools/dvsim/tests/stress_tests.hjson"
                 ]
 
   en_build_modes: ["{tool}_memutil_dpi_scrambled_build_opts"]
 
   // Add additional tops for simulation.
-  sim_tops: ["sram_ctrl_bind", "sram_ctrl_cov_bind", "sec_cm_prim_count_bind"]
+  sim_tops: ["sram_ctrl_bind"]
 
   // Default iterations for all tests - each test entry can override this.
   reseed: 50
@@ -80,59 +79,59 @@
   // List of test specifications.
   tests: [
     {
-      name: "{name}_smoke"
+      name: "{variant}_smoke"
       uvm_test_seq: sram_ctrl_smoke_vseq
     }
     {
-      name: "{name}_multiple_keys"
+      name: "{variant}_multiple_keys"
       uvm_test_seq: sram_ctrl_multiple_keys_vseq
     }
     {
-      name: "{name}_bijection"
+      name: "{variant}_bijection"
       uvm_test_seq: sram_ctrl_bijection_vseq
       run_opts: ["+test_timeout_ns=1000000000"]
     }
     {
-      name: "{name}_stress_pipeline"
+      name: "{variant}_stress_pipeline"
       uvm_test_seq: sram_ctrl_stress_pipeline_vseq
       run_opts: ["+zero_delays=1"]
     }
     {
-      name: "{name}_partial_access"
+      name: "{variant}_partial_access"
       uvm_test_seq: sram_ctrl_smoke_vseq
       run_opts: ["+partial_access_pct=90"]
     }
     {
-      name: "{name}_partial_access_b2b"
+      name: "{variant}_partial_access_b2b"
       uvm_test_seq: sram_ctrl_stress_pipeline_vseq
       run_opts: ["+partial_access_pct=90"]
     }
     {
-      name: "{name}_max_throughput"
+      name: "{variant}_max_throughput"
       uvm_test_seq: sram_ctrl_throughput_vseq
       run_opts: ["+zero_delays=1 +partial_access_pct=0"]
     }
     {
-      name: "{name}_throughput_w_partial_write"
+      name: "{variant}_throughput_w_partial_write"
       uvm_test_seq: sram_ctrl_throughput_vseq
       run_opts: ["+zero_delays=1 +partial_access_pct=20"]
     }
     {
-      name: "{name}_lc_escalation"
+      name: "{variant}_lc_escalation"
       uvm_test_seq: sram_ctrl_lc_escalation_vseq
     }
     {
-      name: "{name}_access_during_key_req"
+      name: "{variant}_access_during_key_req"
       uvm_test_seq: sram_ctrl_access_during_key_req_vseq
       // Need to make sure no sram access when we just request new key or init, so use zero_delays
       run_opts: ["+zero_delays=1"]
     }
     {
-      name: "{name}_executable"
+      name: "{variant}_executable"
       uvm_test_seq: sram_ctrl_executable_vseq
     }
     {
-      name: "{name}_regwen"
+      name: "{variant}_regwen"
       uvm_test_seq: sram_ctrl_regwen_vseq
     }
     // Below 2 tests are same as the tests in dvsim/tests/mem_tests.hjson

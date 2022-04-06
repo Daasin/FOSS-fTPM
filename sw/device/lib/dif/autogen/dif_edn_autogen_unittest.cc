@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "edn_regs.h"  // Generated.
 
@@ -29,34 +28,34 @@ class EdnTest : public Test, public MmioTest {
 class InitTest : public EdnTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_edn_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_edn_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_edn_init(dev().region(), &edn_));
+  EXPECT_EQ(dif_edn_init(dev().region(), &edn_), kDifOk);
 }
 
 class AlertForceTest : public EdnTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_edn_alert_force(nullptr, kDifEdnAlertRecovAlert));
+  EXPECT_EQ(dif_edn_alert_force(nullptr, kDifEdnAlertRecovAlert), kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(
-      dif_edn_alert_force(nullptr, static_cast<dif_edn_alert_t>(32)));
+  EXPECT_EQ(dif_edn_alert_force(nullptr, static_cast<dif_edn_alert_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(EDN_ALERT_TEST_REG_OFFSET,
                  {{EDN_ALERT_TEST_RECOV_ALERT_BIT, true}});
-  EXPECT_DIF_OK(dif_edn_alert_force(&edn_, kDifEdnAlertRecovAlert));
+  EXPECT_EQ(dif_edn_alert_force(&edn_, kDifEdnAlertRecovAlert), kDifOk);
 
   // Force last alert.
   EXPECT_WRITE32(EDN_ALERT_TEST_REG_OFFSET,
                  {{EDN_ALERT_TEST_FATAL_ALERT_BIT, true}});
-  EXPECT_DIF_OK(dif_edn_alert_force(&edn_, kDifEdnAlertFatalAlert));
+  EXPECT_EQ(dif_edn_alert_force(&edn_, kDifEdnAlertFatalAlert), kDifOk);
 }
 
 class IrqGetStateTest : public EdnTest {};
@@ -64,11 +63,11 @@ class IrqGetStateTest : public EdnTest {};
 TEST_F(IrqGetStateTest, NullArgs) {
   dif_edn_irq_state_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_edn_irq_get_state(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_get_state(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_edn_irq_get_state(&edn_, nullptr));
+  EXPECT_EQ(dif_edn_irq_get_state(&edn_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_edn_irq_get_state(nullptr, nullptr));
+  EXPECT_EQ(dif_edn_irq_get_state(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqGetStateTest, SuccessAllRaised) {
@@ -76,7 +75,7 @@ TEST_F(IrqGetStateTest, SuccessAllRaised) {
 
   EXPECT_READ32(EDN_INTR_STATE_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_edn_irq_get_state(&edn_, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_get_state(&edn_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, std::numeric_limits<uint32_t>::max());
 }
 
@@ -84,7 +83,7 @@ TEST_F(IrqGetStateTest, SuccessNoneRaised) {
   dif_edn_irq_state_snapshot_t irq_snapshot = 0;
 
   EXPECT_READ32(EDN_INTR_STATE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_edn_irq_get_state(&edn_, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_get_state(&edn_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, 0);
 }
 
@@ -93,21 +92,23 @@ class IrqIsPendingTest : public EdnTest {};
 TEST_F(IrqIsPendingTest, NullArgs) {
   bool is_pending;
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_is_pending(nullptr, kDifEdnIrqEdnCmdReqDone, &is_pending));
+  EXPECT_EQ(
+      dif_edn_irq_is_pending(nullptr, kDifEdnIrqEdnCmdReqDone, &is_pending),
+      kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_is_pending(&edn_, kDifEdnIrqEdnCmdReqDone, nullptr));
+  EXPECT_EQ(dif_edn_irq_is_pending(&edn_, kDifEdnIrqEdnCmdReqDone, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_is_pending(nullptr, kDifEdnIrqEdnCmdReqDone, nullptr));
+  EXPECT_EQ(dif_edn_irq_is_pending(nullptr, kDifEdnIrqEdnCmdReqDone, nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IrqIsPendingTest, BadIrq) {
   bool is_pending;
   // All interrupt CSRs are 32 bit so interrupt 32 will be invalid.
-  EXPECT_DIF_BADARG(dif_edn_irq_is_pending(
-      &edn_, static_cast<dif_edn_irq_t>(32), &is_pending));
+  EXPECT_EQ(dif_edn_irq_is_pending(&edn_, static_cast<dif_edn_irq_t>(32),
+                                   &is_pending),
+            kDifBadArg);
 }
 
 TEST_F(IrqIsPendingTest, Success) {
@@ -117,75 +118,77 @@ TEST_F(IrqIsPendingTest, Success) {
   irq_state = false;
   EXPECT_READ32(EDN_INTR_STATE_REG_OFFSET,
                 {{EDN_INTR_STATE_EDN_CMD_REQ_DONE_BIT, true}});
-  EXPECT_DIF_OK(
-      dif_edn_irq_is_pending(&edn_, kDifEdnIrqEdnCmdReqDone, &irq_state));
+  EXPECT_EQ(dif_edn_irq_is_pending(&edn_, kDifEdnIrqEdnCmdReqDone, &irq_state),
+            kDifOk);
   EXPECT_TRUE(irq_state);
 
   // Get the last IRQ state.
   irq_state = true;
   EXPECT_READ32(EDN_INTR_STATE_REG_OFFSET,
                 {{EDN_INTR_STATE_EDN_FATAL_ERR_BIT, false}});
-  EXPECT_DIF_OK(
-      dif_edn_irq_is_pending(&edn_, kDifEdnIrqEdnFatalErr, &irq_state));
+  EXPECT_EQ(dif_edn_irq_is_pending(&edn_, kDifEdnIrqEdnFatalErr, &irq_state),
+            kDifOk);
   EXPECT_FALSE(irq_state);
 }
 
 class AcknowledgeAllTest : public EdnTest {};
 
 TEST_F(AcknowledgeAllTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_edn_irq_acknowledge_all(nullptr));
+  EXPECT_EQ(dif_edn_irq_acknowledge_all(nullptr), kDifBadArg);
 }
 
 TEST_F(AcknowledgeAllTest, Success) {
   EXPECT_WRITE32(EDN_INTR_STATE_REG_OFFSET,
                  std::numeric_limits<uint32_t>::max());
 
-  EXPECT_DIF_OK(dif_edn_irq_acknowledge_all(&edn_));
+  EXPECT_EQ(dif_edn_irq_acknowledge_all(&edn_), kDifOk);
 }
 
 class IrqAcknowledgeTest : public EdnTest {};
 
 TEST_F(IrqAcknowledgeTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_edn_irq_acknowledge(nullptr, kDifEdnIrqEdnCmdReqDone));
+  EXPECT_EQ(dif_edn_irq_acknowledge(nullptr, kDifEdnIrqEdnCmdReqDone),
+            kDifBadArg);
 }
 
 TEST_F(IrqAcknowledgeTest, BadIrq) {
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_acknowledge(nullptr, static_cast<dif_edn_irq_t>(32)));
+  EXPECT_EQ(dif_edn_irq_acknowledge(nullptr, static_cast<dif_edn_irq_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(IrqAcknowledgeTest, Success) {
   // Clear the first IRQ state.
   EXPECT_WRITE32(EDN_INTR_STATE_REG_OFFSET,
                  {{EDN_INTR_STATE_EDN_CMD_REQ_DONE_BIT, true}});
-  EXPECT_DIF_OK(dif_edn_irq_acknowledge(&edn_, kDifEdnIrqEdnCmdReqDone));
+  EXPECT_EQ(dif_edn_irq_acknowledge(&edn_, kDifEdnIrqEdnCmdReqDone), kDifOk);
 
   // Clear the last IRQ state.
   EXPECT_WRITE32(EDN_INTR_STATE_REG_OFFSET,
                  {{EDN_INTR_STATE_EDN_FATAL_ERR_BIT, true}});
-  EXPECT_DIF_OK(dif_edn_irq_acknowledge(&edn_, kDifEdnIrqEdnFatalErr));
+  EXPECT_EQ(dif_edn_irq_acknowledge(&edn_, kDifEdnIrqEdnFatalErr), kDifOk);
 }
 
 class IrqForceTest : public EdnTest {};
 
 TEST_F(IrqForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_edn_irq_force(nullptr, kDifEdnIrqEdnCmdReqDone));
+  EXPECT_EQ(dif_edn_irq_force(nullptr, kDifEdnIrqEdnCmdReqDone), kDifBadArg);
 }
 
 TEST_F(IrqForceTest, BadIrq) {
-  EXPECT_DIF_BADARG(dif_edn_irq_force(nullptr, static_cast<dif_edn_irq_t>(32)));
+  EXPECT_EQ(dif_edn_irq_force(nullptr, static_cast<dif_edn_irq_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(IrqForceTest, Success) {
   // Force first IRQ.
   EXPECT_WRITE32(EDN_INTR_TEST_REG_OFFSET,
                  {{EDN_INTR_TEST_EDN_CMD_REQ_DONE_BIT, true}});
-  EXPECT_DIF_OK(dif_edn_irq_force(&edn_, kDifEdnIrqEdnCmdReqDone));
+  EXPECT_EQ(dif_edn_irq_force(&edn_, kDifEdnIrqEdnCmdReqDone), kDifOk);
 
   // Force last IRQ.
   EXPECT_WRITE32(EDN_INTR_TEST_REG_OFFSET,
                  {{EDN_INTR_TEST_EDN_FATAL_ERR_BIT, true}});
-  EXPECT_DIF_OK(dif_edn_irq_force(&edn_, kDifEdnIrqEdnFatalErr));
+  EXPECT_EQ(dif_edn_irq_force(&edn_, kDifEdnIrqEdnFatalErr), kDifOk);
 }
 
 class IrqGetEnabledTest : public EdnTest {};
@@ -193,21 +196,23 @@ class IrqGetEnabledTest : public EdnTest {};
 TEST_F(IrqGetEnabledTest, NullArgs) {
   dif_toggle_t irq_state;
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_get_enabled(nullptr, kDifEdnIrqEdnCmdReqDone, &irq_state));
+  EXPECT_EQ(
+      dif_edn_irq_get_enabled(nullptr, kDifEdnIrqEdnCmdReqDone, &irq_state),
+      kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_get_enabled(&edn_, kDifEdnIrqEdnCmdReqDone, nullptr));
+  EXPECT_EQ(dif_edn_irq_get_enabled(&edn_, kDifEdnIrqEdnCmdReqDone, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_get_enabled(nullptr, kDifEdnIrqEdnCmdReqDone, nullptr));
+  EXPECT_EQ(dif_edn_irq_get_enabled(nullptr, kDifEdnIrqEdnCmdReqDone, nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IrqGetEnabledTest, BadIrq) {
   dif_toggle_t irq_state;
 
-  EXPECT_DIF_BADARG(dif_edn_irq_get_enabled(
-      &edn_, static_cast<dif_edn_irq_t>(32), &irq_state));
+  EXPECT_EQ(dif_edn_irq_get_enabled(&edn_, static_cast<dif_edn_irq_t>(32),
+                                    &irq_state),
+            kDifBadArg);
 }
 
 TEST_F(IrqGetEnabledTest, Success) {
@@ -217,16 +222,16 @@ TEST_F(IrqGetEnabledTest, Success) {
   irq_state = kDifToggleDisabled;
   EXPECT_READ32(EDN_INTR_ENABLE_REG_OFFSET,
                 {{EDN_INTR_ENABLE_EDN_CMD_REQ_DONE_BIT, true}});
-  EXPECT_DIF_OK(
-      dif_edn_irq_get_enabled(&edn_, kDifEdnIrqEdnCmdReqDone, &irq_state));
+  EXPECT_EQ(dif_edn_irq_get_enabled(&edn_, kDifEdnIrqEdnCmdReqDone, &irq_state),
+            kDifOk);
   EXPECT_EQ(irq_state, kDifToggleEnabled);
 
   // Last IRQ is disabled.
   irq_state = kDifToggleEnabled;
   EXPECT_READ32(EDN_INTR_ENABLE_REG_OFFSET,
                 {{EDN_INTR_ENABLE_EDN_FATAL_ERR_BIT, false}});
-  EXPECT_DIF_OK(
-      dif_edn_irq_get_enabled(&edn_, kDifEdnIrqEdnFatalErr, &irq_state));
+  EXPECT_EQ(dif_edn_irq_get_enabled(&edn_, kDifEdnIrqEdnFatalErr, &irq_state),
+            kDifOk);
   EXPECT_EQ(irq_state, kDifToggleDisabled);
 }
 
@@ -235,15 +240,17 @@ class IrqSetEnabledTest : public EdnTest {};
 TEST_F(IrqSetEnabledTest, NullArgs) {
   dif_toggle_t irq_state = kDifToggleEnabled;
 
-  EXPECT_DIF_BADARG(
-      dif_edn_irq_set_enabled(nullptr, kDifEdnIrqEdnCmdReqDone, irq_state));
+  EXPECT_EQ(
+      dif_edn_irq_set_enabled(nullptr, kDifEdnIrqEdnCmdReqDone, irq_state),
+      kDifBadArg);
 }
 
 TEST_F(IrqSetEnabledTest, BadIrq) {
   dif_toggle_t irq_state = kDifToggleEnabled;
 
-  EXPECT_DIF_BADARG(dif_edn_irq_set_enabled(
-      &edn_, static_cast<dif_edn_irq_t>(32), irq_state));
+  EXPECT_EQ(
+      dif_edn_irq_set_enabled(&edn_, static_cast<dif_edn_irq_t>(32), irq_state),
+      kDifBadArg);
 }
 
 TEST_F(IrqSetEnabledTest, Success) {
@@ -253,15 +260,15 @@ TEST_F(IrqSetEnabledTest, Success) {
   irq_state = kDifToggleEnabled;
   EXPECT_MASK32(EDN_INTR_ENABLE_REG_OFFSET,
                 {{EDN_INTR_ENABLE_EDN_CMD_REQ_DONE_BIT, 0x1, true}});
-  EXPECT_DIF_OK(
-      dif_edn_irq_set_enabled(&edn_, kDifEdnIrqEdnCmdReqDone, irq_state));
+  EXPECT_EQ(dif_edn_irq_set_enabled(&edn_, kDifEdnIrqEdnCmdReqDone, irq_state),
+            kDifOk);
 
   // Disable last IRQ.
   irq_state = kDifToggleDisabled;
   EXPECT_MASK32(EDN_INTR_ENABLE_REG_OFFSET,
                 {{EDN_INTR_ENABLE_EDN_FATAL_ERR_BIT, 0x1, false}});
-  EXPECT_DIF_OK(
-      dif_edn_irq_set_enabled(&edn_, kDifEdnIrqEdnFatalErr, irq_state));
+  EXPECT_EQ(dif_edn_irq_set_enabled(&edn_, kDifEdnIrqEdnFatalErr, irq_state),
+            kDifOk);
 }
 
 class IrqDisableAllTest : public EdnTest {};
@@ -269,14 +276,14 @@ class IrqDisableAllTest : public EdnTest {};
 TEST_F(IrqDisableAllTest, NullArgs) {
   dif_edn_irq_enable_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_edn_irq_disable_all(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_disable_all(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_edn_irq_disable_all(nullptr, nullptr));
+  EXPECT_EQ(dif_edn_irq_disable_all(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqDisableAllTest, SuccessNoSnapshot) {
   EXPECT_WRITE32(EDN_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_edn_irq_disable_all(&edn_, nullptr));
+  EXPECT_EQ(dif_edn_irq_disable_all(&edn_, nullptr), kDifOk);
 }
 
 TEST_F(IrqDisableAllTest, SuccessSnapshotAllDisabled) {
@@ -284,7 +291,7 @@ TEST_F(IrqDisableAllTest, SuccessSnapshotAllDisabled) {
 
   EXPECT_READ32(EDN_INTR_ENABLE_REG_OFFSET, 0);
   EXPECT_WRITE32(EDN_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_edn_irq_disable_all(&edn_, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_disable_all(&edn_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, 0);
 }
 
@@ -294,7 +301,7 @@ TEST_F(IrqDisableAllTest, SuccessSnapshotAllEnabled) {
   EXPECT_READ32(EDN_INTR_ENABLE_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
   EXPECT_WRITE32(EDN_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_edn_irq_disable_all(&edn_, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_disable_all(&edn_, &irq_snapshot), kDifOk);
   EXPECT_EQ(irq_snapshot, std::numeric_limits<uint32_t>::max());
 }
 
@@ -303,11 +310,11 @@ class IrqRestoreAllTest : public EdnTest {};
 TEST_F(IrqRestoreAllTest, NullArgs) {
   dif_edn_irq_enable_snapshot_t irq_snapshot = 0;
 
-  EXPECT_DIF_BADARG(dif_edn_irq_restore_all(nullptr, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_restore_all(nullptr, &irq_snapshot), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_edn_irq_restore_all(&edn_, nullptr));
+  EXPECT_EQ(dif_edn_irq_restore_all(&edn_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_edn_irq_restore_all(nullptr, nullptr));
+  EXPECT_EQ(dif_edn_irq_restore_all(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(IrqRestoreAllTest, SuccessAllEnabled) {
@@ -316,14 +323,14 @@ TEST_F(IrqRestoreAllTest, SuccessAllEnabled) {
 
   EXPECT_WRITE32(EDN_INTR_ENABLE_REG_OFFSET,
                  std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_edn_irq_restore_all(&edn_, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_restore_all(&edn_, &irq_snapshot), kDifOk);
 }
 
 TEST_F(IrqRestoreAllTest, SuccessAllDisabled) {
   dif_edn_irq_enable_snapshot_t irq_snapshot = 0;
 
   EXPECT_WRITE32(EDN_INTR_ENABLE_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_edn_irq_restore_all(&edn_, &irq_snapshot));
+  EXPECT_EQ(dif_edn_irq_restore_all(&edn_, &irq_snapshot), kDifOk);
 }
 
 }  // namespace

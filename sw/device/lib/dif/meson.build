@@ -20,7 +20,6 @@ sw_lib_dif_adc_ctrl = declare_dependency(
     'sw_lib_dif_adc_ctrl',
     sources: [
       hw_ip_adc_ctrl_reg_h,
-      'dif_adc_ctrl.c',
     ],
     dependencies: [
       sw_lib_mmio,
@@ -32,10 +31,7 @@ sw_lib_dif_adc_ctrl = declare_dependency(
 test('dif_adc_ctrl_unittest', executable(
     'dif_adc_ctrl_unittest',
     sources: [
-      'dif_adc_ctrl_unittest.cc',
       'autogen/dif_adc_ctrl_autogen_unittest.cc',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_base.c',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_adc_ctrl.c',
       meson.project_source_root() / 'sw/device/lib/dif/autogen/dif_adc_ctrl_autogen.c',
       hw_ip_adc_ctrl_reg_h,
     ],
@@ -302,11 +298,9 @@ sw_lib_dif_spi_host = declare_dependency(
     'sw_lib_dif_spi_host',
     sources: [
       hw_ip_spi_host_reg_h,
-      'dif_spi_host.c',
     ],
     dependencies: [
       sw_lib_mmio,
-      sw_lib_mem,
       sw_lib_dif_autogen_spi_host,
     ],
   )
@@ -315,10 +309,8 @@ sw_lib_dif_spi_host = declare_dependency(
 test('dif_spi_host_unittest', executable(
     'dif_spi_host_unittest',
     sources: [
-      'dif_spi_host_unittest.cc',
       'autogen/dif_spi_host_autogen_unittest.cc',
       meson.project_source_root() / 'sw/device/lib/dif/autogen/dif_spi_host_autogen.c',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_spi_host.c',
       hw_ip_spi_host_reg_h,
     ],
     dependencies: [
@@ -486,7 +478,7 @@ sw_lib_dif_kmac = declare_dependency(
       sw_lib_bitfield,
       sw_lib_mmio,
       sw_lib_dif_autogen_kmac,
-      sw_lib_mem,
+      sw_lib_mem,  
     ],
   )
 )
@@ -1052,7 +1044,6 @@ sw_lib_dif_pattgen = declare_dependency(
     'sw_lib_dif_pattgen',
     sources: [
       hw_ip_pattgen_reg_h,
-      'dif_pattgen.c',
     ],
     dependencies: [
       sw_lib_mmio,
@@ -1064,49 +1055,9 @@ sw_lib_dif_pattgen = declare_dependency(
 test('dif_pattgen_unittest', executable(
     'dif_pattgen_unittest',
     sources: [
-      'dif_pattgen_unittest.cc',
       'autogen/dif_pattgen_autogen_unittest.cc',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_base.c',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_pattgen.c',
       meson.project_source_root() / 'sw/device/lib/dif/autogen/dif_pattgen_autogen.c',
       hw_ip_pattgen_reg_h,
-    ],
-    dependencies: [
-      sw_vendor_gtest,
-      sw_lib_base_testing_mock_mmio,
-    ],
-    native: true,
-    c_args: ['-DMOCK_MMIO'],
-    cpp_args: ['-DMOCK_MMIO'],
-  ),
-  suite: 'dif',
-)
-
-# PWM DIF library
-sw_lib_dif_pwm = declare_dependency(
-  link_with: static_library(
-    'sw_lib_dif_pwm',
-    sources: [
-      hw_ip_pwm_reg_h,
-      'dif_pwm.c',
-    ],
-    dependencies: [
-      sw_lib_mmio,
-      sw_lib_bitfield,
-      sw_lib_dif_autogen_pwm,
-    ],
-  )
-)
-
-test('dif_pwm_unittest', executable(
-    'dif_pwm_unittest',
-    sources: [
-      'dif_pwm_unittest.cc',
-      'autogen/dif_pwm_autogen_unittest.cc',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_base.c',
-      meson.project_source_root() / 'sw/device/lib/dif/dif_pwm.c',
-      meson.project_source_root() / 'sw/device/lib/dif/autogen/dif_pwm_autogen.c',
-      hw_ip_pwm_reg_h,
     ],
     dependencies: [
       sw_vendor_gtest,

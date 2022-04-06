@@ -58,11 +58,13 @@ package rstmgr_pkg;
 
   // cpu reset requests and status
   typedef struct packed {
+    logic rst_cpu_n;
     logic ndmreset_req;
   } rstmgr_cpu_t;
 
   // default value for rstmgr_ast_rsp_t (for dangling ports)
   parameter rstmgr_cpu_t RSTMGR_CPU_DEFAULT = '{
+    rst_cpu_n: 1'b1,
     ndmreset_req: '0
   };
 

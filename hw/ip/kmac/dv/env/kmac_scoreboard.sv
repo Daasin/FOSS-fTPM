@@ -377,10 +377,9 @@ class kmac_scoreboard extends cip_base_scoreboard #(
             @(posedge sha3_idle);
           end
           ,
-          wait(cfg.under_reset || kmac_err.code == ErrKeyNotValid ||
-               cfg.kmac_vif.lc_escalate_en_i != lc_ctrl_pkg::Off)
+          wait(cfg.under_reset || kmac_err.code == ErrKeyNotValid);
       )
-      if (cfg.under_reset || cfg.kmac_vif.lc_escalate_en_i != lc_ctrl_pkg::Off) begin
+      if (cfg.under_reset) begin
         @(negedge cfg.under_reset);
       end
       if (kmac_err.code == ErrKeyNotValid) begin
@@ -404,7 +403,6 @@ class kmac_scoreboard extends cip_base_scoreboard #(
             app_mux_sel = SelNone;
             case (app_st)
               StIdle: begin
-                app_fsm_active = 0;
                 if (!in_kmac_app &&
                     (cfg.m_kmac_app_agent_cfg[AppKeymgr].vif.req_data_if.valid ||
                      cfg.m_kmac_app_agent_cfg[AppLc].vif.req_data_if.valid ||
@@ -485,7 +483,6 @@ class kmac_scoreboard extends cip_base_scoreboard #(
                 app_fsm_active = 0;
               end
             endcase
-            if (cfg.kmac_vif.lc_escalate_en_i != lc_ctrl_pkg::Off) app_st = StError;
             cfg.clk_rst_vif.wait_clks(1);
             #0;
           end
@@ -683,9 +680,8 @@ class kmac_scoreboard extends cip_base_scoreboard #(
             `uvm_info(`gfn, "raised sha3_idle", UVM_HIGH)
           end
           ,
-          wait(cfg.under_reset || cfg.kmac_vif.lc_escalate_en_i != lc_ctrl_pkg::Off);
+          wait(cfg.under_reset);
       )
-      wait (cfg.under_reset);
     end
   endtask
 
@@ -693,8 +689,8 @@ class kmac_scoreboard extends cip_base_scoreboard #(
   virtual task process_sha3_absorb();
     @(negedge cfg.under_reset);
     forever begin
-      sha3_absorb = ral.status.sha3_absorb.get_reset();
       wait(!cfg.under_reset);
+      sha3_absorb = ral.status.sha3_absorb.get_reset();
       `DV_SPINWAIT_EXIT(
           forever begin
             // sha3_absorb should go high when CmdStart is written or
@@ -2067,20 +2063,19 @@ class kmac_scoreboard extends cip_base_scoreboard #(
         //
         // TODO - handle error cases
         if (addr_phase_write) begin
-          bit [KmacCmdIdx:0] kmac_cmd = item.a_data[KmacCmdIdx:0];
           if (app_fsm_active) begin
             // As per designer comment in https://github.com/lowRISC/opentitan/issues/7716,
             // if CmdStart is sent during an active App operation, KMAC will throw
             // ErrSwIssuedCmdInAppActive, but for any other command the KMAC will throw a
             // ErrSwCmdSequence.
-            if (kmac_cmd_e'(kmac_cmd) != CmdNone) begin
+            if (kmac_cmd_e'(item.a_data) != CmdNone) begin
               kmac_err.valid = 1;
               kmac_err.code  = kmac_pkg::ErrSwIssuedCmdInAppActive;
               kmac_err.info  = 24'(item.a_data);
               predict_err(.is_kmac_err(1));
             end
           end else begin
-            case (kmac_cmd_e'(kmac_cmd))
+            case (kmac_cmd_e'(item.a_data))
               CmdStart: begin
 
                 // Mode/Strength configuration error
@@ -2128,7 +2123,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(
 
                   kmac_err.valid = 1;
                   kmac_err.code  = kmac_pkg::ErrSwCmdSequence;
-                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), kmac_cmd};
+                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), item.a_data[3:0]};
 
                   predict_err(.is_kmac_err(1));
                 end
@@ -2147,7 +2142,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(
 
                   kmac_err.valid = 1;
                   kmac_err.code  = kmac_pkg::ErrSwCmdSequence;
-                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), kmac_cmd};
+                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), item.a_data[3:0]};
 
                   predict_err(.is_kmac_err(1));
                 end
@@ -2163,7 +2158,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(
 
                   kmac_err.valid = 1;
                   kmac_err.code  = kmac_pkg::ErrSwCmdSequence;
-                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), kmac_cmd};
+                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), item.a_data[3:0]};
 
                   predict_err(.is_kmac_err(1));
                 end
@@ -2191,7 +2186,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(
 
                   kmac_err.valid = 1;
                   kmac_err.code  = kmac_pkg::ErrSwCmdSequence;
-                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), kmac_cmd};
+                  kmac_err.info  = {6'h1, 11'h0, 3'(err_st), item.a_data[3:0]};
 
                   predict_err(.is_kmac_err(1));
                 end
@@ -2200,7 +2195,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(
                 // RTL internal value, doesn't actually do anything
               end
               default: begin
-                `uvm_fatal(`gfn, $sformatf("%0d is an illegal CMD value", kmac_cmd))
+                `uvm_fatal(`gfn, $sformatf("%0d is an illegal CMD value", item.a_data))
               end
             endcase
           end
@@ -2404,9 +2399,6 @@ class kmac_scoreboard extends cip_base_scoreboard #(
 
     // On reads, if do_read_check, is set, then check mirrored_value against item.d_data
     if (data_phase_read && csr_name != "") begin
-      if (!cfg.do_cycle_accurate_check && csr_name inside {"intr_state", "status"}) begin
-        do_read_check = 0;
-      end
       if (do_read_check) begin
         `DV_CHECK_EQ(csr.get_mirrored_value(), item.d_data,
                      $sformatf("reg name: %0s", csr.get_full_name()))
@@ -2555,12 +2547,8 @@ class kmac_scoreboard extends cip_base_scoreboard #(
     // Intermediate array for streaming `unmasked_key` into `dpi_key_arr`
     bit [7:0] unmasked_key_bytes[];
 
-    int key_word_len, key_byte_len;
-
-    if (cfg.en_scb == 0) return;
-
-    key_word_len = get_key_size_words(key_len);
-    key_byte_len = get_key_size_bytes(key_len);
+    int key_word_len = get_key_size_words(key_len);
+    int key_byte_len = get_key_size_bytes(key_len);
 
     `uvm_info(`gfn, $sformatf("key_word_len: %0d", key_word_len), UVM_HIGH)
     `uvm_info(`gfn, $sformatf("key_byte_len: %0d", key_byte_len), UVM_HIGH)

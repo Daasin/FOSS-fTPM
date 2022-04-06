@@ -78,15 +78,15 @@ module chip_earlgrey_nexysvideo #(
   // Special Signal Indices //
   ////////////////////////////
 
-  localparam int Tap0PadIdx = 22;
-  localparam int Tap1PadIdx = 16;
-  localparam int Dft0PadIdx = 23;
-  localparam int Dft1PadIdx = 34;
-  localparam int TckPadIdx = 59;
-  localparam int TmsPadIdx = 60;
-  localparam int TrstNPadIdx = 18;
-  localparam int TdiPadIdx = 53;
-  localparam int TdoPadIdx = 54;
+  parameter int Tap0PadIdx = 22;
+  parameter int Tap1PadIdx = 16;
+  parameter int Dft0PadIdx = 23;
+  parameter int Dft1PadIdx = 34;
+  parameter int TckPadIdx = 59;
+  parameter int TmsPadIdx = 60;
+  parameter int TrstNPadIdx = 18;
+  parameter int TdiPadIdx = 51;
+  parameter int TdoPadIdx = 52;
 
   // DFT and Debug signal positions in the pinout.
   localparam pinmux_pkg::target_cfg_t PinmuxTargetCfg = '{
@@ -100,17 +100,28 @@ module chip_earlgrey_nexysvideo #(
     dft_strap0_idx:    Dft0PadIdx,
     dft_strap1_idx:    Dft1PadIdx,
     // TODO: check whether there is a better way to pass these USB-specific params
-    usb_dp_idx:        DioUsbdevUsbDp,
-    usb_dn_idx:        DioUsbdevUsbDn,
+    usb_dp_idx:        DioUsbdevDp,
+    usb_dn_idx:        DioUsbdevDn,
+    usb_dp_pullup_idx: DioUsbdevDpPullup,
+    usb_dn_pullup_idx: DioUsbdevDnPullup,
     usb_sense_idx:     MioInUsbdevSense,
     // Pad types for attribute WARL behavior
     dio_pad_type: {
+      BidirOd, // DIO sysrst_ctrl_aon_flash_wp_l
+      BidirTol, // DIO usbdev_rx_enable
+      BidirTol, // DIO usbdev_suspend
+      BidirTol, // DIO usbdev_tx_mode_se
+      BidirTol, // DIO usbdev_dn_pullup
+      BidirTol, // DIO usbdev_dp_pullup
+      BidirTol, // DIO usbdev_se0
       BidirStd, // DIO spi_host0_csb
       BidirStd, // DIO spi_host0_sck
       InputStd, // DIO spi_device_csb
       InputStd, // DIO spi_device_sck
-      BidirOd, // DIO sysrst_ctrl_aon_flash_wp_l
       BidirOd, // DIO sysrst_ctrl_aon_ec_rst_l
+      BidirTol, // DIO usbdev_dn
+      BidirTol, // DIO usbdev_dp
+      BidirTol, // DIO usbdev_d
       BidirStd, // DIO spi_device_sd
       BidirStd, // DIO spi_device_sd
       BidirStd, // DIO spi_device_sd
@@ -118,9 +129,7 @@ module chip_earlgrey_nexysvideo #(
       BidirStd, // DIO spi_host0_sd
       BidirStd, // DIO spi_host0_sd
       BidirStd, // DIO spi_host0_sd
-      BidirStd, // DIO spi_host0_sd
-      BidirStd, // DIO usbdev_usb_dn
-      BidirStd  // DIO usbdev_usb_dp
+      BidirStd  // DIO spi_host0_sd
     },
     mio_pad_type: {
       BidirOd, // MIO Pad 46
@@ -556,62 +565,55 @@ module chip_earlgrey_nexysvideo #(
   // Outputs always drive and just copy the value
   // Let them go to the normal place too because it won't do any harm
   // and it simplifies the changes needed
-  logic usb_dp_pullup_en;
-  logic usb_dn_pullup_en;
-  logic usb_rx_d;
-  logic usb_tx_d;
-  logic usb_tx_se0;
-  logic usb_tx_use_d_se0;
-  logic usb_suspend;
-  logic usb_rx_enable;
 
-  // The value for IO_USB_DNPULLUP0 is used to decide whether we need to undo the swapping.
+  // The output enable for IO_USB_DNPULLUP0 is used to decide whether we need to undo the swapping.
   logic undo_swap;
-  assign undo_swap = usb_dn_pullup_en;
+  assign undo_swap = dio_oe[DioUsbdevDnPullup];
 
   // GPIO[2] = Switch 2 on board is used to select using the UPHY
   // Keep GPIO[1] for selecting differential in sw
   logic use_uphy;
   assign use_uphy = mio_in[MioPadIoa2];
 
-  // DioUsbdevUsbDn
+  // DioUsbdevDn
   assign manual_attr_usb_n = '0;
   assign manual_attr_io_uphy_dn_tx = '0;
 
   assign manual_out_io_uphy_dn_tx = manual_out_usb_n;
-  assign manual_out_usb_n = undo_swap ? dio_out[DioUsbdevUsbDp] :
-                                        dio_out[DioUsbdevUsbDn];
+  assign manual_out_usb_n = undo_swap ? dio_out[DioUsbdevDp] :
+                                        dio_out[DioUsbdevDn];
 
   assign manual_oe_io_uphy_dn_tx = manual_oe_usb_n;
-  assign manual_oe_usb_n = undo_swap ? dio_oe[DioUsbdevUsbDp] :
-                                       dio_oe[DioUsbdevUsbDn];
+  assign manual_oe_usb_n = undo_swap ? dio_oe[DioUsbdevDp] :
+                                       dio_oe[DioUsbdevDn];
 
-  assign dio_in[DioUsbdevUsbDn] = use_uphy ?
-                                  (undo_swap ? manual_in_io_uphy_dp_rx :
-                                               manual_in_io_uphy_dn_rx) :
-                                  (undo_swap ? manual_in_usb_p :
-                                               manual_in_usb_n);
-  // DioUsbdevUsbDp
+  assign dio_in[DioUsbdevDn] = use_uphy ?
+                               (undo_swap ? manual_in_io_uphy_dp_rx :
+                                            manual_in_io_uphy_dn_rx) :
+                               (undo_swap ? manual_in_usb_p :
+                                            manual_in_usb_n);
+  // DioUsbdevDp
   assign manual_attr_usb_p = '0;
   assign manual_attr_io_uphy_dp_tx = '0;
 
   assign manual_out_io_uphy_dp_tx = manual_out_usb_p;
-  assign manual_out_usb_p = undo_swap ? dio_out[DioUsbdevUsbDn] :
-                                        dio_out[DioUsbdevUsbDp];
+  assign manual_out_usb_p = undo_swap ? dio_out[DioUsbdevDn] :
+                                       dio_out[DioUsbdevDp];
 
   assign manual_oe_io_uphy_dp_tx = manual_oe_usb_p;
-  assign manual_oe_usb_p = undo_swap ? dio_oe[DioUsbdevUsbDn] :
-                                       dio_oe[DioUsbdevUsbDp];
-  assign dio_in[DioUsbdevUsbDp] = use_uphy ?
-                                  (undo_swap ? manual_in_io_uphy_dn_rx :
-                                               manual_in_io_uphy_dp_rx) :
-                                  (undo_swap ? manual_in_usb_n :
-                                               manual_in_usb_p);
-  // UsbdevD
+  assign manual_oe_usb_p = undo_swap ? dio_oe[DioUsbdevDn] :
+                                       dio_oe[DioUsbdevDp];
+  assign dio_in[DioUsbdevDp] = use_uphy ?
+                               (undo_swap ? manual_in_io_uphy_dn_rx :
+                                            manual_in_io_uphy_dp_rx) :
+                               (undo_swap ? manual_in_usb_n :
+                                            manual_in_usb_p);
+  // DioUsbdevD
   // This is not connected at the moment
   logic unused_out_usb_d;
-  assign unused_out_usb_d = usb_tx_d;
-  assign usb_rx_d = use_uphy ?
+  assign unused_out_usb_d = dio_out[DioUsbdevD] ^
+                            dio_oe[DioUsbdevD];
+  assign dio_in[DioUsbdevD] = use_uphy ?
                               (undo_swap ? ~manual_in_io_uphy_d_rx :
                                             manual_in_io_uphy_d_rx) :
                               // This is not connected at the moment
@@ -619,15 +621,24 @@ module chip_earlgrey_nexysvideo #(
   assign manual_out_io_uphy_d_rx = 1'b0;
   assign manual_oe_io_uphy_d_rx = 1'b0;
 
-  // UsbdevDnPullup
+  // DioUsbdevDnPullup
   assign manual_attr_io_usb_dnpullup0 = '0;
-  assign manual_out_io_usb_dnpullup0 = usb_dn_pullup_en;
-  assign manual_oe_io_usb_dnpullup0 = undo_swap ? usb_dp_pullup_en : usb_dn_pullup_en;
+  assign manual_out_io_usb_dnpullup0 = undo_swap ? dio_out[DioUsbdevDpPullup] :
+                                                   dio_out[DioUsbdevDnPullup];
+  assign manual_oe_io_usb_dnpullup0 = undo_swap ? dio_oe[DioUsbdevDpPullup] :
+                                                  dio_oe[DioUsbdevDnPullup];
+  assign dio_in[DioUsbdevDnPullup] = manual_in_io_usb_dnpullup0;
 
   // DioUsbdevDpPullup
   assign manual_attr_io_usb_dppullup0 = '0;
-  assign manual_out_io_usb_dppullup0 = usb_dp_pullup_en;
-  assign manual_oe_io_usb_dppullup0 = undo_swap ? usb_dn_pullup_en : usb_dp_pullup_en;
+  assign manual_out_io_usb_dppullup0 = undo_swap ? dio_out[DioUsbdevDnPullup] :
+                                                   dio_out[DioUsbdevDpPullup];
+  assign manual_oe_io_usb_dppullup0 = undo_swap ? dio_oe[DioUsbdevDnPullup] :
+                                                  dio_oe[DioUsbdevDpPullup];
+  assign dio_in[DioUsbdevDpPullup] = manual_in_io_usb_dppullup0;
+
+  // DioUsbdevRxEnable
+  assign dio_in[DioUsbdevRxEnable] = 1'b0;
 
   // Additional outputs for uphy
   assign manual_oe_io_uphy_dppullup = 1'b1;
@@ -671,11 +682,6 @@ module chip_earlgrey_nexysvideo #(
   // monitored clock
   logic sck_monitor;
 
-  // observe interface
-  logic [7:0] fla_obs;
-  logic [7:0] otp_obs;
-  ast_pkg::ast_obs_ctrl_t obs_ctrl;
-
   // otp power sequence
   otp_ctrl_pkg::otp_ast_req_t otp_ctrl_otp_ast_pwr_seq;
   otp_ctrl_pkg::otp_ast_rsp_t otp_ctrl_otp_ast_pwr_seq_h;
@@ -711,8 +717,7 @@ module chip_earlgrey_nexysvideo #(
   prim_mubi_pkg::mubi4_t io_clk_byp_ack;
   prim_mubi_pkg::mubi4_t all_clk_byp_req;
   prim_mubi_pkg::mubi4_t all_clk_byp_ack;
-  prim_mubi_pkg::mubi4_t hi_speed_sel;
-  prim_mubi_pkg::mubi4_t div_step_down_req;
+  logic hi_speed_sel;
 
   // DFT connections
   logic scan_en;
@@ -724,7 +729,7 @@ module chip_earlgrey_nexysvideo #(
   logic [ast_pkg::Pad2AstInWidth-1:0] pad2ast;
 
   // Jitter enable
-  prim_mubi_pkg::mubi4_t jen;
+  logic jen;
 
   // reset domain connections
   import rstmgr_pkg::PowerDomains;
@@ -891,7 +896,6 @@ module chip_earlgrey_nexysvideo #(
     .clk_src_io_en_i       ( base_ast_pwr.io_clk_en ),
     .clk_src_io_o          ( ast_base_clks.clk_io ),
     .clk_src_io_val_o      ( ast_base_pwr.io_clk_val ),
-    .clk_src_io_48m_o      ( div_step_down_req ),
     // usb source clock
     .usb_ref_pulse_i       ( usb_ref_pulse ),
     .usb_ref_val_i         ( usb_ref_val ),
@@ -919,11 +923,10 @@ module chip_earlgrey_nexysvideo #(
     // dft
     .dft_strap_test_i      ( dft_strap_test   ),
     .lc_dft_en_i           ( dft_en           ),
-    .fla_obs_i             ( fla_obs ),
-    .otp_obs_i             ( otp_obs ),
+    .fla_obs_i             ( '0 ),
+    .otp_obs_i             ( '0 ),
     .otm_obs_i             ( '0 ),
-    .usb_obs_i             ( usb_diff_rx_obs ),
-    .obs_ctrl_o            ( obs_ctrl ),
+    .obs_ctrl_o            (  ),
     // pinmux related
     .padmux2ast_i          ( pad2ast    ),
     .ast2padmux_o          ( ast2pinmux ),
@@ -973,8 +976,8 @@ module chip_earlgrey_nexysvideo #(
 // Also need to add AST simulation and FPGA emulation models for things like entropy source -
 // otherwise Verilator / FPGA will hang.
   top_earlgrey #(
-    .SecAesMasking(1'b0),
-    .SecAesSBoxImpl(aes_pkg::SBoxImplLut),
+    .AesMasking(1'b0),
+    .AesSBoxImpl(aes_pkg::SBoxImplLut),
     .KmacEnMasking(1'b0),
     .KeymgrKmacEnMasking(0),
     .SecAesStartTriggerDelay(0),
@@ -1004,29 +1007,19 @@ module chip_earlgrey_nexysvideo #(
     .sck_monitor_o                ( sck_monitor           ),
     .pwrmgr_ast_req_o             ( base_ast_pwr          ),
     .pwrmgr_ast_rsp_i             ( ast_base_pwr          ),
-    .usb_dp_pullup_en_o           ( usb_dp_pullup_en      ),
-    .usb_dn_pullup_en_o           ( usb_dn_pullup_en      ),
-    .usbdev_usb_rx_d_i            ( usb_rx_d              ),
-    .usbdev_usb_tx_d_o            ( usb_tx_d              ),
-    .usbdev_usb_tx_se0_o          ( usb_tx_se0            ),
-    .usbdev_usb_tx_use_d_se0_o    ( usb_tx_use_d_se0      ),
-    .usbdev_usb_suspend_o         ( usb_suspend           ),
-    .usbdev_usb_rx_enable_o       ( usb_rx_enable         ),
     .usbdev_usb_ref_val_o         ( usb_ref_val           ),
     .usbdev_usb_ref_pulse_o       ( usb_ref_pulse         ),
     .ast_edn_req_i                ( ast_edn_edn_req       ),
     .ast_edn_rsp_o                ( ast_edn_edn_rsp       ),
-    .obs_ctrl_i                   ( obs_ctrl              ),
     .flash_bist_enable_i          ( flash_bist_enable     ),
     .flash_power_down_h_i         ( 1'b0                  ),
     .flash_power_ready_h_i        ( 1'b1                  ),
-    .flash_obs_o                  ( flash_obs             ),
     .io_clk_byp_req_o             ( io_clk_byp_req        ),
     .io_clk_byp_ack_i             ( io_clk_byp_ack        ),
     .all_clk_byp_req_o            ( all_clk_byp_req       ),
     .all_clk_byp_ack_i            ( all_clk_byp_ack       ),
     .hi_speed_sel_o               ( hi_speed_sel          ),
-    .div_step_down_req_i          ( div_step_down_req     ),
+
     .ast_tl_req_o                 ( base_ast_bus               ),
     .ast_tl_rsp_i                 ( ast_base_bus               ),
     .adc_req_o                    ( adc_req                    ),
@@ -1034,7 +1027,6 @@ module chip_earlgrey_nexysvideo #(
     .otp_ctrl_otp_ast_pwr_seq_o   ( otp_ctrl_otp_ast_pwr_seq   ),
     .otp_ctrl_otp_ast_pwr_seq_h_i ( otp_ctrl_otp_ast_pwr_seq_h ),
     .otp_alert_o                  ( otp_alert                  ),
-    .otp_obs_o                    ( otp_obs                    ),
     .sensor_ctrl_ast_alert_req_i  ( ast_alert_req              ),
     .sensor_ctrl_ast_alert_rsp_o  ( ast_alert_rsp              ),
     .sensor_ctrl_ast_status_i     ( ast_pwst.io_pok            ),

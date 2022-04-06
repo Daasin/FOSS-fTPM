@@ -77,7 +77,6 @@ rust_library(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=IOKit-sys",
         "manual",
     ],
     version = "0.1.5",

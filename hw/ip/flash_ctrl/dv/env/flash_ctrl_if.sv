@@ -15,8 +15,8 @@ interface flash_ctrl_if ();
   lc_tx_t                           lc_owner_seed_sw_rw_en = lc_ctrl_pkg::Off;
   lc_tx_t                           lc_seed_hw_rd_en = lc_ctrl_pkg::On;
 
-  lc_tx_t                           lc_iso_part_sw_rd_en = lc_ctrl_pkg::Off;
-  lc_tx_t                           lc_iso_part_sw_wr_en = lc_ctrl_pkg::Off;
+  lc_tx_t                           lc_iso_part_sw_rd_en = lc_ctrl_pkg::On;
+  lc_tx_t                           lc_iso_part_sw_wr_en = lc_ctrl_pkg::On;
 
   lc_tx_t                           lc_nvm_debug_en = lc_ctrl_pkg::Off;
   lc_tx_t                           lc_escalate_en = lc_ctrl_pkg::Off;
@@ -32,7 +32,7 @@ interface flash_ctrl_if ();
   otp_ctrl_pkg::flash_otp_key_req_t otp_req;
   otp_ctrl_pkg::flash_otp_key_rsp_t otp_rsp = flash_ctrl_env_pkg::FLASH_OTP_RSP_DEFAULT;
 
-  // JTAG
+  //JTAG
   logic                             cio_tck;
   logic                             cio_tms;
   logic                             cio_tdi;
@@ -42,4 +42,4 @@ interface flash_ctrl_if ();
   // alert
   ast_dif_t                         flash_alert;
 
-endinterface : flash_ctrl_if
+endinterface

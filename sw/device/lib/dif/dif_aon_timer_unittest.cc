@@ -9,7 +9,6 @@
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
 #include "sw/device/lib/dif/dif_base.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "aon_timer_regs.h"  // Generated.
 
@@ -29,12 +28,13 @@ class AonTimerTest : public Test, public MmioTest {
 class WakeupStartTest : public AonTimerTest {};
 
 TEST_F(WakeupStartTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_start(nullptr, 1, 1));
+  EXPECT_EQ(dif_aon_timer_wakeup_start(nullptr, 1, 1), kDifBadArg);
 }
 
 TEST_F(WakeupStartTest, BadPrescaler) {
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_start(
-      &aon_, 1, AON_TIMER_WKUP_CTRL_PRESCALER_MASK + 1));
+  EXPECT_EQ(dif_aon_timer_wakeup_start(&aon_, 1,
+                                       AON_TIMER_WKUP_CTRL_PRESCALER_MASK + 1),
+            kDifBadArg);
 }
 
 TEST_F(WakeupStartTest, Success) {
@@ -54,14 +54,15 @@ TEST_F(WakeupStartTest, Success) {
                      {AON_TIMER_WKUP_CTRL_ENABLE_BIT, true},
                  });
 
-  EXPECT_DIF_OK(
-      dif_aon_timer_wakeup_start(&aon_, 1, AON_TIMER_WKUP_CTRL_PRESCALER_MASK));
+  EXPECT_EQ(
+      dif_aon_timer_wakeup_start(&aon_, 1, AON_TIMER_WKUP_CTRL_PRESCALER_MASK),
+      kDifOk);
 }
 
 class WakeupStopTest : public AonTimerTest {};
 
 TEST_F(WakeupStopTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_stop(nullptr));
+  EXPECT_EQ(dif_aon_timer_wakeup_stop(nullptr), kDifBadArg);
 }
 
 TEST_F(WakeupStopTest, Success) {
@@ -74,13 +75,13 @@ TEST_F(WakeupStopTest, Success) {
                      {AON_TIMER_WKUP_CTRL_ENABLE_BIT, false},
                  });
 
-  EXPECT_DIF_OK(dif_aon_timer_wakeup_stop(&aon_));
+  EXPECT_EQ(dif_aon_timer_wakeup_stop(&aon_), kDifOk);
 }
 
 class WakeupRestartTest : public AonTimerTest {};
 
 TEST_F(WakeupRestartTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_restart(nullptr));
+  EXPECT_EQ(dif_aon_timer_wakeup_restart(nullptr), kDifBadArg);
 }
 
 TEST_F(WakeupRestartTest, Success) {
@@ -91,23 +92,23 @@ TEST_F(WakeupRestartTest, Success) {
                      {AON_TIMER_WKUP_CTRL_ENABLE_BIT, true},
                  });
 
-  EXPECT_DIF_OK(dif_aon_timer_wakeup_restart(&aon_));
+  EXPECT_EQ(dif_aon_timer_wakeup_restart(&aon_), kDifOk);
 }
 
 class WakeupGetCountTest : public AonTimerTest {};
 
 TEST_F(WakeupGetCountTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_get_count(nullptr, nullptr));
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_get_count(&aon_, nullptr));
+  EXPECT_EQ(dif_aon_timer_wakeup_get_count(nullptr, nullptr), kDifBadArg);
+  EXPECT_EQ(dif_aon_timer_wakeup_get_count(&aon_, nullptr), kDifBadArg);
   uint32_t count;
-  EXPECT_DIF_BADARG(dif_aon_timer_wakeup_get_count(nullptr, &count));
+  EXPECT_EQ(dif_aon_timer_wakeup_get_count(nullptr, &count), kDifBadArg);
 }
 
 TEST_F(WakeupGetCountTest, Success) {
   EXPECT_READ32(AON_TIMER_WKUP_COUNT_REG_OFFSET, 0xA5A5A5A5);
 
   uint32_t count;
-  EXPECT_DIF_OK(dif_aon_timer_wakeup_get_count(&aon_, &count));
+  EXPECT_EQ(dif_aon_timer_wakeup_get_count(&aon_, &count), kDifOk);
   EXPECT_EQ(count, 0xA5A5A5A5);
 }
 
@@ -127,7 +128,8 @@ class WatchdogStartTest : public AonTimerTest {
 };
 
 TEST_F(WatchdogStartTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_start(nullptr, 1, 1, false, false));
+  EXPECT_EQ(dif_aon_timer_watchdog_start(nullptr, 1, 1, false, false),
+            kDifBadArg);
 }
 
 TEST_F(WatchdogStartTest, Locked) {
@@ -148,8 +150,9 @@ TEST_F(WatchdogStartTest, Success) {
                      {AON_TIMER_WDOG_CTRL_ENABLE_BIT, true},
                  });
 
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A,
-                                             false, false));
+  EXPECT_EQ(
+      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, false, false),
+      kDifOk);
 }
 
 TEST_F(WatchdogStartTest, SuccessPauseInSleep) {
@@ -164,8 +167,9 @@ TEST_F(WatchdogStartTest, SuccessPauseInSleep) {
                      {AON_TIMER_WDOG_CTRL_ENABLE_BIT, true},
                  });
 
-  EXPECT_DIF_OK(
-      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, true, false));
+  EXPECT_EQ(
+      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, true, false),
+      kDifOk);
 }
 
 TEST_F(WatchdogStartTest, SuccessLock) {
@@ -182,8 +186,9 @@ TEST_F(WatchdogStartTest, SuccessLock) {
 
   EXPECT_WRITE32(AON_TIMER_WDOG_REGWEN_REG_OFFSET, 1);
 
-  EXPECT_DIF_OK(
-      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, false, true));
+  EXPECT_EQ(
+      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, false, true),
+      kDifOk);
 }
 
 TEST_F(WatchdogStartTest, SuccessPauseInSleepAndLock) {
@@ -200,14 +205,15 @@ TEST_F(WatchdogStartTest, SuccessPauseInSleepAndLock) {
 
   EXPECT_WRITE32(AON_TIMER_WDOG_REGWEN_REG_OFFSET, 1);
 
-  EXPECT_DIF_OK(
-      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, true, true));
+  EXPECT_EQ(
+      dif_aon_timer_watchdog_start(&aon_, 0xA5A5A5A5, 0x5A5A5A5A, true, true),
+      kDifOk);
 }
 
 class WatchdogStopTest : public AonTimerTest {};
 
 TEST_F(WatchdogStopTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_stop(nullptr));
+  EXPECT_EQ(dif_aon_timer_watchdog_stop(nullptr), kDifBadArg);
 }
 
 TEST_F(WatchdogStopTest, Locked) {
@@ -227,13 +233,13 @@ TEST_F(WatchdogStopTest, Success) {
                      {AON_TIMER_WDOG_CTRL_ENABLE_BIT, false},
                  });
 
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_stop(&aon_));
+  EXPECT_EQ(dif_aon_timer_watchdog_stop(&aon_), kDifOk);
 }
 
 class WatchdogRestartTest : public AonTimerTest {};
 
 TEST_F(WatchdogRestartTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_restart(nullptr));
+  EXPECT_EQ(dif_aon_timer_watchdog_restart(nullptr), kDifBadArg);
 }
 
 TEST_F(WatchdogRestartTest, Locked) {
@@ -250,64 +256,64 @@ TEST_F(WatchdogRestartTest, Success) {
                      {AON_TIMER_WDOG_CTRL_ENABLE_BIT, true},
                  });
 
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_restart(&aon_));
+  EXPECT_EQ(dif_aon_timer_watchdog_restart(&aon_), kDifOk);
 }
 
 class WatchdogGetCountTest : public AonTimerTest {};
 
 TEST_F(WatchdogGetCountTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_get_count(nullptr, nullptr));
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_get_count(&aon_, nullptr));
+  EXPECT_EQ(dif_aon_timer_watchdog_get_count(nullptr, nullptr), kDifBadArg);
+  EXPECT_EQ(dif_aon_timer_watchdog_get_count(&aon_, nullptr), kDifBadArg);
   uint32_t count;
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_get_count(nullptr, &count));
+  EXPECT_EQ(dif_aon_timer_watchdog_get_count(nullptr, &count), kDifBadArg);
 }
 
 TEST_F(WatchdogGetCountTest, Success) {
   EXPECT_READ32(AON_TIMER_WDOG_COUNT_REG_OFFSET, 0xA5A5A5A5);
 
   uint32_t count;
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_get_count(&aon_, &count));
+  EXPECT_EQ(dif_aon_timer_watchdog_get_count(&aon_, &count), kDifOk);
   EXPECT_EQ(count, 0xA5A5A5A5);
 }
 
 class WatchdogPetTest : public AonTimerTest {};
 
 TEST_F(WatchdogPetTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_pet(nullptr));
+  EXPECT_EQ(dif_aon_timer_watchdog_pet(nullptr), kDifBadArg);
 }
 
 TEST_F(WatchdogPetTest, Success) {
   EXPECT_WRITE32(AON_TIMER_WDOG_COUNT_REG_OFFSET, 0);
 
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_pet(&aon_));
+  EXPECT_EQ(dif_aon_timer_watchdog_pet(&aon_), kDifOk);
 }
 
 class WatchdogLockTest : public AonTimerTest {};
 
 TEST_F(WatchdogLockTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_lock(nullptr));
+  EXPECT_EQ(dif_aon_timer_watchdog_lock(nullptr), kDifBadArg);
 }
 
 TEST_F(WatchdogLockTest, Success) {
   EXPECT_WRITE32(AON_TIMER_WDOG_REGWEN_REG_OFFSET, 1);
 
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_lock(&aon_));
+  EXPECT_EQ(dif_aon_timer_watchdog_lock(&aon_), kDifOk);
 }
 
 class WatchdogIsLockedTest : public AonTimerTest {};
 
 TEST_F(WatchdogIsLockedTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_is_locked(nullptr, nullptr));
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_is_locked(&aon_, nullptr));
+  EXPECT_EQ(dif_aon_timer_watchdog_is_locked(nullptr, nullptr), kDifBadArg);
+  EXPECT_EQ(dif_aon_timer_watchdog_is_locked(&aon_, nullptr), kDifBadArg);
   bool is_locked;
-  EXPECT_DIF_BADARG(dif_aon_timer_watchdog_is_locked(nullptr, &is_locked));
+  EXPECT_EQ(dif_aon_timer_watchdog_is_locked(nullptr, &is_locked), kDifBadArg);
 }
 
 TEST_F(WatchdogIsLockedTest, Success) {
   EXPECT_READ32(AON_TIMER_WDOG_REGWEN_REG_OFFSET, 1);
 
   bool is_locked;
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_is_locked(&aon_, &is_locked));
+  EXPECT_EQ(dif_aon_timer_watchdog_is_locked(&aon_, &is_locked), kDifOk);
   EXPECT_EQ(is_locked, false);
 }
 
@@ -315,7 +321,7 @@ TEST_F(WatchdogIsLockedTest, SuccessLocked) {
   EXPECT_READ32(AON_TIMER_WDOG_REGWEN_REG_OFFSET, 0);
 
   bool is_locked;
-  EXPECT_DIF_OK(dif_aon_timer_watchdog_is_locked(&aon_, &is_locked));
+  EXPECT_EQ(dif_aon_timer_watchdog_is_locked(&aon_, &is_locked), kDifOk);
   EXPECT_EQ(is_locked, true);
 }
 

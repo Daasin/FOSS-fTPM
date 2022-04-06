@@ -207,7 +207,7 @@ const top_earlgrey_plic_peripheral_t
  * `top_earlgrey_alert_peripheral_t`.
  */
 const top_earlgrey_alert_peripheral_t
-    top_earlgrey_alert_for_peripheral[61] = {
+    top_earlgrey_alert_for_peripheral[59] = {
   [kTopEarlgreyAlertIdUart0FatalFault] = kTopEarlgreyAlertPeripheralUart0,
   [kTopEarlgreyAlertIdUart1FatalFault] = kTopEarlgreyAlertPeripheralUart1,
   [kTopEarlgreyAlertIdUart2FatalFault] = kTopEarlgreyAlertPeripheralUart2,
@@ -230,7 +230,6 @@ const top_earlgrey_alert_peripheral_t
   [kTopEarlgreyAlertIdSpiHost1FatalFault] = kTopEarlgreyAlertPeripheralSpiHost1,
   [kTopEarlgreyAlertIdPwrmgrAonFatalFault] = kTopEarlgreyAlertPeripheralPwrmgrAon,
   [kTopEarlgreyAlertIdRstmgrAonFatalFault] = kTopEarlgreyAlertPeripheralRstmgrAon,
-  [kTopEarlgreyAlertIdRstmgrAonFatalCnstyFault] = kTopEarlgreyAlertPeripheralRstmgrAon,
   [kTopEarlgreyAlertIdClkmgrAonRecovFault] = kTopEarlgreyAlertPeripheralClkmgrAon,
   [kTopEarlgreyAlertIdClkmgrAonFatalFault] = kTopEarlgreyAlertPeripheralClkmgrAon,
   [kTopEarlgreyAlertIdSysrstCtrlAonFatalFault] = kTopEarlgreyAlertPeripheralSysrstCtrlAon,
@@ -242,7 +241,6 @@ const top_earlgrey_alert_peripheral_t
   [kTopEarlgreyAlertIdSensorCtrlFatalAlert] = kTopEarlgreyAlertPeripheralSensorCtrl,
   [kTopEarlgreyAlertIdSramCtrlRetAonFatalError] = kTopEarlgreyAlertPeripheralSramCtrlRetAon,
   [kTopEarlgreyAlertIdFlashCtrlRecovErr] = kTopEarlgreyAlertPeripheralFlashCtrl,
-  [kTopEarlgreyAlertIdFlashCtrlFatalStdErr] = kTopEarlgreyAlertPeripheralFlashCtrl,
   [kTopEarlgreyAlertIdFlashCtrlFatalErr] = kTopEarlgreyAlertPeripheralFlashCtrl,
   [kTopEarlgreyAlertIdRvDmFatalFault] = kTopEarlgreyAlertPeripheralRvDm,
   [kTopEarlgreyAlertIdRvPlicFatalFault] = kTopEarlgreyAlertPeripheralRvPlic,
@@ -253,8 +251,8 @@ const top_earlgrey_alert_peripheral_t
   [kTopEarlgreyAlertIdKmacFatalFaultErr] = kTopEarlgreyAlertPeripheralKmac,
   [kTopEarlgreyAlertIdOtbnFatal] = kTopEarlgreyAlertPeripheralOtbn,
   [kTopEarlgreyAlertIdOtbnRecov] = kTopEarlgreyAlertPeripheralOtbn,
-  [kTopEarlgreyAlertIdKeymgrRecovOperationErr] = kTopEarlgreyAlertPeripheralKeymgr,
   [kTopEarlgreyAlertIdKeymgrFatalFaultErr] = kTopEarlgreyAlertPeripheralKeymgr,
+  [kTopEarlgreyAlertIdKeymgrRecovOperationErr] = kTopEarlgreyAlertPeripheralKeymgr,
   [kTopEarlgreyAlertIdCsrngRecovAlert] = kTopEarlgreyAlertPeripheralCsrng,
   [kTopEarlgreyAlertIdCsrngFatalAlert] = kTopEarlgreyAlertPeripheralCsrng,
   [kTopEarlgreyAlertIdEntropySrcRecovAlert] = kTopEarlgreyAlertPeripheralEntropySrc,

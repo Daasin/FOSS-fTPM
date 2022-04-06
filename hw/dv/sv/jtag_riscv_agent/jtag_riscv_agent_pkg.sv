@@ -63,7 +63,6 @@ package jtag_riscv_agent_pkg;
 
   typedef enum bit [4:0] {
     SbAccess32   = 'd2,
-    SbAccess     = 'd17,
     SbReadOnAddr = 'd20,
     SbBusy       = 'd21
   } sbcs_field_e;

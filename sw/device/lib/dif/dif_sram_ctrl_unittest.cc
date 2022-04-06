@@ -9,7 +9,6 @@
 #include "sw/device/lib/base/multibits.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
 #include "sw/device/lib/dif/dif_base.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "sram_ctrl_regs.h"  // Generated.
 
@@ -24,64 +23,10 @@ class SramCtrlTest : public Test, public MmioTest {
   dif_sram_ctrl_t sram_ctrl_ = {.base_addr = dev().region()};
 };
 
-class Scramble : public SramCtrlTest {};
-
-TEST_F(Scramble, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sram_ctrl_scramble(nullptr));
-}
-
-TEST_F(Scramble, Locked) {
-  EXPECT_READ32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 0);
-  EXPECT_EQ(dif_sram_ctrl_scramble(&sram_ctrl_), kDifLocked);
-}
-
-TEST_F(Scramble, Failure) {
-  EXPECT_READ32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 1);
-
-  // Issue request for new scrambling key.
-  EXPECT_WRITE32(SRAM_CTRL_CTRL_REG_OFFSET,
-                 {{SRAM_CTRL_CTRL_RENEW_SCR_KEY_BIT, true},
-                  {SRAM_CTRL_CTRL_INIT_BIT, false}});
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, kDifSramCtrlStatusScrKeyValid);
-
-  // Overwrite memory with pseudo random data.
-  EXPECT_WRITE32(SRAM_CTRL_CTRL_REG_OFFSET,
-                 {{SRAM_CTRL_CTRL_RENEW_SCR_KEY_BIT, false},
-                  {SRAM_CTRL_CTRL_INIT_BIT, true}});
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET,
-                std::numeric_limits<uint32_t>::max());
-
-  EXPECT_EQ(dif_sram_ctrl_scramble(&sram_ctrl_), kDifError);
-}
-
-TEST_F(Scramble, Success) {
-  EXPECT_READ32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 1);
-
-  // Issue request for new scrambling key, and emulate three iteration status
-  // read loop.
-  EXPECT_WRITE32(SRAM_CTRL_CTRL_REG_OFFSET,
-                 {{SRAM_CTRL_CTRL_RENEW_SCR_KEY_BIT, true},
-                  {SRAM_CTRL_CTRL_INIT_BIT, false}});
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, 0);
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, 0);
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, kDifSramCtrlStatusScrKeyValid);
-
-  // Overwrite memory with pseudo random data, and emulate three iteration
-  // status read loop.
-  EXPECT_WRITE32(SRAM_CTRL_CTRL_REG_OFFSET,
-                 {{SRAM_CTRL_CTRL_RENEW_SCR_KEY_BIT, false},
-                  {SRAM_CTRL_CTRL_INIT_BIT, true}});
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, 0);
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, 0);
-  EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, kDifSramCtrlStatusInitDone);
-
-  EXPECT_DIF_OK(dif_sram_ctrl_scramble(&sram_ctrl_));
-}
-
 class RequestNewKeyTest : public SramCtrlTest {};
 
 TEST_F(RequestNewKeyTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sram_ctrl_request_new_key(nullptr));
+  EXPECT_EQ(dif_sram_ctrl_request_new_key(nullptr), kDifBadArg);
 }
 
 TEST_F(RequestNewKeyTest, Locked) {
@@ -94,23 +39,23 @@ TEST_F(RequestNewKeyTest, Success) {
   EXPECT_WRITE32(SRAM_CTRL_CTRL_REG_OFFSET,
                  {{SRAM_CTRL_CTRL_RENEW_SCR_KEY_BIT, true},
                   {SRAM_CTRL_CTRL_INIT_BIT, false}});
-  EXPECT_DIF_OK(dif_sram_ctrl_request_new_key(&sram_ctrl_));
+  EXPECT_EQ(dif_sram_ctrl_request_new_key(&sram_ctrl_), kDifOk);
 }
 
 class GetStatusTest : public SramCtrlTest {};
 
 TEST_F(GetStatusTest, NullArgs) {
   dif_sram_ctrl_status_bitfield_t status;
-  EXPECT_DIF_BADARG(dif_sram_ctrl_get_status(&sram_ctrl_, nullptr));
-  EXPECT_DIF_BADARG(dif_sram_ctrl_get_status(nullptr, &status));
-  EXPECT_DIF_BADARG(dif_sram_ctrl_get_status(nullptr, nullptr));
+  EXPECT_EQ(dif_sram_ctrl_get_status(&sram_ctrl_, nullptr), kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_get_status(nullptr, &status), kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_get_status(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(GetStatusTest, SuccessSome) {
   EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, 0xA5A5A5A5);
 
   dif_sram_ctrl_status_bitfield_t status = 0;
-  EXPECT_DIF_OK(dif_sram_ctrl_get_status(&sram_ctrl_, &status));
+  EXPECT_EQ(dif_sram_ctrl_get_status(&sram_ctrl_, &status), kDifOk);
   EXPECT_EQ(status, 0xA5A5A5A5);
 }
 
@@ -119,7 +64,7 @@ TEST_F(GetStatusTest, SuccessAll) {
                 std::numeric_limits<uint32_t>::max());
 
   dif_sram_ctrl_status_bitfield_t status = 0;
-  EXPECT_DIF_OK(dif_sram_ctrl_get_status(&sram_ctrl_, &status));
+  EXPECT_EQ(dif_sram_ctrl_get_status(&sram_ctrl_, &status), kDifOk);
   EXPECT_EQ(status, std::numeric_limits<uint32_t>::max());
 }
 
@@ -127,7 +72,7 @@ TEST_F(GetStatusTest, SuccessNone) {
   EXPECT_READ32(SRAM_CTRL_STATUS_REG_OFFSET, 0);
 
   dif_sram_ctrl_status_bitfield_t status = std::numeric_limits<uint32_t>::max();
-  EXPECT_DIF_OK(dif_sram_ctrl_get_status(&sram_ctrl_, &status));
+  EXPECT_EQ(dif_sram_ctrl_get_status(&sram_ctrl_, &status), kDifOk);
   EXPECT_EQ(status, 0);
 }
 
@@ -135,42 +80,43 @@ class ExecGetEnabledTest : public SramCtrlTest {};
 
 TEST_F(ExecGetEnabledTest, NullArgs) {
   dif_toggle_t state;
-  EXPECT_DIF_BADARG(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, nullptr));
-  EXPECT_DIF_BADARG(dif_sram_ctrl_exec_get_enabled(nullptr, &state));
-  EXPECT_DIF_BADARG(dif_sram_ctrl_exec_get_enabled(nullptr, nullptr));
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, nullptr), kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(nullptr, &state), kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(ExecGetEnabledTest, Enabled) {
   dif_toggle_t state;
   EXPECT_READ32(SRAM_CTRL_EXEC_REG_OFFSET, kMultiBitBool4True);
-  EXPECT_DIF_OK(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state));
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state), kDifOk);
   EXPECT_EQ(state, kDifToggleEnabled);
 }
 
 TEST_F(ExecGetEnabledTest, Disabled) {
   dif_toggle_t state = kDifToggleEnabled;
   EXPECT_READ32(SRAM_CTRL_EXEC_REG_OFFSET, kMultiBitBool4False);
-  EXPECT_DIF_OK(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state));
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state), kDifOk);
   EXPECT_EQ(state, kDifToggleDisabled);
 
   state = kDifToggleEnabled;
   EXPECT_READ32(SRAM_CTRL_EXEC_REG_OFFSET, 0);
-  EXPECT_DIF_OK(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state));
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state), kDifOk);
   EXPECT_EQ(state, kDifToggleDisabled);
 
   state = kDifToggleEnabled;
   EXPECT_READ32(SRAM_CTRL_EXEC_REG_OFFSET,
                 std::numeric_limits<uint32_t>::max());
-  EXPECT_DIF_OK(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state));
+  EXPECT_EQ(dif_sram_ctrl_exec_get_enabled(&sram_ctrl_, &state), kDifOk);
   EXPECT_EQ(state, kDifToggleDisabled);
 }
 
 class ExecSetEnabledTest : public SramCtrlTest {};
 
 TEST_F(ExecSetEnabledTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sram_ctrl_exec_set_enabled(nullptr, kDifToggleEnabled));
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_exec_set_enabled(nullptr, kDifToggleDisabled));
+  EXPECT_EQ(dif_sram_ctrl_exec_set_enabled(nullptr, kDifToggleEnabled),
+            kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_exec_set_enabled(nullptr, kDifToggleDisabled),
+            kDifBadArg);
 }
 
 TEST_F(ExecSetEnabledTest, Locked) {
@@ -186,19 +132,20 @@ TEST_F(ExecSetEnabledTest, Locked) {
 TEST_F(ExecSetEnabledTest, Enabled) {
   EXPECT_READ32(SRAM_CTRL_EXEC_REGWEN_REG_OFFSET, 0x1);
   EXPECT_WRITE32(SRAM_CTRL_EXEC_REG_OFFSET, kMultiBitBool4True);
-  EXPECT_DIF_OK(dif_sram_ctrl_exec_set_enabled(&sram_ctrl_, kDifToggleEnabled));
+  EXPECT_EQ(dif_sram_ctrl_exec_set_enabled(&sram_ctrl_, kDifToggleEnabled),
+            kDifOk);
 
   EXPECT_READ32(SRAM_CTRL_EXEC_REGWEN_REG_OFFSET, 0x1);
   EXPECT_WRITE32(SRAM_CTRL_EXEC_REG_OFFSET, kMultiBitBool4False);
-  EXPECT_DIF_OK(
-      dif_sram_ctrl_exec_set_enabled(&sram_ctrl_, kDifToggleDisabled));
+  EXPECT_EQ(dif_sram_ctrl_exec_set_enabled(&sram_ctrl_, kDifToggleDisabled),
+            kDifOk);
 }
 
 class LockTest : public SramCtrlTest {};
 
 TEST_F(LockTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sram_ctrl_lock(nullptr, kDifSramCtrlLockCtrl));
-  EXPECT_DIF_BADARG(dif_sram_ctrl_lock(nullptr, kDifSramCtrlLockExec));
+  EXPECT_EQ(dif_sram_ctrl_lock(nullptr, kDifSramCtrlLockCtrl), kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_lock(nullptr, kDifSramCtrlLockExec), kDifBadArg);
 }
 
 TEST_F(LockTest, Error) {
@@ -209,35 +156,35 @@ TEST_F(LockTest, Error) {
 
 TEST_F(LockTest, LockCtrl) {
   EXPECT_WRITE32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 0x0);
-  EXPECT_DIF_OK(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockCtrl));
+  EXPECT_EQ(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockCtrl), kDifOk);
   EXPECT_WRITE32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 0x0);
-  EXPECT_DIF_OK(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockCtrl));
+  EXPECT_EQ(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockCtrl), kDifOk);
 }
 
 TEST_F(LockTest, LockExec) {
   EXPECT_WRITE32(SRAM_CTRL_EXEC_REGWEN_REG_OFFSET, 0x0);
-  EXPECT_DIF_OK(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockExec));
+  EXPECT_EQ(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockExec), kDifOk);
   EXPECT_WRITE32(SRAM_CTRL_EXEC_REGWEN_REG_OFFSET, 0x0);
-  EXPECT_DIF_OK(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockExec));
+  EXPECT_EQ(dif_sram_ctrl_lock(&sram_ctrl_, kDifSramCtrlLockExec), kDifOk);
 }
 
 class IsLockedTest : public SramCtrlTest {};
 
 TEST_F(IsLockedTest, NullArgs) {
   bool is_locked;
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockCtrl, &is_locked));
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockCtrl, nullptr));
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockCtrl, nullptr));
+  EXPECT_EQ(dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockCtrl, &is_locked),
+            kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockCtrl, nullptr),
+            kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockCtrl, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockExec, &is_locked));
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockExec, nullptr));
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockExec, nullptr));
+  EXPECT_EQ(dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockExec, &is_locked),
+            kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_is_locked(nullptr, kDifSramCtrlLockExec, nullptr),
+            kDifBadArg);
+  EXPECT_EQ(dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockExec, nullptr),
+            kDifBadArg);
 }
 
 TEST_F(IsLockedTest, Error) {
@@ -252,28 +199,32 @@ TEST_F(IsLockedTest, Error) {
 TEST_F(IsLockedTest, Ctrl) {
   bool is_locked = true;
   EXPECT_READ32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 0x1);
-  EXPECT_DIF_OK(
-      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockCtrl, &is_locked));
+  EXPECT_EQ(
+      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockCtrl, &is_locked),
+      kDifOk);
   EXPECT_EQ(is_locked, false);
 
   is_locked = false;
   EXPECT_READ32(SRAM_CTRL_CTRL_REGWEN_REG_OFFSET, 0x0);
-  EXPECT_DIF_OK(
-      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockCtrl, &is_locked));
+  EXPECT_EQ(
+      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockCtrl, &is_locked),
+      kDifOk);
   EXPECT_EQ(is_locked, true);
 }
 
 TEST_F(IsLockedTest, Exec) {
   bool is_locked = true;
   EXPECT_READ32(SRAM_CTRL_EXEC_REGWEN_REG_OFFSET, 0x1);
-  EXPECT_DIF_OK(
-      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockExec, &is_locked));
+  EXPECT_EQ(
+      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockExec, &is_locked),
+      kDifOk);
   EXPECT_EQ(is_locked, false);
 
   is_locked = false;
   EXPECT_READ32(SRAM_CTRL_EXEC_REGWEN_REG_OFFSET, 0x0);
-  EXPECT_DIF_OK(
-      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockExec, &is_locked));
+  EXPECT_EQ(
+      dif_sram_ctrl_is_locked(&sram_ctrl_, kDifSramCtrlLockExec, &is_locked),
+      kDifOk);
   EXPECT_EQ(is_locked, true);
 }
 

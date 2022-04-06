@@ -1,12 +1,9 @@
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-################################################################################
-# Bazel Embedded
-#
-# Contains rules that support building SW for embedded targets. Specifically, we
-# maintain a fork to build for RISCV32I.
-################################################################################
+# bazel_embedded has rules that support building for embedded targets.
+# We maintain a fork to build for RiscV32i
+
 git_repository(
     name = "bazel_embedded",
     commit = "b4faaec60b07b11fe3d1fc6b40f22baf31a54690",
@@ -36,9 +33,27 @@ load(
 
 register_lowrisc_toolchain_rv32imc_toolchain()
 
-################################################################################
-# Go Rules
-################################################################################
+# We have a 'vendored' copy of the googletest repo in our repository.
+# In the future, we may want to change this to a git repo or http archive.
+local_repository(
+    name = "googletest",
+    path = "sw/vendor/google_googletest",
+)
+
+# We have a 'vendored' copy of the google_verible_verilog_syntax_py repo
+local_repository(
+    name = "google_verible_verilog_syntax_py",
+    path = "hw/ip/prim/util/vendor/google_verible_verilog_syntax_py",
+)
+
+# Abseil is required by googletest.
+http_archive(
+    name = "com_google_absl",
+    strip_prefix = "abseil-cpp-master",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/master.zip"],
+)
+
+# Buildifier is a linting tool for our WORKSPACE and BUILD files
 http_archive(
     name = "io_bazel_rules_go",
     sha256 = "d1ffd055969c8f8d431e2d439813e42326961d0942bdf734d2c95dc30c369566",
@@ -53,35 +68,34 @@ go_rules_dependencies()
 
 go_register_toolchains()
 
-################################################################################
-# Python Rules
-################################################################################
 http_archive(
-    name = "rules_python",
-    sha256 = "9fcf91dbcc31fde6d1edb15f117246d912c33c36f44cf681976bd886538deba6",
-    strip_prefix = "rules_python-0.8.0",
-    url = "https://github.com/bazelbuild/rules_python/archive/refs/tags/0.8.0.tar.gz",
+    name = "bazel_gazelle",
+    sha256 = "b85f48fa105c4403326e9525ad2b2cc437babaa6e15a3fc0b1dbab0ab064bc7c",
+    urls = [
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.22.2/bazel-gazelle-v0.22.2.tar.gz",
+    ],
 )
 
-load("@rules_python//python:repositories.bzl", "python_register_toolchains")
-load("@rules_python//python:pip.bzl", "pip_install")
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 
-python_register_toolchains(
-    name = "python3_9",
-    python_version = "3.9",
+gazelle_dependencies()
+
+http_archive(
+    name = "com_google_protobuf",
+    strip_prefix = "protobuf-master",
+    urls = ["https://github.com/protocolbuffers/protobuf/archive/master.zip"],
 )
 
-load("@python3_9//:defs.bzl", "interpreter")
+load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
-pip_install(
-    name = "ot_python_deps",
-    python_interpreter_target = interpreter,
-    requirements = "//:python-requirements.txt",
+protobuf_deps()
+
+http_archive(
+    name = "com_github_bazelbuild_buildtools",
+    strip_prefix = "buildtools-main",
+    url = "https://github.com/bazelbuild/buildtools/archive/main.zip",
 )
 
-################################################################################
-# Rust Rules
-################################################################################
 http_archive(
     name = "rules_rust",
     sha256 = "531bdd470728b61ce41cf7604dc4f9a115983e455d46ac1d0c1632f613ab9fc3",
@@ -96,69 +110,12 @@ load("@rules_rust//rust:repositories.bzl", "rust_repositories")
 
 rust_repositories(
     edition = "2018",
-    version = "1.58.0",
+    version = "1.53.0",
 )
 
 load("//third_party/cargo:crates.bzl", "raze_fetch_remote_crates")
 
 raze_fetch_remote_crates()
-
-################################################################################
-# Vendored SW
-################################################################################
-# We have a 'vendored' copy of the googletest repo in our repository.
-# In the future, we may want to change this to a git repo or http archive.
-local_repository(
-    name = "googletest",
-    path = "sw/vendor/google_googletest",
-)
-
-# We have a 'vendored' copy of the google_verible_verilog_syntax_py repo
-local_repository(
-    name = "google_verible_verilog_syntax_py",
-    path = "hw/ip/prim/util/vendor/google_verible_verilog_syntax_py",
-)
-
-################################################################################
-# Third Party SW
-################################################################################
-# Abseil is required by googletest.
-http_archive(
-    name = "com_google_absl",
-    strip_prefix = "abseil-cpp-master",
-    urls = ["https://github.com/abseil/abseil-cpp/archive/master.zip"],
-)
-
-# Bazel Gazelle
-http_archive(
-    name = "bazel_gazelle",
-    sha256 = "b85f48fa105c4403326e9525ad2b2cc437babaa6e15a3fc0b1dbab0ab064bc7c",
-    urls = [
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.22.2/bazel-gazelle-v0.22.2.tar.gz",
-    ],
-)
-
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
-
-gazelle_dependencies()
-
-# Protobuf
-http_archive(
-    name = "com_google_protobuf",
-    strip_prefix = "protobuf-master",
-    urls = ["https://github.com/protocolbuffers/protobuf/archive/master.zip"],
-)
-
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
-
-protobuf_deps()
-
-# Buildifier (linting tool for our WORKSPACE and BUILD files)
-http_archive(
-    name = "com_github_bazelbuild_buildtools",
-    strip_prefix = "buildtools-main",
-    url = "https://github.com/bazelbuild/buildtools/archive/main.zip",
-)
 
 # boringssl `main-with-bazel` branch as of 2021-11-09.
 git_repository(

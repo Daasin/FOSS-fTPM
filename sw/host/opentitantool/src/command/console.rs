@@ -9,7 +9,8 @@ use raw_tty::TtyModeGuard;
 use regex::Regex;
 use std::any::Any;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io;
+use std::io::{ErrorKind, Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
@@ -48,7 +49,7 @@ impl CommandDispatch for Console {
         transport: &TransportWrapper,
     ) -> Result<Option<Box<dyn Serialize>>> {
         // We need the UART for the console command to operate.
-        transport.capabilities()?.request(Capability::UART).ok()?;
+        transport.capabilities().request(Capability::UART).ok()?;
         let mut stdout = std::io::stdout();
         let mut stdin = std::io::stdin();
 
@@ -191,33 +192,45 @@ impl InnerConsole {
         stdout: &mut impl Write,
     ) -> Result<ExitStatus> {
         let mut buf = [0u8; 256];
-        let len = uart.read_timeout(&mut buf, timeout)?;
-        if len > 0 {
-            stdout.write_all(&buf[..len])?;
-            stdout.flush()?;
+        match uart.read_timeout(&mut buf, timeout) {
+            Ok(len) => {
+                stdout.write_all(&buf[..len])?;
+                stdout.flush()?;
 
-            // If we're logging, save it to the logfile.
-            if let Some(logfile) = &mut self.logfile {
-                logfile.write_all(&buf[..len])?;
-            }
+                // If we're logging, save it to the logfile.
+                if let Some(logfile) = &mut self.logfile {
+                    logfile.write_all(&buf[..len])?;
+                }
 
-            // If we have exit condition regexes check them.
-            self.append_buffer(&buf[..len]);
-            if self
-                .exit_success
-                .as_ref()
-                .map(|rx| rx.is_match(&self.buffer))
-                == Some(true)
-            {
-                return Ok(ExitStatus::ExitSuccess);
+                // If we have exit condition regexes check them.
+                self.append_buffer(&buf[..len]);
+                if self
+                    .exit_success
+                    .as_ref()
+                    .map(|rx| rx.is_match(&self.buffer))
+                    == Some(true)
+                {
+                    return Ok(ExitStatus::ExitSuccess);
+                }
+                if self
+                    .exit_failure
+                    .as_ref()
+                    .map(|rx| rx.is_match(&self.buffer))
+                    == Some(true)
+                {
+                    return Ok(ExitStatus::ExitFailure);
+                }
             }
-            if self
-                .exit_failure
-                .as_ref()
-                .map(|rx| rx.is_match(&self.buffer))
-                == Some(true)
-            {
-                return Ok(ExitStatus::ExitFailure);
+            Err(e) => {
+                // If we got a timeout from the uart, ignore it.
+                // Return all other errors.
+                if let Some(ioerr) = e.downcast_ref::<io::Error>() {
+                    if ioerr.kind() != ErrorKind::TimedOut {
+                        return Err(e);
+                    }
+                } else {
+                    return Err(e);
+                }
             }
         }
         Ok(ExitStatus::None)

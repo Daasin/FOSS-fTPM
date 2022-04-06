@@ -74,7 +74,7 @@ module tlul_sram_byte import tlul_pkg::*; #(
     logic wr_txn;
     logic byte_wr_txn;
     logic byte_req_ack;
-    logic [prim_util_pkg::vbits(Outstanding+1)-1:0] pending_txn_cnt;
+    logic [prim_util_pkg::vbits(Outstanding):0] pending_txn_cnt;
 
     assign a_ack = tl_i.a_valid & tl_o.a_ready;
     assign d_ack = tl_o.d_valid & tl_i.d_ready;
@@ -269,12 +269,7 @@ module tlul_sram_byte import tlul_pkg::*; #(
       // transaction size in cases where a read modify write operation is
       // performed. Hence, we always return the registered size here.
       tl_o.d_size  = a_size;
-    end // always_comb
-
-    // unused info from tl_sram_i
-    // see explanation in above block
-    logic unused_tl;
-    assign unused_tl = |tl_sram_i.d_size;
+    end
 
     // when byte access detected, go to wait read
     `ASSERT(ByteAccessStateChange_A, a_ack & wr_txn & ~&tl_i.a_mask & ~error_i |=>

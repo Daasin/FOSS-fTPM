@@ -8,12 +8,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "sw/device/lib/base/macros.h"
 #include "sw/device/silicon_creator/lib/error.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define OTP_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 
 /**
  * The following constants represent the expected number of sec_mmio register
@@ -37,7 +38,7 @@ enum {
  * @param address The address to read from offset from the start of OTP memory.
  * @return The 32-bit value from OTP.
  */
-OT_WARN_UNUSED_RESULT
+OTP_WARN_UNUSED_RESULT
 uint32_t otp_read32(uint32_t address);
 
 /**
@@ -47,7 +48,7 @@ uint32_t otp_read32(uint32_t address);
  * @param address The address to read from offset from the start of OTP memory.
  * @return The 64-bit value from OTP.
  */
-OT_WARN_UNUSED_RESULT
+OTP_WARN_UNUSED_RESULT
 uint64_t otp_read64(uint32_t address);
 
 /**

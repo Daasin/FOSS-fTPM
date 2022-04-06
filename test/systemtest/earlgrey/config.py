@@ -24,6 +24,13 @@ TEST_APPS_SELFCHECKING = [
     {
         "name": "otbn_smoketest_rtl",
         "binary_name": "otbn_smoketest",
+        "verilator_extra_args": ['+OTBN_USE_MODEL=0'],
+        "targets": ["sim_verilator"],
+    },
+    {
+        "name": "otbn_smoketest_model",
+        "binary_name": "otbn_smoketest",
+        "verilator_extra_args": ['+OTBN_USE_MODEL=1'],
         "targets": ["sim_verilator"],
     },
     {
@@ -43,7 +50,7 @@ TEST_APPS_SELFCHECKING = [
         "targets": ["fpga_cw310"],
     },
     {
-        "name": "otbn_ecdsa_op_irq_test",
+        "name": "otbn_ecdsa_p256_test",
         "targets": ["fpga_cw310"],
     },
     {
@@ -91,12 +98,10 @@ TEST_APPS_SELFCHECKING = [
     #    "name": "csrng_smoketest",
     #   "targets": ["sim_verilator", "fpga_cw310"],
     # },
-    # TODO(lowrisc/opentitan#10092): Remove dependency on uncontrolled
-    # environment.
-    # {
-    #     "name": "entropy_src_smoketest",
-    #     "targets": ["sim_verilator", "fpga_cw310"],
-    # },
+    {
+        "name": "entropy_src_smoketest",
+        "targets": ["sim_verilator", "fpga_cw310"],
+    },
     {
         "name": "kmac_smoketest",
         "targets": ["sim_verilator", "fpga_cw310"],

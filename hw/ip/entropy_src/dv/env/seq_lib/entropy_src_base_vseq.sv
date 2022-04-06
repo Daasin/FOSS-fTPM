@@ -17,8 +17,6 @@ class entropy_src_base_vseq extends cip_base_vseq #(
   bit  do_entropy_src_init = 1'b1;
   bit  do_interrupt        = 1'b1;
 
-  bit [15:0] path_err_val;
-
   virtual entropy_src_cov_if   cov_vif;
 
   `uvm_object_new
@@ -118,28 +116,28 @@ class entropy_src_base_vseq extends cip_base_vseq #(
     csr_update(ral.observe_fifo_thresh);
 
     // Enables (should be done last)
-    ral.conf.fips_enable.set(cfg.fips_enable);
+    ral.conf.fips_enable.set(cfg.enable);
+
     ral.conf.entropy_data_reg_enable.set(cfg.entropy_data_reg_enable);
+    ral.conf.boot_bypass_disable.set(cfg.boot_bypass_disable);
     ral.conf.rng_bit_enable.set(cfg.rng_bit_enable);
     ral.conf.rng_bit_sel.set(cfg.rng_bit_sel);
-    ral.conf.threshold_scope.set(cfg.ht_threshold_scope);
     csr_update(.csr(ral.conf));
 
-    // Register write enable lock is on be default
-    // Setting this to zero will lock future writes
-    csr_wr(.ptr(ral.sw_regupd), .value(cfg.sw_regupd));
 
-    // Module_enables (should be done last)
-    ral.module_enable.set(cfg.module_enable);
+    ral.module_enable.set(cfg.enable); // TODO: Change config here?
     csr_update(.csr(ral.module_enable));
-
-    ral.me_regwen.set(cfg.me_regwen);
-    csr_update(.csr(ral.me_regwen));
 
     if (do_interrupt) begin
       ral.intr_enable.set(en_intr);
       csr_update(ral.intr_enable);
     end
+
+    // Register write enable lock is on be default
+    // Setting this to zero will lock future writes
+    // TODO Do we need to check main_sm_idle before writing DUT registers?
+    csr_wr(.ptr(ral.regwen), .value(cfg.regwen));
+
   endtask
 
   typedef enum int {
@@ -229,272 +227,4 @@ class entropy_src_base_vseq extends cip_base_vseq #(
     end while (intr_status && !done);
   endtask
 
-  task run_rng_host_seq(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq);
-    for (int i = 0; i < m_rng_push_seq.num_trans; i++) begin
-      rng_val =  i % 16;
-      cfg.m_rng_agent_cfg.add_h_user_data(rng_val);
-    end
-    m_rng_push_seq.start(p_sequencer.rng_sequencer_h);
-  endtask // run_rng_host_seq
-
-  task repcnt_ht_fail_seq(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq);
-    // Set rng_val
-    // Use randomly generated but fixed rng_val through the test to cause the repcnt health test
-    // to fail
-    `DV_CHECK_STD_RANDOMIZE_FATAL(rng_val)
-    for (int i = 0; i < m_rng_push_seq.num_trans; i++) begin
-      cfg.m_rng_agent_cfg.add_h_user_data(rng_val);
-    end
-  endtask // repcnt_ht_fail_seq
-
-  task adaptp_ht_fail_seq(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                          bit[15:0] fips_thresh, bit[15:0] bypass_thresh);
-    ral.adaptp_hi_thresholds.fips_thresh.set(fips_thresh);
-    ral.adaptp_hi_thresholds.bypass_thresh.set(bypass_thresh);
-    csr_update(.csr(ral.adaptp_hi_thresholds));
-    ral.adaptp_lo_thresholds.fips_thresh.set(fips_thresh);
-    ral.adaptp_lo_thresholds.bypass_thresh.set(bypass_thresh);
-    csr_update(.csr(ral.adaptp_lo_thresholds));
-    // Turn on module_enable
-    csr_wr(.ptr(ral.module_enable), .value(prim_mubi_pkg::MuBi4True));
-    // Set rng_val
-    for (int i = 0; i < m_rng_push_seq.num_trans; i++) begin
-      rng_val = (i % 16 == 0 ? (cfg.which_ht == high_test ? 0 : 1) :
-                               (cfg.which_ht == high_test ? 1 : 0));
-      cfg.m_rng_agent_cfg.add_h_user_data(rng_val);
-    end
-  endtask // adaptp_ht_fail_seq
-
-  task bucket_ht_fail_seq(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                          bit[15:0] fips_thresh, bit[15:0] bypass_thresh);
-    ral.bucket_thresholds.fips_thresh.set(fips_thresh);
-    ral.bucket_thresholds.bypass_thresh.set(bypass_thresh);
-    csr_update(.csr(ral.bucket_thresholds));
-    // Turn on module_enable
-    csr_wr(.ptr(ral.module_enable), .value(prim_mubi_pkg::MuBi4True));
-    // Set rng_val
-    for (int i = 0; i < m_rng_push_seq.num_trans; i++) begin
-      rng_val = (i % 2 == 0 ? 5 : 10);
-      cfg.m_rng_agent_cfg.add_h_user_data(rng_val);
-    end
-  endtask // bucket_ht_fail_seq
-
-  task markov_ht_fail_seq(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                          bit[15:0] fips_thresh, bit[15:0] bypass_thresh);
-    ral.markov_hi_thresholds.fips_thresh.set(fips_thresh);
-    ral.markov_hi_thresholds.bypass_thresh.set(bypass_thresh);
-    csr_update(.csr(ral.markov_hi_thresholds));
-    ral.markov_lo_thresholds.fips_thresh.set(fips_thresh);
-    ral.markov_lo_thresholds.bypass_thresh.set(bypass_thresh);
-    csr_update(.csr(ral.markov_lo_thresholds));
-    // Turn on module_enable
-    csr_wr(.ptr(ral.module_enable), .value(prim_mubi_pkg::MuBi4True));
-    // Set rng_val
-    for (int i = 0; i < m_rng_push_seq.num_trans; i++) begin
-      rng_val = (i % 2 == 0 ? (cfg.which_ht == high_test ? 0 : 1) :
-                              (cfg.which_ht == high_test ? 1 : 0));
-      cfg.m_rng_agent_cfg.add_h_user_data(rng_val);
-    end
-  endtask // markov_ht_fail_seq
-
-  task force_fifo_err(string path1, string path2, bit value1, bit value2,
-                      uvm_reg_field reg_field, bit exp_data);
-    if (!uvm_hdl_check_path(path1)) begin
-      `uvm_fatal(`gfn, $sformatf("\n\t ----| PATH NOT FOUND"))
-    end else begin
-      `DV_CHECK(uvm_hdl_force(path1, value1));
-    end
-    if (!uvm_hdl_check_path(path2)) begin
-      `uvm_fatal(`gfn, $sformatf("\n\t ----| PATH NOT FOUND"))
-    end else begin
-      `DV_CHECK(uvm_hdl_force(path2, value2));
-    end
-    cfg.clk_rst_vif.wait_clks(50);
-    // Check register value
-    csr_spinwait(.ptr(reg_field), .exp_data(exp_data));
-    `DV_CHECK(uvm_hdl_release(path1));
-    `DV_CHECK(uvm_hdl_release(path2));
-  endtask // force_fifo_err
-
-  task force_fifo_err_exception(string paths [4], bit values [4],
-                                uvm_reg_field reg_field, bit exp_data);
-    string data_path = "tb.dut.u_entropy_src_core.sfifo_esrng_rdata";
-    foreach (paths[i]) begin
-      if (!uvm_hdl_check_path(paths[i])) begin
-        `uvm_fatal(`gfn, $sformatf("\n\t ----| PATH NOT FOUND"))
-      end else begin
-        `DV_CHECK(uvm_hdl_force(paths[i], values[i]));
-      end
-    end
-    if (!uvm_hdl_check_path(data_path)) begin
-      `uvm_fatal(`gfn, $sformatf("\n\t ----| PATH NOT FOUND"))
-    end else begin
-      `DV_CHECK(uvm_hdl_force(data_path, '0));
-    end
-    cfg.clk_rst_vif.wait_clks(50);
-    // Check register value
-    csr_spinwait(.ptr(reg_field), .exp_data(exp_data));
-    foreach (paths[i]) begin
-      `DV_CHECK(uvm_hdl_release(paths[i]));
-    end
-  endtask // force_fifo_err_exception
-
-  task force_path_err(string path, bit [15:0] value, uvm_reg_field reg_field, bit exp_data);
-    if (!uvm_hdl_check_path(path)) begin
-      `uvm_fatal(`gfn, $sformatf("\n\t ----| PATH NOT FOUND"))
-    end else begin
-      `DV_CHECK(uvm_hdl_force(path, value));
-      cfg.clk_rst_vif.wait_clks(50);
-      `DV_CHECK(uvm_hdl_release(path));
-      cfg.clk_rst_vif.wait_clks(50);
-      // Check err_code register
-      csr_rd_check(.ptr(reg_field), .compare_value(exp_data));
-    end
-  endtask // force_path_err
-
-  task window_cntr_err_test(uvm_reg_field reg_field);
-    string path = cfg.entropy_src_path_vif.cntr_err_path("window", cfg.which_cntr_replicate);
-    `DV_CHECK_STD_RANDOMIZE_FATAL(path_err_val)
-    // Force the path (up_cnt_q[1]) to stuck at a different value from up_cnt_q[0] to trigger
-    // the counter error
-    force_path_err(path, path_err_val, reg_field, 1'b1);
-  endtask // window_cntr_err_test
-
-  task repcnt_ht_cntr_test(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                           uvm_reg_field reg_field);
-    string path;
-    `DV_CHECK_STD_RANDOMIZE_FATAL(path_err_val)
-    // Set a low threshold to introduce ht fails
-    ral.repcnt_thresholds.fips_thresh.set(16'h0008);
-    ral.repcnt_thresholds.bypass_thresh.set(16'h0008);
-    csr_update(.csr(ral.repcnt_thresholds));
-    repcnt_ht_fail_seq(m_rng_push_seq);
-    m_rng_push_seq.start(p_sequencer.rng_sequencer_h);
-    cfg.clk_rst_vif.wait_clks(100);
-    // Force repcnt ht counter err
-    path = cfg.entropy_src_path_vif.cntr_err_path("repcnt_ht", cfg.which_cntr_replicate);
-    // Force the path (up_cnt_q[1]) to stuck at a different value from up_cnt_q[0] to trigger
-    // the counter error
-    force_path_err(path, path_err_val, reg_field, 1'b1);
-    // Write the threshold back to a high value
-    ral.repcnt_thresholds.fips_thresh.set(16'hfffe);
-    ral.repcnt_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.repcnt_thresholds));
-  endtask // repcnt_ht_cntr_test
-
-  task repcnts_ht_cntr_test(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                            uvm_reg_field reg_field);
-    string path;
-    `DV_CHECK_STD_RANDOMIZE_FATAL(path_err_val)
-    // Set a low threshold to introduce ht fails
-    ral.repcnts_thresholds.fips_thresh.set(16'h0008);
-    ral.repcnts_thresholds.bypass_thresh.set(16'h0008);
-    csr_update(.csr(ral.repcnts_thresholds));
-    repcnt_ht_fail_seq(m_rng_push_seq);
-    m_rng_push_seq.start(p_sequencer.rng_sequencer_h);
-    cfg.clk_rst_vif.wait_clks(100);
-    // Force repcnts ht counter err
-    path = cfg.entropy_src_path_vif.cntr_err_path("repcnts_ht", cfg.which_cntr_replicate);
-    // Force the path (up_cnt_q[1]) to stuck at a different value from up_cnt_q[0] to trigger
-    // the counter error
-    force_path_err(path, path_err_val, reg_field, 1'b1);
-    // Write the threshold back to a high value
-    ral.repcnts_thresholds.fips_thresh.set(16'hfffe);
-    ral.repcnts_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.repcnts_thresholds));
-  endtask // repcnts_ht_cntr_test
-
-  task adaptp_ht_cntr_test(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                           uvm_reg_field reg_field);
-    string path;
-    bit [15:0] fips_thresh = 16'h0008;
-    bit [15:0] bypass_thresh = 16'h0008;
-    `DV_CHECK_STD_RANDOMIZE_FATAL(path_err_val)
-    adaptp_ht_fail_seq(m_rng_push_seq, fips_thresh, bypass_thresh);
-    // Start the sequence
-    m_rng_push_seq.start(p_sequencer.rng_sequencer_h);
-    cfg.clk_rst_vif.wait_clks(100);
-    // Force adaptp ht counter err
-    path = cfg.entropy_src_path_vif.cntr_err_path("adaptp_ht", cfg.which_cntr_replicate);
-    // Force the path (up_cnt_q[1]) to stuck at a different value from up_cnt_q[0] to trigger
-    // the counter error
-    force_path_err(path, path_err_val, reg_field, 1'b1);
-    // Write the threshold back to a high value
-    ral.adaptp_hi_thresholds.fips_thresh.set(16'hfffe);
-    ral.adaptp_hi_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.adaptp_hi_thresholds));
-    ral.adaptp_lo_thresholds.fips_thresh.set(16'hfffe);
-    ral.adaptp_lo_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.adaptp_lo_thresholds));
-  endtask // adaptp_ht_cntr_test
-
-  task bucket_ht_cntr_test(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                           uvm_reg_field reg_field);
-    string path;
-    bit [15:0] fips_thresh = 16'h0008;
-    bit [15:0] bypass_thresh = 16'h0008;
-    `DV_CHECK_STD_RANDOMIZE_FATAL(path_err_val)
-    fips_thresh = 16'h0008;
-    bypass_thresh = 16'h0008;
-    bucket_ht_fail_seq(m_rng_push_seq, fips_thresh, bypass_thresh);
-    m_rng_push_seq.start(p_sequencer.rng_sequencer_h);
-    cfg.clk_rst_vif.wait_clks(100);
-    // Force bucket ht counter err
-    path = cfg.entropy_src_path_vif.cntr_err_path("bucket_ht", cfg.which_bin);
-    // Force the path (up_cnt_q[1]) to stuck at a different value from up_cnt_q[0] to trigger
-    // the counter error
-    force_path_err(path, path_err_val, reg_field, 1'b1);
-    // Write the threshold back to a high value
-    ral.bucket_thresholds.fips_thresh.set(16'hfffe);
-    ral.bucket_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.bucket_thresholds));
-  endtask // bucket_ht_cntr_test
-
-  task markov_ht_cntr_test(push_pull_host_seq#(entropy_src_pkg::RNG_BUS_WIDTH) m_rng_push_seq,
-                           uvm_reg_field reg_field);
-    string path;
-    bit [15:0] fips_thresh = 16'h0008;
-    bit [15:0] bypass_thresh = 16'h0008;
-    `DV_CHECK_STD_RANDOMIZE_FATAL(path_err_val)
-
-    fips_thresh = 16'h0008;
-    bypass_thresh = 16'h0008;
-    markov_ht_fail_seq(m_rng_push_seq, fips_thresh, bypass_thresh);
-    // Start the sequence
-    m_rng_push_seq.start(p_sequencer.rng_sequencer_h);
-    cfg.clk_rst_vif.wait_clks(100);
-    // Force markov ht counter err
-    path = cfg.entropy_src_path_vif.cntr_err_path("markov_ht", cfg.which_cntr_replicate);
-    // Force the path (up_cnt_q[1]) to stuck at a different value from up_cnt_q[0] to trigger
-    // the counter error
-    force_path_err(path, path_err_val, reg_field, 1'b1);
-    // Write the threshold back to a high value
-    ral.markov_hi_thresholds.fips_thresh.set(16'hfffe);
-    ral.markov_hi_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.markov_hi_thresholds));
-    ral.markov_lo_thresholds.fips_thresh.set(16'hfffe);
-    ral.markov_lo_thresholds.bypass_thresh.set(16'hfffe);
-    csr_update(.csr(ral.markov_lo_thresholds));
-  endtask // markov_ht_cntr_test
-
-  // Find the first or last index in the original string that the target character appears
-  function automatic int find_index (string target, string original_str, string which_index);
-    int        index;
-    case (which_index)
-      "first": begin
-        for (int i = original_str.len(); i > 0; i--) begin
-          if (original_str[i] == target) index = i;
-        end
-      end
-      "last": begin
-        for (int i = 0; i < original_str.len(); i++) begin
-          if (original_str[i] == target) index = i;
-        end
-      end
-      default: begin
-        `uvm_fatal(`gfn, "Invalid index!")
-      end
-    endcase // case (which_index)
-    return index;
-  endfunction // find_index
 endclass : entropy_src_base_vseq

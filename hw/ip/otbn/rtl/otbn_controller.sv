@@ -26,7 +26,7 @@ module otbn_controller
   input  logic start_i,  // start the processing at address zero
   output logic locked_o, // OTBN in locked state and must be reset to perform any further actions
 
-  output err_bits_t err_bits_o,           // valid when start_secure_wipe_o is asserted
+  output err_bits_t err_bits_o,           // valid when done_o is asserted
   output logic      recoverable_err_o,
   output logic      reg_intg_violation_o,
 
@@ -135,7 +135,6 @@ module otbn_controller
   input  logic        state_reset_i,
   output logic [31:0] insn_cnt_o,
   input  logic        insn_cnt_clear_i,
-  output logic        mems_sec_wipe_o,
   input  logic        bus_intg_violation_i,
   input  logic        illegal_bus_access_i,
   input  logic        lifecycle_escalation_i,
@@ -201,7 +200,6 @@ module otbn_controller
 
   logic lsu_load_req_raw;
   logic lsu_store_req_raw;
-  logic rnd_req_raw;
 
   // Register read data with integrity stripped off
   logic [31:0]     rf_base_rd_data_a_no_intg;
@@ -267,7 +265,7 @@ module otbn_controller
   assign mem_stall = lsu_load_req_raw;
 
   // Reads to RND must stall until data is available
-  assign ispr_stall = rnd_req_raw & ~rnd_valid_i;
+  assign ispr_stall = rnd_req_o & ~rnd_valid_i;
 
   assign stall = mem_stall | ispr_stall;
 
@@ -283,7 +281,7 @@ module otbn_controller
                      (state_q == OtbnStateRun) ||
                      (state_q == OtbnStateStall);
 
-  assign locked_o = (state_q == OtbnStateLocked) & ~secure_wipe_running_i;
+  assign locked_o = state_q == OtbnStateLocked;
   assign start_secure_wipe_o = executing & (done_complete | err) & ~secure_wipe_running_i;
 
   assign jump_or_branch = (insn_valid_i &
@@ -486,7 +484,6 @@ module otbn_controller
   assign recoverable_err = software_err & ~software_errs_fatal_i;
 
   assign reg_intg_violation_o = err_bits.reg_intg_violation;
-  assign mems_sec_wipe_o = (state_d == OtbnStateLocked) & (state_q != OtbnStateLocked);
 
   if (SecWipeEn) begin : gen_sec_wipe
     err_bits_t err_bits_d, err_bits_q;
@@ -1115,9 +1112,8 @@ module otbn_controller
                                                                dmem_addr_unaligned_bignum |
                                                                dmem_addr_unaligned_base);
 
-  assign rnd_req_raw = insn_valid_i & ispr_rd_insn & (ispr_addr_o == IsprRnd);
-  assign rnd_req_o = rnd_req_raw & insn_executing;
+  assign rnd_req_o = insn_valid_i & ispr_rd_insn & (ispr_addr_o == IsprRnd);
 
-  assign rnd_prefetch_req_o = insn_executing & ispr_wr_insn &
+  assign rnd_prefetch_req_o = insn_valid_i & ispr_wr_insn &
       (insn_dec_shared_i.subset == InsnSubsetBase) & (csr_addr == CsrRndPrefetch);
 endmodule

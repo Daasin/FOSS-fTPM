@@ -16,9 +16,7 @@ interface jtag_if #(time JtagDefaultTckPeriodNs = 20ns) ();
   bit   tck_en;
   time  tck_period_ns = JtagDefaultTckPeriodNs;
 
-  // Use negedge to drive jtag inputs because design also use posedge clock edge to sample.
   clocking host_cb @(posedge tck);
-    default output #1ns;
     output  tms;
     output  tdi;
     input   tdo;
@@ -43,16 +41,14 @@ interface jtag_if #(time JtagDefaultTckPeriodNs = 20ns) ();
 
   // task to wait for tck cycles
   task automatic wait_tck(int cycles);
-    repeat (cycles) begin
-      if (tck_en) @(posedge tck);
-      else        #(tck_period_ns * 1ns);
-    end
+    repeat (cycles) @(posedge tck);
   endtask
 
   // task to issue trst_n
-  task automatic do_trst_n(int cycles = $urandom_range(5, 20));
+  task automatic do_trst_n(int cycles);
     trst_n <= 1'b0;
-    wait_tck(cycles);
+    if (tck_en) wait_tck(cycles);
+    else        #(tck_period_ns * cycles * 1ns);
     trst_n <= 1'b1;
   endtask
 

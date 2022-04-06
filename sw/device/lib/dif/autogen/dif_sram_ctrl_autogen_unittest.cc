@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "sram_ctrl_regs.h"  // Generated.
 
@@ -29,31 +28,32 @@ class SramCtrlTest : public Test, public MmioTest {
 class InitTest : public SramCtrlTest {};
 
 TEST_F(InitTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_sram_ctrl_init(dev().region(), nullptr));
+  EXPECT_EQ(dif_sram_ctrl_init(dev().region(), nullptr), kDifBadArg);
 }
 
 TEST_F(InitTest, Success) {
-  EXPECT_DIF_OK(dif_sram_ctrl_init(dev().region(), &sram_ctrl_));
+  EXPECT_EQ(dif_sram_ctrl_init(dev().region(), &sram_ctrl_), kDifOk);
 }
 
 class AlertForceTest : public SramCtrlTest {};
 
 TEST_F(AlertForceTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_sram_ctrl_alert_force(nullptr, kDifSramCtrlAlertFatalError));
+  EXPECT_EQ(dif_sram_ctrl_alert_force(nullptr, kDifSramCtrlAlertFatalError),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, BadAlert) {
-  EXPECT_DIF_BADARG(dif_sram_ctrl_alert_force(
-      nullptr, static_cast<dif_sram_ctrl_alert_t>(32)));
+  EXPECT_EQ(dif_sram_ctrl_alert_force(nullptr,
+                                      static_cast<dif_sram_ctrl_alert_t>(32)),
+            kDifBadArg);
 }
 
 TEST_F(AlertForceTest, Success) {
   // Force first alert.
   EXPECT_WRITE32(SRAM_CTRL_ALERT_TEST_REG_OFFSET,
                  {{SRAM_CTRL_ALERT_TEST_FATAL_ERROR_BIT, true}});
-  EXPECT_DIF_OK(
-      dif_sram_ctrl_alert_force(&sram_ctrl_, kDifSramCtrlAlertFatalError));
+  EXPECT_EQ(dif_sram_ctrl_alert_force(&sram_ctrl_, kDifSramCtrlAlertFatalError),
+            kDifOk);
 }
 
 }  // namespace

@@ -14,7 +14,7 @@ module aes_control_fsm_p
   import aes_pkg::*;
   import aes_reg_pkg::*;
 #(
-  parameter bit SecMasking = 0
+  parameter bit Masking = 0
 ) (
   input  logic                                    clk_i,
   input  logic                                    rst_ni,
@@ -326,7 +326,7 @@ module aes_control_fsm_p
   /////////////////
 
   aes_control_fsm #(
-    .SecMasking ( SecMasking )
+    .Masking ( Masking )
   ) u_aes_control_fsm (
     .clk_i                     ( clk_i                         ),
     .rst_ni                    ( rst_ni                        ),

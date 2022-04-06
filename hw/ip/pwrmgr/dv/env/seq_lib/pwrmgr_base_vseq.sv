@@ -91,7 +91,6 @@ class pwrmgr_base_vseq extends cip_base_vseq #(
   // This static variable is incremented in each pre_start and decremented in each post_start.
   // It is used to start and stop the responders when the parent sequence starts and ends.
   local static int sequence_depth = 0;
-  pwrmgr_mubi_e mubi_mode;
 
   // This stops randomizing cycles counts that select from a pipeline, since
   // changes can lead to missing or unexpected transitions.
@@ -102,24 +101,8 @@ class pwrmgr_base_vseq extends cip_base_vseq #(
     cycles_before_main_pok.rand_mode(0);
   endtask
 
-  // Disable exclusions for CONTROL.USB_CLK_EN_ACTIVE and RESET_EN: they are meant for full-chip only.
-  function void disable_unnecessary_exclusions();
-    csr_excl_item csr_excl = ral.get_excl_item();
-    `uvm_info(`gfn, "Dealing with exclusions", UVM_MEDIUM)
-    csr_excl.enable_excl(.obj("pwrmgr_reg_block.control.usb_clk_en_active"), .enable(1'b0));
-    csr_excl.enable_excl(.obj("pwrmgr_reg_block.reset_en"), .enable(1'b0));
-    csr_excl.print_exclusions(UVM_MEDIUM);
-  endfunction
-
-  virtual task pre_start();
-    cfg.pwrmgr_vif.lc_hw_debug_en = lc_ctrl_pkg::Off;
-    cfg.pwrmgr_vif.lc_dft_en = lc_ctrl_pkg::Off;
-    mubi_mode = PwrmgrMubiNone;
-    void'($value$plusargs("pwrmgr_mubi_mode=%0d", mubi_mode));
-    `uvm_info(`gfn, $sformatf("pwrmgr mubi mode : %s", mubi_mode.name()), UVM_MEDIUM)
-
+  task pre_start();
     if (do_pwrmgr_init) pwrmgr_init();
-    disable_unnecessary_exclusions();
     cfg.slow_clk_rst_vif.wait_for_reset(.wait_negedge(0));
     stop_randomizing_cycles();
     fork
@@ -177,17 +160,12 @@ class pwrmgr_base_vseq extends cip_base_vseq #(
         // A short slow clock reset should suffice.
         cfg.slow_clk_rst_vif.apply_reset(.pre_reset_dly_clks(0), .reset_width_clks(5));
       end
-      begin
-        cfg.esc_clk_rst_vif.apply_reset();
-      end
     join
   endtask
 
   virtual task apply_resets_concurrently(int reset_duration_ps = 0);
     cfg.slow_clk_rst_vif.drive_rst_pin(0);
-    cfg.esc_clk_rst_vif.drive_rst_pin(0);
     super.apply_resets_concurrently(cfg.slow_clk_rst_vif.clk_period_ps);
-    cfg.esc_clk_rst_vif.drive_rst_pin(1);
     cfg.slow_clk_rst_vif.drive_rst_pin(1);
   endtask
 
@@ -202,7 +180,6 @@ class pwrmgr_base_vseq extends cip_base_vseq #(
               cfg.slow_clk_rst_vif.clk_freq_mhz,
               cfg.slow_clk_rst_vif.clk_period_ps
               ), UVM_MEDIUM)
-    cfg.esc_clk_rst_vif.set_freq_mhz(cfg.clk_rst_vif.clk_freq_mhz);
     control_assertions(0);
   endtask
 
@@ -493,7 +470,7 @@ class pwrmgr_base_vseq extends cip_base_vseq #(
     `uvm_info(`gfn, $sformatf("Observed reset cause_match 0x%x", cause), UVM_MEDIUM)
   endtask
 
-  virtual task wait_for_csr_to_propagate_to_slow_domain();
+  task wait_for_csr_to_propagate_to_slow_domain();
     csr_wr(.ptr(ral.cfg_cdc_sync), .value(1'b1));
     csr_spinwait(.ptr(ral.cfg_cdc_sync), .exp_data(1'b0),
                  .timeout_ns(PropagationToSlowTimeoutInNanoSeconds));
@@ -551,22 +528,5 @@ class pwrmgr_base_vseq extends cip_base_vseq #(
     `uvm_info(`gfn, "Clearing escalation reset", UVM_MEDIUM)
     cfg.m_esc_agent_cfg.vif.sender_cb.esc_tx_int <= 2'b01;
   endfunction
-
-  // bad_bits = {done, good}
-  task add_rom_rsp_noise();
-    bit[MUBI4W*2-1:0] bad_bits;
-    int delay;
-
-    repeat(10) begin
-      delay = $urandom_range(5, 10);
-      `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(bad_bits,
-                                         bad_bits[MUBI4W*2-1:MUBI4W] != prim_mubi_pkg::MuBi4True;
-                                         bad_bits[MUBI4W*2-1:MUBI4W] != prim_mubi_pkg::MuBi4False;
-                                         bad_bits[MUBI4W-1:0] != prim_mubi_pkg::MuBi4False;
-                                         bad_bits[MUBI4W-1:0] != prim_mubi_pkg::MuBi4True;)
-      cfg.pwrmgr_vif.rom_ctrl = bad_bits;
-      #(delay * 10ns);
-    end
-  endtask // add_rom_rsp_nose
 
 endclass : pwrmgr_base_vseq

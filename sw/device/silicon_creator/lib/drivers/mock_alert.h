@@ -5,7 +5,6 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_DRIVERS_MOCK_ALERT_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_DRIVERS_MOCK_ALERT_H_
 
-#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/silicon_creator/lib/drivers/alert.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
 
@@ -15,7 +14,7 @@ namespace internal {
 /**
  * Mock class for alert.c.
  */
-class MockAlert : public global_mock::GlobalMock<MockAlert> {
+class MockAlert : public GlobalMock<MockAlert> {
  public:
   MOCK_METHOD(rom_error_t, alert_configure,
               (size_t, alert_class_t, alert_enable_t));

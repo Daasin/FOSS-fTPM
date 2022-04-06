@@ -744,6 +744,6 @@ dptr_y:
 dptr_d:
   .zero 4
 
-/* Scratchpad memory */
+/* 768 bytes of scratchpad memory */
 scratchpad:
   .zero 896

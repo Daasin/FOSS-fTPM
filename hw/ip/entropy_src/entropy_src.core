@@ -14,7 +14,6 @@ filesets:
       - lowrisc:prim:lfsr
       - lowrisc:prim:sparse_fsm
       - lowrisc:prim:max_tree
-      - lowrisc:prim:sum_tree
       - lowrisc:ip:tlul
       - lowrisc:ip:sha3
       - lowrisc:ip:otp_ctrl_pkg

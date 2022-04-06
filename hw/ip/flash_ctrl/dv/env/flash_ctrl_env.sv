@@ -42,6 +42,7 @@ class flash_ctrl_env #(
         end
       end
     end
+
   endfunction
 
   virtual function void connect_phase(uvm_phase phase);

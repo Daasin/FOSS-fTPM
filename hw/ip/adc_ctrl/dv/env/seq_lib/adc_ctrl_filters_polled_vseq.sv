@@ -14,15 +14,9 @@ class adc_ctrl_filters_polled_vseq extends adc_ctrl_base_vseq;
   virtual task pre_start();
     super.pre_start();
     fork
-      check_adc_ctrl_status();
+      check_filter_status();
     join_none
-    cfg.testmode = AdcCtrlTestmodeNormal;
-  endtask
-
-  virtual task post_start();
-    super.post_start();
-    // Kill background processes
-    disable check_adc_ctrl_status;
+    cfg.testmode = AdcCtrlNormal;
   endtask
 
   virtual task body();
@@ -33,11 +27,6 @@ class adc_ctrl_filters_polled_vseq extends adc_ctrl_base_vseq;
 
       // Make sure ADC is off
       csr_wr(ral.adc_en_ctl, 'h0);
-
-      // Sample coverage
-      if (cfg.en_cov) begin
-        cov.sample_cfg_cov();
-      end
 
       // Set up the adc_ctrl registers
       configure_adc_ctrl();
@@ -51,26 +40,8 @@ class adc_ctrl_filters_polled_vseq extends adc_ctrl_base_vseq;
 
       // Start ADC
       ral.adc_en_ctl.adc_enable.set(1);
-      case (cfg.testmode)
-        AdcCtrlTestmodeOneShot: begin
-          ral.adc_en_ctl.oneshot_mode.set(1);
-          ral.adc_pd_ctl.lp_mode.set(0);
-        end
-        AdcCtrlTestmodeNormal: begin
-          ral.adc_en_ctl.oneshot_mode.set(0);
-          ral.adc_pd_ctl.lp_mode.set(0);
-        end
-        AdcCtrlTestmodeLowpower: begin
-          ral.adc_en_ctl.oneshot_mode.set(0);
-          ral.adc_pd_ctl.lp_mode.set(1);
-        end
-        default: `uvm_fatal(`gfn, "Undefined test mode")
-      endcase
-      csr_wr(ral.adc_pd_ctl, ral.adc_pd_ctl.get());
+      ral.adc_en_ctl.oneshot_mode.set(0);
       csr_wr(ral.adc_en_ctl, ral.adc_en_ctl.get());
-
-      // Hook to do things immediately after the adc_ctrl is enabled
-      post_adc_ctrl_enable();
 
       // Send randomized ramp on all channels - rising
       `uvm_create_obj(adc_ctrl_random_ramp_vseq, random_ramp_vseq)
@@ -103,19 +74,13 @@ class adc_ctrl_filters_polled_vseq extends adc_ctrl_base_vseq;
       // Now turn off ADC_CTRL
       adc_ctrl_off();
 
-      // FSM reset to synchronise RTL & model
-      do_adc_fsm_reset();
-
-      // Re-randomize configuration if enabled
-      if (!cfg.filters_fixed) `DV_CHECK_RANDOMIZE_FATAL(cfg);
-
     end
     // A short delay to allow all CDC to complete
-    cfg.clk_aon_rst_vif.wait_clks($urandom_range(10, 15));
+    cfg.clk_aon_rst_vif.wait_clks($urandom_range(3, 5));
   endtask : body
 
-  // Check the status registers after every ADC sample (all channels)
-  virtual task check_adc_ctrl_status();
+  // Check the filter status register after every ADC sample (all channels)
+  virtual task check_filter_status();
     uvm_reg_data_t rdata;
     forever begin
       // Wait for all channels
@@ -128,10 +93,6 @@ class adc_ctrl_filters_polled_vseq extends adc_ctrl_base_vseq;
         csr_wr(ral.filter_status, $urandom());
       end
     end
-  endtask
-
-  // Hook to do things immediately after the adc_ctrl is enabled
-  virtual task post_adc_ctrl_enable();
   endtask
 
 endclass : adc_ctrl_filters_polled_vseq

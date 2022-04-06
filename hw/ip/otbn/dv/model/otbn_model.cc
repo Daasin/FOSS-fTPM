@@ -19,18 +19,17 @@
 #include "sv_utils.h"
 
 extern "C" {
-int otbn_rf_peek(int index, svBitVecVal *val);
-int otbn_stack_element_peek(int index, svBitVecVal *val);
+// These functions are only implemented if DesignScope != "", i.e. if we're
+// running a block-level simulation. Code needs to check at runtime if
+// otbn_rf_peek() and otbn_stack_element_peek() are available before calling
+// them.
+int otbn_rf_peek(int index, svBitVecVal *val) __attribute__((weak));
+int otbn_stack_element_peek(int index, svBitVecVal *val) __attribute__((weak));
 }
 
 #define RUNNING_BIT (1U << 0)
 #define CHECK_DUE_BIT (1U << 1)
 #define FAILED_STEP_BIT (1U << 2)
-
-// Values come from otbn_pkg to signify the value for specific operations.
-#define CMD_EXECUTE 0xD8
-#define CMD_SECWIPE_DMEM 0xC3
-#define CMD_SECWIPE_IMEM 0x1E
 
 // Read (the start of) the contents of a file at path as a vector of bytes.
 // Expects num_bytes bytes of data. On failure, throws a std::runtime_error.
@@ -125,6 +124,11 @@ static std::array<T, 32> get_rtl_regs(const std::string &reg_scope) {
   // 32/sizeof(svBitVecVal) words on the stack.
   svBitVecVal buf[256 / 8 / sizeof(svBitVecVal)];
 
+  // The implementation of otbn_rf_peek() is only available if DesignScope != ""
+  // (the function is implemented in SystemVerilog, and imported through DPI).
+  // We should not reach the code here if that's the case.
+  assert(otbn_rf_peek);
+
   for (int i = 0; i < 32; ++i) {
     if (!otbn_rf_peek(i, buf)) {
       std::ostringstream oss;
@@ -149,6 +153,12 @@ static std::vector<T> get_stack(const std::string &stack_scope) {
   // (for a "bit [255:0]" argument). Allocate 256 bits (= 32 bytes) as
   // 32/sizeof(svBitVecVal) words on the stack.
   svBitVecVal buf[256 / 8 / sizeof(svBitVecVal)];
+
+  // The implementation of otbn_stack_element_peek() is only available if
+  // DesignScope != "" (the function is implemented in SystemVerilog, and
+  // imported through DPI).  We should not reach the code here if that's the
+  // case.
+  assert(otbn_stack_element_peek);
 
   int i = 0;
 
@@ -187,9 +197,7 @@ OtbnModel::OtbnModel(const std::string &mem_scope,
                      const std::string &design_scope, bool enable_secure_wipe)
     : mem_util_(mem_scope),
       design_scope_(design_scope),
-      enable_secure_wipe_(enable_secure_wipe) {
-  assert(mem_scope.size() && design_scope.size());
-}
+      enable_secure_wipe_(enable_secure_wipe) {}
 
 OtbnModel::~OtbnModel() {}
 
@@ -223,6 +231,8 @@ int OtbnModel::take_loop_warps(const OtbnMemUtil &memutil) {
 }
 
 int OtbnModel::start() {
+  const MemArea &imem = mem_util_.GetMemArea(true);
+
   ISSWrapper *iss = ensure_wrapper();
   if (!iss)
     return -1;
@@ -250,36 +260,6 @@ int OtbnModel::start() {
   return 0;
 }
 
-int OtbnModel::dmem_wipe() {
-  ISSWrapper *iss = ensure_wrapper();
-  if (!iss)
-    return -1;
-
-  try {
-    iss->dmem_wipe();
-  } catch (const std::runtime_error &err) {
-    std::cerr << "Error when stepping DMEM wipe: " << err.what() << "\n";
-    return -1;
-  }
-
-  return 0;
-}
-
-int OtbnModel::imem_wipe() {
-  ISSWrapper *iss = ensure_wrapper();
-  if (!iss)
-    return -1;
-
-  try {
-    iss->imem_wipe();
-  } catch (const std::runtime_error &err) {
-    std::cerr << "Error when stepping IMEM wipe: " << err.what() << "\n";
-    return -1;
-  }
-
-  return 0;
-}
-
 void OtbnModel::edn_flush() {
   ISSWrapper *iss = ensure_wrapper();
 
@@ -298,9 +278,9 @@ void OtbnModel::edn_urnd_step(svLogicVecVal *edn_urnd_data /* logic [31:0] */) {
   iss->edn_urnd_step(edn_urnd_data->aval);
 }
 
-int OtbnModel::set_keymgr_value(svLogicVecVal *key0 /* logic [383:0] */,
-                                svLogicVecVal *key1 /* logic [383:0] */,
-                                unsigned char valid) {
+void OtbnModel::set_keymgr_value(svLogicVecVal *key0 /* logic [383:0] */,
+                                 svLogicVecVal *key1 /* logic [383:0] */,
+                                 unsigned char valid) {
   ISSWrapper *iss = ensure_wrapper();
 
   std::array<uint32_t, 12> key0_arr;
@@ -311,14 +291,7 @@ int OtbnModel::set_keymgr_value(svLogicVecVal *key0 /* logic [383:0] */,
     key1_arr[i] = key1[i].aval;
   }
 
-  try {
-    iss->set_keymgr_value(key0_arr, key1_arr, valid != 0);
-  } catch (const std::runtime_error &err) {
-    std::cerr << "Error when setting keymgr value: " << err.what() << "\n";
-    return -1;
-  }
-
-  return 0;
+  iss->set_keymgr_value(key0_arr, key1_arr, valid != 0);
 }
 
 void OtbnModel::edn_urnd_cdc_done() {
@@ -329,11 +302,6 @@ void OtbnModel::edn_urnd_cdc_done() {
 void OtbnModel::edn_rnd_cdc_done() {
   ISSWrapper *iss = ensure_wrapper();
   iss->edn_rnd_cdc_done();
-}
-
-void OtbnModel::otp_key_cdc_done() {
-  ISSWrapper *iss = ensure_wrapper();
-  iss->otp_key_cdc_done();
 }
 
 int OtbnModel::step(svBitVecVal *status /* bit [7:0] */,
@@ -402,16 +370,11 @@ int OtbnModel::check() const {
 
   good &= OtbnTraceChecker::get().Finish();
 
-  // Check DMEM only when we are about to start Secure Wipe because otherwise
-  // we would not have a valid scrambling key anymore. That would result with
-  // not getting a valid nonce and therefore an error.
-  if (iss->get_mirrored().wipe_start) {
-    try {
-      good &= check_dmem(*iss);
-    } catch (const std::exception &err) {
-      std::cerr << "Failed to check DMEM: " << err.what() << "\n";
-      return -1;
-    }
+  try {
+    good &= check_dmem(*iss);
+  } catch (const std::exception &err) {
+    std::cerr << "Failed to check DMEM: " << err.what() << "\n";
+    return -1;
   }
 
   try {
@@ -490,7 +453,7 @@ int OtbnModel::step_crc(const svBitVecVal *item /* bit [47:0] */,
     return -1;
 
   std::array<uint8_t, 6> item_arr;
-  for (size_t i = 0; i < item_arr.size(); ++i) {
+  for (int i = 0; i < item_arr.size(); ++i) {
     item_arr[i] = item[i / 4] >> 8 * (i % 4);
   }
   uint32_t state32 = state[0];
@@ -626,6 +589,8 @@ bool OtbnModel::check_dmem(ISSWrapper &iss) const {
 }
 
 bool OtbnModel::check_regs(ISSWrapper &iss) const {
+  assert(design_scope_.size());
+
   std::string base_scope =
       design_scope_ +
       ".u_otbn_rf_base.gen_rf_base_ff.u_otbn_rf_base_inner.u_snooper";
@@ -685,6 +650,8 @@ bool OtbnModel::check_regs(ISSWrapper &iss) const {
 }
 
 bool OtbnModel::check_call_stack(ISSWrapper &iss) const {
+  assert(design_scope_.size());
+
   std::string call_stack_snooper_scope =
       design_scope_ + ".u_otbn_rf_base.u_call_stack_snooper";
 
@@ -741,59 +708,35 @@ void edn_model_urnd_step(OtbnModel *model,
   model->edn_urnd_step(edn_urnd_data);
 }
 
-void otp_key_cdc_done(OtbnModel *model) { model->otp_key_cdc_done(); }
-
 void edn_model_rnd_cdc_done(OtbnModel *model) { model->edn_rnd_cdc_done(); }
 
 void edn_model_urnd_cdc_done(OtbnModel *model) { model->edn_urnd_cdc_done(); }
 
-unsigned otbn_model_step(OtbnModel *model, unsigned model_state,
-                         svBitVecVal *cmd /* bit [7:0] */,
+unsigned otbn_model_step(OtbnModel *model, svLogic start, unsigned model_state,
                          svBitVecVal *status /* bit [7:0] */,
                          svBitVecVal *insn_cnt /* bit [31:0] */,
                          svBitVecVal *rnd_req /* bit [0:0] */,
                          svBitVecVal *err_bits /* bit [31:0] */,
                          svBitVecVal *stop_pc /* bit [31:0] */) {
   assert(model && status && insn_cnt && err_bits && stop_pc);
+  assert(!is_xz(start));
 
   // Clear any check due bit (we hopefully ran the check on the previous
   // negedge)
   model_state = model_state & ~CHECK_DUE_BIT;
 
-  int result;
-  unsigned new_state_bits;
+  // Start the model if requested
+  if (start) {
+    switch (model->start()) {
+      case 0:
+        // All good
+        model_state |= RUNNING_BIT;
+        break;
 
-  switch (*cmd) {
-    case CMD_EXECUTE:
-      result = model->start();
-      new_state_bits = RUNNING_BIT;
-      break;
-    case CMD_SECWIPE_DMEM:
-      result = model->dmem_wipe();
-      new_state_bits = RUNNING_BIT;
-      break;
-    case CMD_SECWIPE_IMEM:
-      result = model->imem_wipe();
-      new_state_bits = RUNNING_BIT;
-      break;
-    default:
-      result = 0;
-      new_state_bits = 0;
-      break;
-  }
-
-  switch (result) {
-    case 0:
-      // Starting an operation succeeded. Set any required bits in the
-      // state.
-      model_state |= new_state_bits;
-      break;
-
-    default:
-      // Something went wrong in the model when starting the operation.
-      // Stop running and set FAILED_STEP_BIT to signal the error back
-      // to the SV side.
-      return (model_state & ~RUNNING_BIT) | FAILED_STEP_BIT;
+      default:
+        // Something went wrong.
+        return (model_state & ~RUNNING_BIT) | FAILED_STEP_BIT;
+    }
   }
 
   // Step the model once
@@ -878,10 +821,10 @@ void otbn_take_loop_warps(OtbnModel *model, OtbnMemUtil *memutil) {
   model->take_loop_warps(*memutil);
 }
 
-int otbn_model_set_keymgr_value(OtbnModel *model, svLogicVecVal *key0,
-                                svLogicVecVal *key1, unsigned char valid) {
+void otbn_model_set_keymgr_value(OtbnModel *model, svLogicVecVal *key0,
+                                 svLogicVecVal *key1, unsigned char valid) {
   assert(model && key0 && key1);
-  return model->set_keymgr_value(key0, key1, valid);
+  model->set_keymgr_value(key0, key1, valid);
 }
 
 int otbn_model_send_lc_escalation(OtbnModel *model) {

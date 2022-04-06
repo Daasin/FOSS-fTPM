@@ -910,17 +910,6 @@ module trial1_reg_top (
 
 
   // R[rwtype5]: V(False)
-  logic rwtype5_qe;
-  logic [0:0] rwtype5_flds_we;
-  prim_flop #(
-    .Width(1),
-    .ResetValue(0)
-  ) u_rwtype50_qe (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .d_i(&rwtype5_flds_we),
-    .q_o(rwtype5_qe)
-  );
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -938,19 +927,15 @@ module trial1_reg_top (
     .d      (hw2reg.rwtype5.d),
 
     // to internal hardware
-    .qe     (rwtype5_flds_we[0]),
+    .qe     (reg2hw.rwtype5.qe),
     .q      (reg2hw.rwtype5.q),
 
     // to register interface (read)
     .qs     (rwtype5_qs)
   );
-  assign reg2hw.rwtype5.qe = rwtype5_qe;
 
 
   // R[rwtype6]: V(True)
-  logic rwtype6_qe;
-  logic [0:0] rwtype6_flds_we;
-  assign rwtype6_qe = &rwtype6_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_rwtype6 (
@@ -959,11 +944,10 @@ module trial1_reg_top (
     .wd     (rwtype6_wd),
     .d      (hw2reg.rwtype6.d),
     .qre    (),
-    .qe     (rwtype6_flds_we[0]),
+    .qe     (reg2hw.rwtype6.qe),
     .q      (reg2hw.rwtype6.q),
     .qs     (rwtype6_qs)
   );
-  assign reg2hw.rwtype6.qe = rwtype6_qe;
 
 
   // R[rotype1]: V(True)

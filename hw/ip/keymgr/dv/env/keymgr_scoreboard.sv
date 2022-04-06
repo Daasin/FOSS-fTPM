@@ -554,6 +554,20 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
             case (current_state)
               keymgr_pkg::StReset: begin
                 if (op == keymgr_pkg::OpAdvance) begin
+                  key_shares_t otp_key;
+                  if (cfg.keymgr_vif.otp_key.valid) begin
+                    otp_key = {cfg.keymgr_vif.otp_key.key_share1,
+                               cfg.keymgr_vif.otp_key.key_share0};
+                  end else begin
+                    if (cfg.en_cov) cov.invalid_hw_input_cg.sample(OtpRootKeyValidLow);
+                    `uvm_info(`gfn, "otp_key valid is low", UVM_LOW)
+                  end
+                  // for advance to OwnerRootSecret, both KDF use same otp_key
+                  current_internal_key[Sealing] = otp_key;
+                  current_internal_key[Attestation] = otp_key;
+                  cfg.keymgr_vif.store_internal_key(current_internal_key[Sealing], current_state,
+                                                    current_cdi);
+
                   // expect no EDN request is issued. After this advance is done, will have 2 reqs
                   `DV_CHECK_EQ(edn_fifos[0].is_empty(), 1)
                 end else begin // !OpAdvance
@@ -581,9 +595,15 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
                 bit good_key = get_is_kmac_key_correct();
                 bit good_data = good_key && !get_sw_invalid_input() && !get_hw_invalid_input();
 
+                bit skip_clean_kmac_key = 0;
+
+                if (current_state != keymgr_pkg::StReset &&
+                    op inside {keymgr_pkg::OpAdvance, keymgr_pkg::OpDisable}) begin
+                  skip_clean_kmac_key = 1;
+                end
+
                 if (op == keymgr_pkg::OpAdvance) begin
                   current_cdi = get_adv_cdi_type();
-                  if (current_state == keymgr_pkg::StInit) latch_otp_key();
                 end else begin
                   int cdi_sel = `gmv(ral.control_shadowed.cdi_sel);
                   `downcast(current_cdi, cdi_sel)
@@ -634,7 +654,7 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
             // advance OP completes
             if (current_op_status == keymgr_pkg::OpWip &&
                 item.d_data inside {keymgr_pkg::OpDoneSuccess, keymgr_pkg::OpDoneFail}) begin
-              current_op_status = keymgr_pkg::keymgr_op_status_e'(item.d_data);
+              current_op_status = item.d_data;
 
               if (cfg.en_cov) begin
                 keymgr_pkg::keymgr_key_dest_e dest = keymgr_pkg::keymgr_key_dest_e'(
@@ -668,8 +688,7 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
           fork
             begin
               cfg.clk_rst_vif.wait_clks(1);
-              cfg.keymgr_vif.clear_sideload_key(
-                  keymgr_pkg::keymgr_sideload_clr_e'(`gmv(ral.sideload_clear.val)));
+              cfg.keymgr_vif.clear_sideload_key(`gmv(ral.sideload_clear.val));
             end
           join_none
         end
@@ -730,22 +749,6 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
       void'(csr.predict(.value(item.d_data), .kind(UVM_PREDICT_READ)));
     end
   endtask
-
-  virtual function void latch_otp_key();
-    key_shares_t otp_key;
-    if (cfg.keymgr_vif.otp_key.valid) begin
-      otp_key = {cfg.keymgr_vif.otp_key.key_share1,
-                 cfg.keymgr_vif.otp_key.key_share0};
-    end else begin
-      if (cfg.en_cov) cov.invalid_hw_input_cg.sample(OtpRootKeyValidLow);
-      `uvm_info(`gfn, "otp_key valid is low", UVM_LOW)
-    end
-    // for advance to OwnerRootSecret, both KDF use same otp_key
-    current_internal_key[Sealing] = otp_key;
-    current_internal_key[Attestation] = otp_key;
-    cfg.keymgr_vif.store_internal_key(current_internal_key[Sealing], current_state,
-                                      current_cdi);
-  endfunction
 
   virtual function bit [TL_DW-1:0] get_current_max_version();
     // design change this to 0 if LC turns off keymgr.
@@ -1053,7 +1056,7 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
     end
     foreach (cfg.keymgr_vif.keys_a_array[state, cdi, dest]) begin
       `DV_CHECK_NE(act, cfg.keymgr_vif.keys_a_array[state][cdi][dest],
-                   $sformatf("key at state %0d for %s %s", state, cdi.name, dest))
+                   $sformatf("key at state %0s for %s %s", state.name, cdi.name, dest))
     end
   endfunction
 
@@ -1164,7 +1167,7 @@ class keymgr_scoreboard extends cip_base_scoreboard #(
   virtual function void wipe_hw_keys();
     fork
       begin
-        uvm_reg_data_t current_design_state;
+        keymgr_pkg::keymgr_working_state_e current_design_state;
         cfg.clk_rst_vif.wait_n_clks(1);
         // When LC disables keymgr across with an operation, will have InvalidOp error.
         // If no operation at that time, no error.

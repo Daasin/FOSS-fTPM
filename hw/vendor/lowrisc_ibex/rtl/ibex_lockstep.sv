@@ -6,8 +6,6 @@
 // This module instantiates a second copy of the core logic, and compares it's outputs against
 // those from the main core. The second core runs synchronously with the main core, delayed by
 // LockstepOffset cycles.
-
-// SEC_CM: LOGIC.SHADOW
 module ibex_lockstep import ibex_pkg::*; #(
   parameter int unsigned LockstepOffset    = 2,
   parameter bit          PMPEnable         = 1'b0,
@@ -35,8 +33,6 @@ module ibex_lockstep import ibex_pkg::*; #(
   parameter bit          DummyInstructions = 1'b0,
   parameter bit          RegFileECC        = 1'b0,
   parameter int unsigned RegFileDataWidth  = 32,
-  parameter bit          MemECC            = 1'b0,
-  parameter int unsigned MemDataWidth      = MemECC ? 32 + 7 : 32,
   parameter int unsigned DmHaltAddr        = 32'h1A110800,
   parameter int unsigned DmExceptionAddr   = 32'h1A110808
 ) (
@@ -50,7 +46,8 @@ module ibex_lockstep import ibex_pkg::*; #(
   input  logic                         instr_gnt_i,
   input  logic                         instr_rvalid_i,
   input  logic [31:0]                  instr_addr_i,
-  input  logic [MemDataWidth-1:0]      instr_rdata_i,
+  input  logic [31:0]                  instr_rdata_i,
+  input  logic [6:0]                   instr_rdata_intg_i,
   input  logic                         instr_err_i,
 
   input  logic                         data_req_i,
@@ -59,8 +56,10 @@ module ibex_lockstep import ibex_pkg::*; #(
   input  logic                         data_we_i,
   input  logic [3:0]                   data_be_i,
   input  logic [31:0]                  data_addr_i,
-  input  logic [MemDataWidth-1:0]      data_wdata_i,
-  input  logic [MemDataWidth-1:0]      data_rdata_i,
+  input  logic [31:0]                  data_wdata_i,
+  output logic [6:0]                   data_wdata_intg_o,
+  input  logic [31:0]                  data_rdata_i,
+  input  logic [6:0]                   data_rdata_intg_i,
   input  logic                         data_err_i,
 
   input  logic                         dummy_instr_id_i,
@@ -95,10 +94,9 @@ module ibex_lockstep import ibex_pkg::*; #(
   input  crash_dump_t                  crash_dump_i,
   input  logic                         double_fault_seen_i,
 
-  input  fetch_enable_t                fetch_enable_i,
+  input  logic                         fetch_enable_i,
   output logic                         alert_minor_o,
-  output logic                         alert_major_internal_o,
-  output logic                         alert_major_bus_o,
+  output logic                         alert_major_o,
   input  logic                         icache_inval_i,
   input  logic                         core_busy_i,
   input  logic                         test_en_i,
@@ -119,17 +117,16 @@ module ibex_lockstep import ibex_pkg::*; #(
   // - The reset of the shadow core is synchronously released.
   // The comparison is started in the following clock cycle.
 
-  logic [LockstepOffsetW-1:0] rst_shadow_cnt_d, rst_shadow_cnt_q, rst_shadow_cnt_incr;
+  logic [LockstepOffsetW-1:0] rst_shadow_cnt_d, rst_shadow_cnt_q;
   // Internally generated resets cause IMPERFECTSCH warnings
   /* verilator lint_off IMPERFECTSCH */
   logic                       rst_shadow_set_d, rst_shadow_set_q;
   logic                       rst_shadow_n, enable_cmp_q;
   /* verilator lint_on IMPERFECTSCH */
 
-  assign rst_shadow_cnt_incr = rst_shadow_cnt_q + LockstepOffsetW'(1);
-
   assign rst_shadow_set_d = (rst_shadow_cnt_q == LockstepOffsetW'(LockstepOffset - 1));
-  assign rst_shadow_cnt_d = rst_shadow_set_d ? rst_shadow_cnt_q : rst_shadow_cnt_incr;
+  assign rst_shadow_cnt_d = rst_shadow_set_d ? rst_shadow_cnt_q :
+                                               (rst_shadow_cnt_q + LockstepOffsetW'(1));
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -169,11 +166,11 @@ module ibex_lockstep import ibex_pkg::*; #(
   typedef struct packed {
     logic                        instr_gnt;
     logic                        instr_rvalid;
-    logic [MemDataWidth-1:0]     instr_rdata;
+    logic [31:0]                 instr_rdata;
     logic                        instr_err;
     logic                        data_gnt;
     logic                        data_rvalid;
-    logic [MemDataWidth-1:0]     data_rdata;
+    logic [31:0]                 data_rdata;
     logic                        data_err;
     logic [RegFileDataWidth-1:0] rf_rdata_a_ecc;
     logic [RegFileDataWidth-1:0] rf_rdata_b_ecc;
@@ -183,12 +180,13 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic [14:0]                 irq_fast;
     logic                        irq_nm;
     logic                        debug_req;
-    fetch_enable_t               fetch_enable;
+    logic                        fetch_enable;
     logic                        ic_scr_key_valid;
   } delayed_inputs_t;
 
   delayed_inputs_t [LockstepOffset-1:0] shadow_inputs_q;
   delayed_inputs_t                      shadow_inputs_in;
+  logic [6:0]                           instr_rdata_intg_q, data_rdata_intg_q;
   // Packed arrays must be dealt with separately
   logic [TagSizeECC-1:0]                shadow_tag_rdata_q [IC_NUM_WAYS][LockstepOffset];
   logic [LineSizeECC-1:0]               shadow_data_rdata_q [IC_NUM_WAYS][LockstepOffset];
@@ -216,12 +214,16 @@ module ibex_lockstep import ibex_pkg::*; #(
   // Delay the inputs
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
+      instr_rdata_intg_q <= '0;
+      data_rdata_intg_q  <= '0;
       for (int unsigned i = 0; i < LockstepOffset; i++) begin
         shadow_inputs_q[i]     <= delayed_inputs_t'('0);
         shadow_tag_rdata_q[i]  <= '{default: 0};
         shadow_data_rdata_q[i] <= '{default: 0};
       end
     end else begin
+      instr_rdata_intg_q <= instr_rdata_intg_i;
+      data_rdata_intg_q  <= data_rdata_intg_i;
       for (int unsigned i = 0; i < LockstepOffset - 1; i++) begin
         shadow_inputs_q[i]     <= shadow_inputs_q[i+1];
         shadow_tag_rdata_q[i]  <= shadow_tag_rdata_q[i+1];
@@ -232,6 +234,38 @@ module ibex_lockstep import ibex_pkg::*; #(
       shadow_data_rdata_q[LockstepOffset-1] <= ic_data_rdata_i;
     end
   end
+
+  ////////////////////////////
+  // Bus integrity checking //
+  ////////////////////////////
+
+  logic        bus_intg_err;
+  logic [1:0]  instr_intg_err, data_intg_err;
+  logic [31:0] unused_wdata;
+
+  // Checks on incoming data
+  prim_secded_inv_39_32_dec u_instr_intg_dec (
+    .data_i     ({instr_rdata_intg_q, shadow_inputs_q[LockstepOffset-1].instr_rdata}),
+    .data_o     (),
+    .syndrome_o (),
+    .err_o      (instr_intg_err)
+  );
+
+  prim_secded_inv_39_32_dec u_data_intg_dec (
+    .data_i     ({data_rdata_intg_q, shadow_inputs_q[LockstepOffset-1].data_rdata}),
+    .data_o     (),
+    .syndrome_o (),
+    .err_o      (data_intg_err)
+  );
+
+  assign bus_intg_err = (shadow_inputs_q[LockstepOffset-1].instr_rvalid & |instr_intg_err) |
+                        (shadow_inputs_q[LockstepOffset-1].data_rvalid  & |data_intg_err);
+
+  // Generate integrity bits
+  prim_secded_inv_39_32_enc u_data_gen (
+    .data_i (data_wdata_i),
+    .data_o ({data_wdata_intg_o, unused_wdata})
+  );
 
   ///////////////////
   // Output delays //
@@ -244,7 +278,7 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic                        data_we;
     logic [3:0]                  data_be;
     logic [31:0]                 data_addr;
-    logic [MemDataWidth-1:0]     data_wdata;
+    logic [31:0]                 data_wdata;
     logic                        dummy_instr_id;
     logic [4:0]                  rf_raddr_a;
     logic [4:0]                  rf_raddr_b;
@@ -310,7 +344,7 @@ module ibex_lockstep import ibex_pkg::*; #(
   // Shadow core instantiation //
   ///////////////////////////////
 
-  logic shadow_alert_minor, shadow_alert_major_internal, shadow_alert_major_bus;
+  logic shadow_alert_minor, shadow_alert_major;
 
   ibex_core #(
     .PMPEnable         ( PMPEnable         ),
@@ -338,8 +372,6 @@ module ibex_lockstep import ibex_pkg::*; #(
     .DummyInstructions ( DummyInstructions ),
     .RegFileECC        ( RegFileECC        ),
     .RegFileDataWidth  ( RegFileDataWidth  ),
-    .MemECC            ( MemECC            ),
-    .MemDataWidth      ( MemDataWidth      ),
     .DmHaltAddr        ( DmHaltAddr        ),
     .DmExceptionAddr   ( DmExceptionAddr   )
   ) u_shadow_core (
@@ -428,12 +460,11 @@ module ibex_lockstep import ibex_pkg::*; #(
     .rvfi_ext_mcycle    (),
 `endif
 
-    .fetch_enable_i         (shadow_inputs_q[0].fetch_enable),
-    .alert_minor_o          (shadow_alert_minor),
-    .alert_major_internal_o (shadow_alert_major_internal),
-    .alert_major_bus_o      (shadow_alert_major_bus),
-    .icache_inval_o         (shadow_outputs_d.icache_inval),
-    .core_busy_o            (shadow_outputs_d.core_busy)
+    .fetch_enable_i    (shadow_inputs_q[0].fetch_enable),
+    .alert_minor_o     (shadow_alert_minor),
+    .alert_major_o     (shadow_alert_major),
+    .icache_inval_o    (shadow_outputs_d.icache_inval),
+    .core_busy_o       (shadow_outputs_d.core_busy)
   );
 
   // Register the shadow core outputs
@@ -447,9 +478,8 @@ module ibex_lockstep import ibex_pkg::*; #(
 
   logic outputs_mismatch;
 
-  assign outputs_mismatch       = enable_cmp_q & (shadow_outputs_q != core_outputs_q[0]);
-  assign alert_major_internal_o = outputs_mismatch | shadow_alert_major_internal;
-  assign alert_major_bus_o      = shadow_alert_major_bus;
-  assign alert_minor_o          = shadow_alert_minor;
+  assign outputs_mismatch = enable_cmp_q & (shadow_outputs_q != core_outputs_q[0]);
+  assign alert_major_o    = outputs_mismatch | shadow_alert_major | bus_intg_err;
+  assign alert_minor_o    = shadow_alert_minor;
 
 endmodule

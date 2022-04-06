@@ -158,7 +158,7 @@
       swaccess: "ro",  // this particular enable bit is meant to be fully HW managed
       hwaccess: "hwo",
       tags: [// Internal HW can modify status register
-             "excl:CsrNonInitTests:CsrExclCheck"]
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         {
             bits: "0",
@@ -241,16 +241,19 @@
           resval: "false"
         },
         { bits: "15:12",
-          name: "THRESHOLD_SCOPE",
+          name: "BOOT_BYPASS_DISABLE",
           mubi: true,
           desc: '''
-                This field controls the scope (either by-line or by-sum) of the health checks.
-                If set to kMuBi4True, the Adaptive Proportion and Markov Tests will accumulate all
-                RNG input lines into a single score, and thresholds will be applied to the sum all
-                the entropy input lines.  If set to kMuBi4False, the RNG input lines are all scored
-                individually.  A statistical deviation in any one input line, be it due to
-                coincidence or failure, will force rejection of the sample, and count toward the
-                total alert count.
+                Setting this field to kMuBi4True will disable the initial generation of non-FIPS entropy.
+                '''
+          resval: false
+        },
+        { bits: "19:16",
+          name: "HEALTH_TEST_CLR",
+          mubi: true,
+          desc: '''
+                Setting this field to kMuBi4True will clear all registers related to the
+                health test operations.
                 '''
           resval: false
         },
@@ -352,7 +355,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -388,7 +391,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -424,7 +427,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -460,7 +463,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -496,7 +499,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -532,7 +535,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -568,7 +571,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -604,7 +607,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -640,7 +643,7 @@
       hwqe:  "true",
       regwen:   "REGWEN",
       tags: [// Exclude from writes to these field because they are one-way updates
-             "excl:CsrNonInitTests:CsrExclWrite"]
+             "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         { bits: "15:0",
           name: "FIPS_THRESH",
@@ -709,6 +712,8 @@
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "15:0",
           name: "FIPS_WATERMARK",
@@ -726,7 +731,7 @@
       hwaccess: "hwo",
       hwext: "true",
       tags: [// Internal HW can modify status register
-             "excl:CsrNonInitTests:CsrExclCheck"]
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "15:0",
           name: "FIPS_WATERMARK",
@@ -745,6 +750,8 @@
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "15:0",
           name: "FIPS_WATERMARK",
@@ -761,6 +768,8 @@
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "15:0",
           name: "FIPS_WATERMARK",
@@ -779,6 +788,8 @@
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "15:0",
           name: "FIPS_WATERMARK",
@@ -794,6 +805,8 @@
       desc:     "Markov test high watermarks register",
       swaccess: "ro",
       hwaccess: "hwo",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       hwext: "true",
       fields: [
         { bits: "15:0",
@@ -811,6 +824,8 @@
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "15:0",
           name: "FIPS_WATERMARK",
@@ -1112,59 +1127,6 @@
         },
       ]
     },
-    { name: "FW_OV_SHA3_START",
-      desc: "Firmware override sha3 block start control register",
-      swaccess: "rw",
-      hwaccess: "hro",
-      tags: [// Exclude from writes to these field because they cause side affects.
-             "excl:CsrAllTests:CsrExclAll"]
-      fields: [
-        { bits: "3:0",
-          name: "FW_OV_INSERT_START",
-          desc: '''
-                Setting this field to 0xA will instruct the ENTROPY_SRC main state machine
-                to start the SHA3 process and be ready to accept entropy data. This field should
-                be set prior to writting the FW_OV_WR_DATA register. Once all data has been written,
-                this field should be set to 0x5. Once that happened, the SHA3 block will finish
-                processing and push the result into the ESFINAL FIFO.
-                '''
-          resval: "0x5"
-        },
-      ]
-    },
-    { name:     "FW_OV_WR_FIFO_FULL",
-      desc:     "Firmware override FIFO write full status register",
-      swaccess: "ro",
-      hwaccess: "hwo",
-      hwext: "true",
-      fields: [
-        { bits: "0",
-          name: "FW_OV_WR_FIFO_FULL",
-          desc: '''"When this bit is clear, writes to the FW_OV_WR_DATA register are allowed.
-                If this bit is set, it is the equivalent to a FIFO full condition, and writes
-                to the FW_OV_WR_DATA register must be delayed until this bit is reset.
-                '''
-        }
-      ]
-    },
-    { name:     "FW_OV_RD_FIFO_OVERFLOW",
-      desc:     "Firmware override Observe FIFO overflow status",
-      swaccess: "rw0c",
-      hwaccess: "hwo",
-      hwext: "false",
-      fields: [
-        { bits: "0",
-          name: "FW_OV_DR_FIFO_OVERFLOW",
-          desc: '''
-                This bit is set by hardware whenever RNG data is lost due to an overflow condition
-                in the Observe FIFO. The RNG data rate is slow enough that firmware should always
-                be able to keep up. This register meanwhile provides an additional check to confirm
-                that bytes read from the !!FW_OV_RD_DATA register represent contiguous RNG samples.
-                If an overflow event occurs, this bit must be cleared by software.
-                '''
-        }
-      ]
-    },
     { name: "FW_OV_RD_DATA",
       desc: "Firmware override Observe FIFO read register",
       swaccess: "ro",
@@ -1202,21 +1164,8 @@
         { bits: "6:0",
           desc: '''This field will set the threshold that the depth of the Observe FIFO
                 will be compared with when setting the interrupt status bit.
-                Note: a value of zero is reserved and not to be used.
                 '''
           resval: "0x20"
-        }
-      ]
-    },
-    { name: "OBSERVE_FIFO_DEPTH",
-      desc: "Observe FIFO depth register",
-      swaccess: "ro",
-      hwaccess: "hwo",
-      hwext: "true",
-      fields: [
-        { bits: "6:0",
-          desc: '''This field will hold the current depth of the Observe FIFO.
-                '''
         }
       ]
     },
@@ -1225,6 +1174,8 @@
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
+      tags: [// Internal HW can modify status register
+             "excl:CsrAllTests:CsrExclCheck"]
       fields: [
         { bits: "2:0",
           name: "ENTROPY_FIFO_DEPTH",
@@ -1253,11 +1204,10 @@
         { bits: "16",
           name: "MAIN_SM_IDLE",
           desc: "The entropy_src main state machine is in the idle state."
-          resval: 1
         }
-        { bits: "17",
-          name: "MAIN_SM_BOOT_DONE",
-          desc: "The entropy_src main state machine is in the boot phase done state."
+        { bits: "31:24",
+          name: "MAIN_SM_STATE",
+          desc: "This is the state of the entropy_src main state machine."
         }
       ]
     },
@@ -1292,9 +1242,17 @@
                 '''
         }
         { bits: "3",
-          name: "THRESHOLD_SCOPE_FIELD_ALERT",
+          name: "BOOT_BYPASS_DISABLE_FIELD_ALERT",
           desc: '''
-                This bit is set when the THRESHOLD_SCOPE field in the !!CONF register is set to
+                This bit is set when the BOOT_BYPASS_DISABLE field in the !!CONF register is set to
+                a value other than 0x5 or 0xA.
+                Writing a zero resets this status bit.
+                '''
+        }
+        { bits: "4",
+          name: "HEALTH_TEST_CLR_FIELD_ALERT",
+          desc: '''
+                This bit is set when the HEALTH_TEST_CLR field in the !!CONF register is set to
                 a value other than 0x5 or 0xA.
                 Writing a zero resets this status bit.
                 '''
@@ -1303,14 +1261,6 @@
           name: "RNG_BIT_ENABLE_FIELD_ALERT",
           desc: '''
                 This bit is set when the RNG_BIT_ENABLE field in the !!CONF register is set to
-                a value other than 0x5 or 0xA.
-                Writing a zero resets this status bit.
-                '''
-        }
-        { bits: "7",
-          name: "FW_OV_SHA3_START_FIELD_ALERT",
-          desc: '''
-                This bit is set when the FW_OV_SHA3_START field in the !!FW_OV_SHA3_START register is set to
                 a value other than 0x5 or 0xA.
                 Writing a zero resets this status bit.
                 '''
@@ -1377,6 +1327,8 @@
       desc: "Hardware detection of error conditions status register",
       swaccess: "ro",
       hwaccess: "hwo",
+      tags: [ // The internal HW can modify the error code registers
+              "excl:CsrAllTests:CsrExclCheck"],
       fields: [
         { bits: "0",
           name: "SFIFO_ESRNG_ERR",
@@ -1468,7 +1420,7 @@
       hwqe: "true",
       regwen: "REGWEN",
       tags: [// Setting this register will force an unwanted fatal alert.
-                 "excl:CsrNonInitTests:CsrExclWrite"]
+                 "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         {
             bits: "4:0",
@@ -1482,20 +1434,6 @@
                   an interrupt or an alert.
                   '''
         },
-      ]
-    },
-    { name: "MAIN_SM_STATE",
-      desc: "Main state machine state debug register",
-      swaccess: "ro",
-      hwaccess: "hwo",
-      fields: [
-        { bits: "8:0",
-          name: "MAIN_SM_STATE",
-          desc: '''This is the state of the ENTROPY_SRC main state machine.
-                See the RTL file `entropy_src_main_sm` for the meaning of the values.
-                '''
-          resval: 0xf5
-        }
       ]
     },
   ]

@@ -155,15 +155,6 @@ enum {
   kFlashCtrlSecMmioInit = 5,
 };
 
-
-
-/**
- * Value of a word in flash after erase.
- */
-enum {
-  kFlashCtrlErasedWord = UINT32_MAX,
-};
-
 /**
  * Kicks of the initialization of the flash controller.
  *
@@ -277,26 +268,15 @@ rom_error_t flash_ctrl_info_write(flash_ctrl_info_page_t info_page,
                                   uint32_t offset, uint32_t word_count,
                                   const void *data);
 
-/*
- * Encoding generated with
- * $ ./util/design/sparse-fsm-encode.py -d 5 -m 2 -n 32 \
- *     -s 2181785819 --language=c
- *
- * Minimum Hamming distance: 14
- * Maximum Hamming distance: 14
- * Minimum Hamming weight: 14
- * Maximum Hamming weight: 18
- */
-
 typedef enum flash_ctrl_erase_type {
   /**
    * Erase a page.
    */
-  kFlashCtrlEraseTypePage = 0xaf0eab8b,
+  kFlashCtrlEraseTypePage = 0,
   /**
    * Erase a bank.
    */
-  kFlashCtrlEraseTypeBank = 0x80329be9,
+  kFlashCtrlEraseTypeBank = 1,
 } flash_ctrl_erase_type_t;
 
 /**
@@ -312,16 +292,6 @@ typedef enum flash_ctrl_erase_type {
  */
 rom_error_t flash_ctrl_data_erase(uint32_t addr,
                                   flash_ctrl_erase_type_t erase_type);
-
-/**
- * Verifies that a data partition page or bank was erased.
- *
- * @param addr Address that falls within the bank or page erased.
- * @param erase_type Whether to verify a page or a bank.
- * @return Result of the operation.
- */
-rom_error_t flash_ctrl_data_erase_verify(uint32_t addr,
-                                         flash_ctrl_erase_type_t erase_type);
 
 /**
  * Erases an information partition page or bank.

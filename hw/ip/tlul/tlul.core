@@ -13,7 +13,6 @@ filesets:
       - lowrisc:tlul:adapter_sram
       - lowrisc:tlul:adapter_reg
       - lowrisc:tlul:sram2tlul
-      - lowrisc:tlul:lc_gate
 
 targets:
   default:

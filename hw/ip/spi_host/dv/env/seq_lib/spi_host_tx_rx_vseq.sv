@@ -26,33 +26,26 @@ class spi_host_tx_rx_vseq extends spi_host_base_vseq;
     cfg.seq_cfg.host_spi_min_len = 4;
     cfg.seq_cfg.host_spi_max_len = 16;
 
-    for (int n = 0; n < num_transactions; n++) begin
+    for(int n = 0; n < num_transactions; n++) begin
       generate_transaction();
       send_trans(transaction);
-      wait_ready_for_command();
+      cfg.clk_rst_vif.wait_clks(100);
     end
   endtask
 
 
   virtual task read_rx_fifo();
+    bit [7:0] fifo_entries = 0;
     bit [7:0] read_q[$];
-    bit active = 0;
-    bit rxempty;
-    spi_host_status_t status;
 
-    csr_spinwait(.ptr(ral.status.active), .exp_data(1'b1));
-    csr_spinwait(.ptr(ral.status.rxempty), .exp_data(1'b0));
-    forever begin
-      do begin
-        csr_rd(.ptr(ral.status), .value(status));
-        for (int i = 0; i < status.rx_qd; i++) begin
-          access_data_fifo(read_q, RxFifo);
-        end
-      end while (status.rx_qd > 0);
-      if (!status.active && status.rxempty && (status.rx_qd == 0)) begin
-        break;
+    csr_rd(.ptr(ral.status.rxqd), .value(fifo_entries));
+    do begin
+      for(int i = 0; i <fifo_entries; i++) begin
+        access_data_fifo(read_q, RxFifo);
       end
-    end  // forever loop
+      csr_spinwait(.ptr(ral.status.active), .exp_data(1'b0));
+      csr_rd(.ptr(ral.status.rxqd), .value(fifo_entries));
+    end while (fifo_entries > 0 );
 
     // wait for all accesses to complete
     wait_no_outstanding_access();
@@ -72,7 +65,7 @@ class spi_host_tx_rx_vseq extends spi_host_base_vseq;
       // lock fifo to this seq
       spi_host_atomic.get(1);
       // write data to fifo
-      if (segment.command_reg.direction != RxOnly) begin
+      if(segment.command_reg.direction  != RxOnly) begin
         access_data_fifo(segment.spi_data, TxFifo);
       end
       program_command_reg(segment.command_reg);

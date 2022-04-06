@@ -7,7 +7,6 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio.h"
-#include "sw/device/lib/dif/dif_test_base.h"
 
 #include "uart_regs.h"  // Generated.
 
@@ -59,7 +58,7 @@ class UartTest : public Test, public MmioTest {
 class ConfigTest : public UartTest {};
 
 TEST_F(ConfigTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_uart_configure(nullptr, config_));
+  EXPECT_EQ(dif_uart_configure(nullptr, config_), kDifBadArg);
 }
 
 TEST_F(ConfigTest, Default) {
@@ -73,7 +72,7 @@ TEST_F(ConfigTest, Default) {
 
   EXPECT_WRITE32(UART_INTR_ENABLE_REG_OFFSET, 0);
 
-  EXPECT_DIF_OK(dif_uart_configure(&uart_, config_));
+  EXPECT_EQ(dif_uart_configure(&uart_, config_), kDifOk);
 }
 
 TEST_F(ConfigTest, ParityEven) {
@@ -91,7 +90,7 @@ TEST_F(ConfigTest, ParityEven) {
 
   EXPECT_WRITE32(UART_INTR_ENABLE_REG_OFFSET, 0);
 
-  EXPECT_DIF_OK(dif_uart_configure(&uart_, config_));
+  EXPECT_EQ(dif_uart_configure(&uart_, config_), kDifOk);
 }
 
 TEST_F(ConfigTest, ParityOdd) {
@@ -110,7 +109,7 @@ TEST_F(ConfigTest, ParityOdd) {
 
   EXPECT_WRITE32(UART_INTR_ENABLE_REG_OFFSET, 0);
 
-  EXPECT_DIF_OK(dif_uart_configure(&uart_, config_));
+  EXPECT_EQ(dif_uart_configure(&uart_, config_), kDifOk);
 }
 
 class WatermarkRxSetTest : public UartTest {};
@@ -118,7 +117,7 @@ class WatermarkRxSetTest : public UartTest {};
 TEST_F(WatermarkRxSetTest, UartNull) {
   dif_result_t result =
       dif_uart_watermark_rx_set(nullptr, kDifUartWatermarkByte1);
-  EXPECT_DIF_BADARG(result);
+  EXPECT_EQ(result, kDifBadArg);
 }
 
 /**
@@ -130,20 +129,21 @@ TEST_F(WatermarkRxSetTest, Success) {
                     {UART_FIFO_CTRL_RXILVL_OFFSET, UART_FIFO_CTRL_RXILVL_MASK,
                      UART_FIFO_CTRL_RXILVL_VALUE_RXLVL1},
                 });
-  EXPECT_DIF_OK(dif_uart_watermark_rx_set(&uart_, kDifUartWatermarkByte1));
+  EXPECT_EQ(dif_uart_watermark_rx_set(&uart_, kDifUartWatermarkByte1), kDifOk);
 
   EXPECT_MASK32(UART_FIFO_CTRL_REG_OFFSET,
                 {
                     {UART_FIFO_CTRL_RXILVL_OFFSET, UART_FIFO_CTRL_RXILVL_MASK,
                      UART_FIFO_CTRL_RXILVL_VALUE_RXLVL30},
                 });
-  EXPECT_DIF_OK(dif_uart_watermark_rx_set(&uart_, kDifUartWatermarkByte30));
+  EXPECT_EQ(dif_uart_watermark_rx_set(&uart_, kDifUartWatermarkByte30), kDifOk);
 }
 
 class WatermarkTxSetTest : public UartTest {};
 
 TEST_F(WatermarkTxSetTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_uart_watermark_tx_set(nullptr, kDifUartWatermarkByte1));
+  EXPECT_EQ(dif_uart_watermark_tx_set(nullptr, kDifUartWatermarkByte1),
+            kDifBadArg);
 }
 
 TEST_F(WatermarkTxSetTest, InvalidWatermark) {
@@ -160,14 +160,14 @@ TEST_F(WatermarkTxSetTest, Success) {
                     {UART_FIFO_CTRL_TXILVL_OFFSET, UART_FIFO_CTRL_TXILVL_MASK,
                      UART_FIFO_CTRL_TXILVL_VALUE_TXLVL1},
                 });
-  EXPECT_DIF_OK(dif_uart_watermark_tx_set(&uart_, kDifUartWatermarkByte1));
+  EXPECT_EQ(dif_uart_watermark_tx_set(&uart_, kDifUartWatermarkByte1), kDifOk);
 
   EXPECT_MASK32(UART_FIFO_CTRL_REG_OFFSET,
                 {
                     {UART_FIFO_CTRL_TXILVL_OFFSET, UART_FIFO_CTRL_TXILVL_MASK,
                      UART_FIFO_CTRL_TXILVL_VALUE_TXLVL16},
                 });
-  EXPECT_DIF_OK(dif_uart_watermark_tx_set(&uart_, kDifUartWatermarkByte16));
+  EXPECT_EQ(dif_uart_watermark_tx_set(&uart_, kDifUartWatermarkByte16), kDifOk);
 }
 
 class BytesSendTest : public UartTest {
@@ -189,26 +189,28 @@ class BytesSendTest : public UartTest {
 };
 
 TEST_F(BytesSendTest, NullArgs) {
-  EXPECT_DIF_BADARG(
-      dif_uart_bytes_send(nullptr, kBytesArray.data(), 1, nullptr));
+  EXPECT_EQ(dif_uart_bytes_send(nullptr, kBytesArray.data(), 1, nullptr),
+            kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_bytes_send(&uart_, nullptr, 1, nullptr));
+  EXPECT_EQ(dif_uart_bytes_send(&uart_, nullptr, 1, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_bytes_send(nullptr, nullptr, 1, nullptr));
+  EXPECT_EQ(dif_uart_bytes_send(nullptr, nullptr, 1, nullptr), kDifBadArg);
 }
 
 TEST_F(BytesSendTest, TxFifoEmptyBytesWrittenNull) {
   ExpectSendBytes();
-  EXPECT_DIF_OK(dif_uart_bytes_send(&uart_, kBytesArray.data(),
-                                    kBytesArray.size(), nullptr));
+  EXPECT_EQ(dif_uart_bytes_send(&uart_, kBytesArray.data(), kBytesArray.size(),
+                                nullptr),
+            kDifOk);
 }
 
 TEST_F(BytesSendTest, TxFifoEmpty) {
   ExpectSendBytes();
 
   size_t bytes_written;
-  EXPECT_DIF_OK(dif_uart_bytes_send(&uart_, kBytesArray.data(),
-                                    kBytesArray.size(), &bytes_written));
+  EXPECT_EQ(dif_uart_bytes_send(&uart_, kBytesArray.data(), kBytesArray.size(),
+                                &bytes_written),
+            kDifOk);
   EXPECT_EQ(bytes_written, kBytesArray.size());
 }
 
@@ -216,8 +218,9 @@ TEST_F(BytesSendTest, TxFifoFull) {
   EXPECT_READ32(UART_STATUS_REG_OFFSET, {{UART_STATUS_TXFULL_BIT, true}});
 
   size_t bytes_written;
-  EXPECT_DIF_OK(dif_uart_bytes_send(&uart_, kBytesArray.data(),
-                                    kBytesArray.size(), &bytes_written));
+  EXPECT_EQ(dif_uart_bytes_send(&uart_, kBytesArray.data(), kBytesArray.size(),
+                                &bytes_written),
+            kDifOk);
   EXPECT_EQ(bytes_written, 0);
 }
 
@@ -241,13 +244,13 @@ class BytesReceiveTest : public UartTest {
 TEST_F(BytesReceiveTest, UartNull) {
   std::vector<uint8_t> receive_bytes(1);
 
-  EXPECT_DIF_BADARG(
-      dif_uart_bytes_receive(nullptr, 1, receive_bytes.data(), nullptr));
+  EXPECT_EQ(dif_uart_bytes_receive(nullptr, 1, receive_bytes.data(), nullptr),
+            kDifBadArg);
   EXPECT_THAT(receive_bytes, Each(Eq(0)));
 
-  EXPECT_DIF_BADARG(dif_uart_bytes_receive(&uart_, 1, nullptr, nullptr));
+  EXPECT_EQ(dif_uart_bytes_receive(&uart_, 1, nullptr, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_bytes_receive(nullptr, 1, nullptr, nullptr));
+  EXPECT_EQ(dif_uart_bytes_receive(nullptr, 1, nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(BytesReceiveTest, RxFifoFullBytesWrittenNull) {
@@ -255,8 +258,9 @@ TEST_F(BytesReceiveTest, RxFifoFullBytesWrittenNull) {
   ExpectReceiveBytes(num_bytes);
 
   std::vector<uint8_t> receive_bytes(num_bytes);
-  EXPECT_DIF_OK(
-      dif_uart_bytes_receive(&uart_, num_bytes, receive_bytes.data(), nullptr));
+  EXPECT_EQ(
+      dif_uart_bytes_receive(&uart_, num_bytes, receive_bytes.data(), nullptr),
+      kDifOk);
   EXPECT_EQ(receive_bytes, kBytesArray);
 }
 
@@ -266,8 +270,9 @@ TEST_F(BytesReceiveTest, RxFifoFull) {
 
   size_t bytes_read;
   std::vector<uint8_t> receive_bytes(num_bytes);
-  EXPECT_DIF_OK(dif_uart_bytes_receive(&uart_, num_bytes, receive_bytes.data(),
-                                       &bytes_read));
+  EXPECT_EQ(dif_uart_bytes_receive(&uart_, num_bytes, receive_bytes.data(),
+                                   &bytes_read),
+            kDifOk);
   EXPECT_EQ(bytes_read, num_bytes);
   EXPECT_EQ(receive_bytes, kBytesArray);
 }
@@ -279,8 +284,9 @@ TEST_F(BytesReceiveTest, RxFifoEmpty) {
 
   size_t bytes_read;
   std::vector<uint8_t> receive_bytes(num_bytes);
-  EXPECT_DIF_OK(dif_uart_bytes_receive(&uart_, num_bytes, receive_bytes.data(),
-                                       &bytes_read));
+  EXPECT_EQ(dif_uart_bytes_receive(&uart_, num_bytes, receive_bytes.data(),
+                                   &bytes_read),
+            kDifOk);
   EXPECT_EQ(bytes_read, 0);
   EXPECT_THAT(receive_bytes, Each(Eq(0)));
 }
@@ -289,7 +295,7 @@ class BytesSendPolledTest : public UartTest {};
 
 TEST_F(BytesSendPolledTest, NullArgs) {
   dif_result_t result = dif_uart_byte_send_polled(nullptr, 'X');
-  EXPECT_DIF_BADARG(result);
+  EXPECT_EQ(result, kDifBadArg);
 }
 
 TEST_F(BytesSendPolledTest, Success) {
@@ -305,18 +311,18 @@ TEST_F(BytesSendPolledTest, Success) {
   EXPECT_READ32(UART_STATUS_REG_OFFSET, {{UART_STATUS_TXIDLE_BIT, false}});
   EXPECT_READ32(UART_STATUS_REG_OFFSET, {{UART_STATUS_TXIDLE_BIT, true}});
 
-  EXPECT_DIF_OK(dif_uart_byte_send_polled(&uart_, 'X'));
+  EXPECT_EQ(dif_uart_byte_send_polled(&uart_, 'X'), kDifOk);
 }
 
 class BytesReceivePolledTest : public UartTest {};
 
 TEST_F(BytesReceivePolledTest, NullArgs) {
   uint8_t byte;
-  EXPECT_DIF_BADARG(dif_uart_byte_receive_polled(nullptr, &byte));
+  EXPECT_EQ(dif_uart_byte_receive_polled(nullptr, &byte), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_byte_receive_polled(&uart_, nullptr));
+  EXPECT_EQ(dif_uart_byte_receive_polled(&uart_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_byte_receive_polled(nullptr, nullptr));
+  EXPECT_EQ(dif_uart_byte_receive_polled(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(BytesReceivePolledTest, Success) {
@@ -329,7 +335,7 @@ TEST_F(BytesReceivePolledTest, Success) {
   EXPECT_READ32(UART_RDATA_REG_OFFSET, 'X');
 
   uint8_t byte = 'Y';
-  EXPECT_DIF_OK(dif_uart_byte_receive_polled(&uart_, &byte));
+  EXPECT_EQ(dif_uart_byte_receive_polled(&uart_, &byte), kDifOk);
   EXPECT_EQ(byte, 'X');
 }
 
@@ -337,11 +343,11 @@ class RxBytesAvailableTest : public UartTest {};
 
 TEST_F(RxBytesAvailableTest, NullArgs) {
   size_t num_bytes;
-  EXPECT_DIF_BADARG(dif_uart_rx_bytes_available(nullptr, &num_bytes));
+  EXPECT_EQ(dif_uart_rx_bytes_available(nullptr, &num_bytes), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_rx_bytes_available(&uart_, nullptr));
+  EXPECT_EQ(dif_uart_rx_bytes_available(&uart_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_rx_bytes_available(nullptr, nullptr));
+  EXPECT_EQ(dif_uart_rx_bytes_available(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(RxBytesAvailableTest, FifoFull) {
@@ -350,7 +356,7 @@ TEST_F(RxBytesAvailableTest, FifoFull) {
                 {{UART_FIFO_STATUS_RXLVL_OFFSET, kDifUartFifoSizeBytes}});
 
   size_t num_bytes;
-  EXPECT_DIF_OK(dif_uart_rx_bytes_available(&uart_, &num_bytes));
+  EXPECT_EQ(dif_uart_rx_bytes_available(&uart_, &num_bytes), kDifOk);
   EXPECT_EQ(num_bytes, kDifUartFifoSizeBytes);
 }
 
@@ -360,7 +366,7 @@ TEST_F(RxBytesAvailableTest, FifoEmpty) {
                 {{UART_FIFO_STATUS_RXLVL_OFFSET, 0}});
 
   size_t num_bytes;
-  EXPECT_DIF_OK(dif_uart_rx_bytes_available(&uart_, &num_bytes));
+  EXPECT_EQ(dif_uart_rx_bytes_available(&uart_, &num_bytes), kDifOk);
   EXPECT_EQ(num_bytes, 0);
 }
 
@@ -368,11 +374,11 @@ class TxBytesAvailableTest : public UartTest {};
 
 TEST_F(TxBytesAvailableTest, NullArgs) {
   size_t num_bytes;
-  EXPECT_DIF_BADARG(dif_uart_tx_bytes_available(nullptr, &num_bytes));
+  EXPECT_EQ(dif_uart_tx_bytes_available(nullptr, &num_bytes), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_tx_bytes_available(&uart_, nullptr));
+  EXPECT_EQ(dif_uart_tx_bytes_available(&uart_, nullptr), kDifBadArg);
 
-  EXPECT_DIF_BADARG(dif_uart_tx_bytes_available(nullptr, nullptr));
+  EXPECT_EQ(dif_uart_tx_bytes_available(nullptr, nullptr), kDifBadArg);
 }
 
 TEST_F(TxBytesAvailableTest, FifoFull) {
@@ -381,7 +387,7 @@ TEST_F(TxBytesAvailableTest, FifoFull) {
                 {{UART_FIFO_STATUS_TXLVL_OFFSET, kDifUartFifoSizeBytes}});
 
   size_t num_bytes;
-  EXPECT_DIF_OK(dif_uart_tx_bytes_available(&uart_, &num_bytes));
+  EXPECT_EQ(dif_uart_tx_bytes_available(&uart_, &num_bytes), kDifOk);
   EXPECT_EQ(num_bytes, 0);
 }
 
@@ -391,7 +397,7 @@ TEST_F(TxBytesAvailableTest, FifoEmpty) {
                 {{UART_FIFO_STATUS_TXLVL_OFFSET, 0}});
 
   size_t num_bytes;
-  EXPECT_DIF_OK(dif_uart_tx_bytes_available(&uart_, &num_bytes));
+  EXPECT_EQ(dif_uart_tx_bytes_available(&uart_, &num_bytes), kDifOk);
   EXPECT_EQ(num_bytes, kDifUartFifoSizeBytes);
 }
 
@@ -399,17 +405,17 @@ class FifoResetTest : public UartTest {};
 
 TEST_F(FifoResetTest, NullArgs) {
   dif_result_t result = dif_uart_fifo_reset(nullptr, kDifUartFifoResetRx);
-  EXPECT_DIF_BADARG(result);
+  EXPECT_EQ(result, kDifBadArg);
 }
 
 TEST_F(FifoResetTest, Success) {
   EXPECT_READ32(UART_FIFO_CTRL_REG_OFFSET, 0);
   EXPECT_WRITE32(UART_FIFO_CTRL_REG_OFFSET, {{UART_FIFO_CTRL_RXRST_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_fifo_reset(&uart_, kDifUartFifoResetRx));
+  EXPECT_EQ(dif_uart_fifo_reset(&uart_, kDifUartFifoResetRx), kDifOk);
 
   EXPECT_READ32(UART_FIFO_CTRL_REG_OFFSET, 0);
   EXPECT_WRITE32(UART_FIFO_CTRL_REG_OFFSET, {{UART_FIFO_CTRL_TXRST_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_fifo_reset(&uart_, kDifUartFifoResetTx));
+  EXPECT_EQ(dif_uart_fifo_reset(&uart_, kDifUartFifoResetTx), kDifOk);
 
   EXPECT_READ32(UART_FIFO_CTRL_REG_OFFSET, 0);
   EXPECT_WRITE32(UART_FIFO_CTRL_REG_OFFSET,
@@ -417,50 +423,55 @@ TEST_F(FifoResetTest, Success) {
                      {UART_FIFO_CTRL_RXRST_BIT, true},
                      {UART_FIFO_CTRL_TXRST_BIT, true},
                  });
-  EXPECT_DIF_OK(dif_uart_fifo_reset(&uart_, kDifUartFifoResetAll));
+  EXPECT_EQ(dif_uart_fifo_reset(&uart_, kDifUartFifoResetAll), kDifOk);
 }
 
 class LoopbackSetTest : public UartTest {};
 
 TEST_F(LoopbackSetTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_uart_loopback_set(nullptr, kDifUartLoopbackSystem,
-                                          kDifToggleEnabled));
+  EXPECT_EQ(
+      dif_uart_loopback_set(nullptr, kDifUartLoopbackSystem, kDifToggleEnabled),
+      kDifBadArg);
 }
 
 TEST_F(LoopbackSetTest, Success) {
   EXPECT_MASK32(UART_CTRL_REG_OFFSET, {{UART_CTRL_SLPBK_BIT, 0x1, true}});
-  EXPECT_DIF_OK(
-      dif_uart_loopback_set(&uart_, kDifUartLoopbackSystem, kDifToggleEnabled));
+  EXPECT_EQ(
+      dif_uart_loopback_set(&uart_, kDifUartLoopbackSystem, kDifToggleEnabled),
+      kDifOk);
 
   EXPECT_MASK32(UART_CTRL_REG_OFFSET, {{UART_CTRL_SLPBK_BIT, 0x1, false}});
-  EXPECT_DIF_OK(dif_uart_loopback_set(&uart_, kDifUartLoopbackSystem,
-                                      kDifToggleDisabled));
+  EXPECT_EQ(
+      dif_uart_loopback_set(&uart_, kDifUartLoopbackSystem, kDifToggleDisabled),
+      kDifOk);
 
   EXPECT_MASK32(UART_CTRL_REG_OFFSET, {{UART_CTRL_LLPBK_BIT, 0x1, true}});
-  EXPECT_DIF_OK(
-      dif_uart_loopback_set(&uart_, kDifUartLoopbackLine, kDifToggleEnabled));
+  EXPECT_EQ(
+      dif_uart_loopback_set(&uart_, kDifUartLoopbackLine, kDifToggleEnabled),
+      kDifOk);
 
   EXPECT_MASK32(UART_CTRL_REG_OFFSET, {{UART_CTRL_LLPBK_BIT, 0x1, false}});
-  EXPECT_DIF_OK(
-      dif_uart_loopback_set(&uart_, kDifUartLoopbackLine, kDifToggleDisabled));
+  EXPECT_EQ(
+      dif_uart_loopback_set(&uart_, kDifUartLoopbackLine, kDifToggleDisabled),
+      kDifOk);
 }
 
 class RxTimeoutTest : public UartTest {};
 
 TEST_F(RxTimeoutTest, NullArgs) {
-  EXPECT_DIF_BADARG(dif_uart_enable_rx_timeout(nullptr, 1));
-  EXPECT_DIF_BADARG(dif_uart_disable_rx_timeout(nullptr));
+  EXPECT_EQ(dif_uart_enable_rx_timeout(nullptr, 1), kDifBadArg);
+  EXPECT_EQ(dif_uart_disable_rx_timeout(nullptr), kDifBadArg);
 
   uint32_t value;       // optional
   dif_toggle_t status;  // mandatory
-  EXPECT_DIF_BADARG(dif_uart_get_rx_timeout(nullptr, &status, &value));
-  EXPECT_DIF_BADARG(dif_uart_get_rx_timeout(&uart_, nullptr, &value));
+  EXPECT_EQ(dif_uart_get_rx_timeout(nullptr, &status, &value), kDifBadArg);
+  EXPECT_EQ(dif_uart_get_rx_timeout(&uart_, nullptr, &value), kDifBadArg);
 }
 
 TEST_F(RxTimeoutTest, OutOfRange) {
   // RX timeout value must be in the range [0,0xffffff].
-  EXPECT_DIF_BADARG(dif_uart_enable_rx_timeout(&uart_, 0x01000000));
-  EXPECT_DIF_BADARG(dif_uart_enable_rx_timeout(&uart_, 0xffffffff));
+  EXPECT_EQ(dif_uart_enable_rx_timeout(&uart_, 0x01000000), kDifBadArg);
+  EXPECT_EQ(dif_uart_enable_rx_timeout(&uart_, 0xffffffff), kDifBadArg);
 }
 
 TEST_F(RxTimeoutTest, Enable) {
@@ -469,7 +480,7 @@ TEST_F(RxTimeoutTest, Enable) {
   EXPECT_WRITE32(UART_TIMEOUT_CTRL_REG_OFFSET,
                  {{UART_TIMEOUT_CTRL_VAL_OFFSET, duration},
                   {UART_TIMEOUT_CTRL_EN_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_enable_rx_timeout(&uart_, duration));
+  EXPECT_EQ(dif_uart_enable_rx_timeout(&uart_, duration), kDifOk);
 }
 
 TEST_F(RxTimeoutTest, Disable) {
@@ -477,7 +488,7 @@ TEST_F(RxTimeoutTest, Disable) {
   EXPECT_WRITE32(
       UART_TIMEOUT_CTRL_REG_OFFSET,
       {{UART_TIMEOUT_CTRL_VAL_OFFSET, 0}, {UART_TIMEOUT_CTRL_EN_BIT, false}});
-  EXPECT_DIF_OK(dif_uart_disable_rx_timeout(&uart_));
+  EXPECT_EQ(dif_uart_disable_rx_timeout(&uart_), kDifOk);
 }
 
 TEST_F(RxTimeoutTest, GetStatusOnly) {
@@ -486,14 +497,14 @@ TEST_F(RxTimeoutTest, GetStatusOnly) {
   EXPECT_WRITE32(UART_TIMEOUT_CTRL_REG_OFFSET,
                  {{UART_TIMEOUT_CTRL_VAL_OFFSET, duration},
                   {UART_TIMEOUT_CTRL_EN_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_enable_rx_timeout(&uart_, duration));
+  EXPECT_EQ(dif_uart_enable_rx_timeout(&uart_, duration), kDifOk);
 
   // Read out status only.
   dif_toggle_t status = kDifToggleDisabled;
   EXPECT_READ32(UART_TIMEOUT_CTRL_REG_OFFSET,
                 {{UART_TIMEOUT_CTRL_VAL_OFFSET, duration},
                  {UART_TIMEOUT_CTRL_EN_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_get_rx_timeout(&uart_, &status, nullptr));
+  EXPECT_EQ(dif_uart_get_rx_timeout(&uart_, &status, nullptr), kDifOk);
   EXPECT_EQ(status, kDifToggleEnabled);
 }
 
@@ -503,7 +514,7 @@ TEST_F(RxTimeoutTest, GetAll) {
   EXPECT_WRITE32(UART_TIMEOUT_CTRL_REG_OFFSET,
                  {{UART_TIMEOUT_CTRL_VAL_OFFSET, duration},
                   {UART_TIMEOUT_CTRL_EN_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_enable_rx_timeout(&uart_, duration));
+  EXPECT_EQ(dif_uart_enable_rx_timeout(&uart_, duration), kDifOk);
 
   // Read out duration and status.
   uint32_t out = 0;
@@ -511,7 +522,7 @@ TEST_F(RxTimeoutTest, GetAll) {
   EXPECT_READ32(UART_TIMEOUT_CTRL_REG_OFFSET,
                 {{UART_TIMEOUT_CTRL_VAL_OFFSET, duration},
                  {UART_TIMEOUT_CTRL_EN_BIT, true}});
-  EXPECT_DIF_OK(dif_uart_get_rx_timeout(&uart_, &status, &out));
+  EXPECT_EQ(dif_uart_get_rx_timeout(&uart_, &status, &out), kDifOk);
   EXPECT_EQ(status, kDifToggleEnabled);
   EXPECT_EQ(out, duration);
 }

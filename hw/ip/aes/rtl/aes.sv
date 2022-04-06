@@ -11,11 +11,11 @@ module aes
   import aes_reg_pkg::*;
 #(
   parameter bit          AES192Enable          = 1, // Can be 0 (disable), or 1 (enable).
-  parameter bit          SecMasking            = 1, // Can be 0 (no masking), or
+  parameter bit          Masking               = 1, // Can be 0 (no masking), or
                                                     // 1 (first-order masking) of the cipher
                                                     // core. Masking requires the use of a
-                                                    // masked S-Box, see SecSBoxImpl parameter.
-  parameter sbox_impl_e  SecSBoxImpl           = SBoxImplDom, // See aes_pkg.sv
+                                                    // masked S-Box, see SBoxImpl parameter.
+  parameter sbox_impl_e  SBoxImpl              = SBoxImplDom, // See aes_pkg.sv
   parameter int unsigned SecStartTriggerDelay  = 0, // Manual start trigger delay, useful for
                                                     // SCA measurements. A value of e.g. 40
                                                     // allows the processor to go into sleep
@@ -41,7 +41,7 @@ module aes
   input  logic                                      rst_shadowed_ni,
 
   // Idle indicator for clock manager
-  output prim_mubi_pkg::mubi4_t                     idle_o,
+  output logic                                      idle_o,
 
   // Life cycle
   input  lc_ctrl_pkg::lc_tx_t                       lc_escalate_en_i,
@@ -71,10 +71,8 @@ module aes
   aes_hw2reg_t               hw2reg;
 
   logic      [NumAlerts-1:0] alert;
-  lc_ctrl_pkg::lc_tx_t       lc_escalate_en;
+  lc_ctrl_pkg::lc_tx_t [1:0] lc_escalate_en;
 
-  logic                      edn_req_int;
-  logic                      edn_req_hold_d, edn_req_hold_q;
   logic                      edn_req;
   logic                      edn_ack;
   logic   [EntropyWidth-1:0] edn_data;
@@ -89,6 +87,7 @@ module aes
   // SEC_CM: AUX.CONFIG.SHADOW
   // SEC_CM: AUX.CONFIG.REGWEN
   // SEC_CM: KEY.SW_UNREADABLE
+  // SEC_CM: IV.CONFIG.SW_UNREADABLE
   // SEC_CM: DATA_REG.SW_UNREADABLE
   // Register interface
   logic intg_err_alert;
@@ -107,7 +106,7 @@ module aes
   // SEC_CM: LC_ESCALATE_EN.INTERSIG.MUBI
   // Synchronize life cycle input
   prim_lc_sync #(
-    .NumCopies (1)
+    .NumCopies (2)
   ) u_prim_lc_sync (
     .clk_i,
     .rst_ni,
@@ -115,51 +114,23 @@ module aes
     .lc_en_o ( {lc_escalate_en} )
   );
 
-  ///////////////////
-  // EDN Interface //
-  ///////////////////
-
-  // Internally, we have up to two PRNGs that share the EDN interface for reseeding. Here, we just
-  // arbitrate the requests. Upsizing of the entropy to the correct width is performed inside the
-  // PRNGs.
-  // Reseed operations for the clearing PRNG are initiated by software. Reseed operations for the
-  // masking PRNG can also be automatically initiated.
-  assign edn_req_int          = entropy_clearing_req | entropy_masking_req;
-  // Only forward ACK to PRNG currently requesting entropy. Give higher priority to clearing PRNG.
-  assign entropy_clearing_ack =  entropy_clearing_req & edn_ack;
-  assign entropy_masking_ack  = ~entropy_clearing_req & entropy_masking_req & edn_ack;
-
-  // Upon escalation or detection of a fatal alert, an EDN request signal can be dropped before
-  // getting acknowledged. This is okay with respect to AES as the module will need to be reset
-  // anyway. However, to not leave EDN in a strange state, we hold the request until it's actually
-  // acknowledged.
-  assign edn_req        = edn_req_int | edn_req_hold_q;
-  assign edn_req_hold_d = (edn_req_hold_q | edn_req) & ~edn_ack;
-  always_ff @(posedge clk_i or negedge rst_ni) begin : edn_req_reg
-    if (!rst_ni) begin
-      edn_req_hold_q <= '0;
-    end else begin
-      edn_req_hold_q <= edn_req_hold_d;
-    end
-  end
-
   // Synchronize EDN interface
   prim_sync_reqack_data #(
     .Width(EntropyWidth),
     .DataSrc2Dst(1'b0),
     .DataReg(1'b0)
   ) u_prim_sync_reqack_data (
-    .clk_src_i  ( clk_i         ),
-    .rst_src_ni ( rst_ni        ),
-    .clk_dst_i  ( clk_edn_i     ),
-    .rst_dst_ni ( rst_edn_ni    ),
-    .req_chk_i  ( 1'b1          ),
-    .src_req_i  ( edn_req       ),
-    .src_ack_o  ( edn_ack       ),
-    .dst_req_o  ( edn_o.edn_req ),
-    .dst_ack_i  ( edn_i.edn_ack ),
-    .data_i     ( edn_i.edn_bus ),
-    .data_o     ( edn_data      )
+    .clk_src_i  ( clk_i                                 ),
+    .rst_src_ni ( rst_ni                                ),
+    .clk_dst_i  ( clk_edn_i                             ),
+    .rst_dst_ni ( rst_edn_ni                            ),
+    .req_chk_i  ( lc_escalate_en[0] == lc_ctrl_pkg::Off ),
+    .src_req_i  ( edn_req                               ),
+    .src_ack_o  ( edn_ack                               ),
+    .dst_req_o  ( edn_o.edn_req                         ),
+    .dst_ack_i  ( edn_i.edn_ack                         ),
+    .data_i     ( edn_i.edn_bus                         ),
+    .data_o     ( edn_data                              )
   );
   // We don't track whether the entropy is pre-FIPS or not inside AES.
   assign unused_edn_fips = edn_i.edn_fips;
@@ -168,11 +139,23 @@ module aes
   // Core //
   //////////
 
+  // Entropy distribution
+  // Internally, we have up to two PRNGs that share the EDN interface for reseeding. Here, we just
+  // arbitrate the requests. Upsizing of the entropy to the correct width is performed inside the
+  // PRNGs.
+  // Reseed operations for the clearing PRNG are initiated by software. Reseed operations for the
+  // masking PRNG are automatically initiated. Reseeding operations of the two PRNGs are not
+  // expected to take place simultaneously.
+  assign edn_req              = entropy_clearing_req | entropy_masking_req;
+  // Only forward ACK to PRNG currently requesting entropy. Give higher priority to clearing PRNG.
+  assign entropy_clearing_ack =  entropy_clearing_req & edn_ack;
+  assign entropy_masking_ack  = ~entropy_clearing_req & entropy_masking_req & edn_ack;
+
   // AES core
   aes_core #(
     .AES192Enable             ( AES192Enable             ),
-    .SecMasking               ( SecMasking               ),
-    .SecSBoxImpl              ( SecSBoxImpl              ),
+    .Masking                  ( Masking                  ),
+    .SBoxImpl                 ( SBoxImpl                 ),
     .SecStartTriggerDelay     ( SecStartTriggerDelay     ),
     .SecAllowForcingMasks     ( SecAllowForcingMasks     ),
     .SecSkipPRNGReseeding     ( SecSkipPRNGReseeding     ),
@@ -195,7 +178,7 @@ module aes
 
     .keymgr_key_i           ( keymgr_key_i         ),
 
-    .lc_escalate_en_i       ( lc_escalate_en       ),
+    .lc_escalate_en_i       ( lc_escalate_en[1]    ),
 
     .intg_err_alert_i       ( intg_err_alert       ),
     .alert_recov_o          ( alert[0]             ),
@@ -205,7 +188,7 @@ module aes
     .hw2reg                 ( hw2reg               )
   );
 
-  assign idle_o = prim_mubi_pkg::mubi4_bool_to_mubi(reg2hw.status.idle.q);
+  assign idle_o = reg2hw.status.idle.q;
 
   ////////////
   // Alerts //
@@ -246,6 +229,7 @@ module aes
   `ASSERT_KNOWN(EdnReqKnown, edn_o)
   `ASSERT_KNOWN(AlertTxKnown, alert_tx_o)
 
+`ifndef SYNTHESIS
   // Alert assertions for sparse FSMs.
   for (genvar i = 0; i < Sp2VWidth; i++) begin : gen_control_fsm_svas
     if (SP2V_LOGIC_HIGH[i] == 1'b1) begin : gen_control_fsm_svas_p
@@ -288,4 +272,6 @@ module aes
           alert_tx_o[1])
     end
   end
+`endif
+
 endmodule

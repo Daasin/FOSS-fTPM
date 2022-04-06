@@ -78,8 +78,11 @@ static bool cpu_capture_is_locked(mmio_region_t base_addr) {
  */
 static bool rstmgr_software_reset_is_locked(
     mmio_region_t base_addr, dif_rstmgr_peripheral_t peripheral) {
-  return !mmio_region_read32(
-      base_addr, RSTMGR_SW_RST_REGWEN_0_REG_OFFSET + 4 * peripheral);
+  uint32_t bitfield =
+      mmio_region_read32(base_addr, RSTMGR_SW_RST_REGWEN_REG_OFFSET);
+
+  // When bit is cleared, the software reset for `peripheral` is disabled.
+  return !bitfield_bit32_read(bitfield, peripheral);
 }
 
 /**
@@ -88,9 +91,14 @@ static bool rstmgr_software_reset_is_locked(
 static void rstmgr_software_reset_hold(mmio_region_t base_addr,
                                        dif_rstmgr_peripheral_t peripheral,
                                        bool hold) {
-  bool value = hold ? false : true;
-  mmio_region_write32(
-      base_addr, RSTMGR_SW_RST_CTRL_N_0_REG_OFFSET + 4 * peripheral, value);
+  uint32_t bitfield =
+      mmio_region_read32(base_addr, RSTMGR_SW_RST_CTRL_N_REG_OFFSET);
+
+  // Clear bit to hold a `peripheral` in the reset state, and set
+  bool bit = hold ? false : true;
+  bitfield = bitfield_bit32_write(bitfield, peripheral, bit);
+
+  mmio_region_write32(base_addr, RSTMGR_SW_RST_CTRL_N_REG_OFFSET, bitfield);
 }
 
 /**
@@ -112,10 +120,7 @@ dif_result_t dif_rstmgr_reset(const dif_rstmgr_t *handle) {
   rstmgr_reset_info_clear(base_addr);
 
   // Set bits to stop holding all peripherals in the reset state.
-  for (uint32_t i = 0; i < RSTMGR_PARAM_NUM_SW_RESETS; i++) {
-    mmio_region_write32(base_addr, RSTMGR_SW_RST_CTRL_N_0_REG_OFFSET + i * 4,
-                        UINT32_MAX);
-  }
+  mmio_region_write32(base_addr, RSTMGR_SW_RST_CTRL_N_REG_OFFSET, UINT32_MAX);
 
   return kDifOk;
 }
@@ -128,8 +133,10 @@ dif_result_t dif_rstmgr_reset_lock(const dif_rstmgr_t *handle,
 
   mmio_region_t base_addr = handle->base_addr;
 
-  mmio_region_write32(base_addr,
-                      RSTMGR_SW_RST_REGWEN_0_REG_OFFSET + 4 * peripheral, 0);
+  // Clear bit to disable the software reset for the peripheral.
+  uint32_t bitfield = bitfield_bit32_write(UINT32_MAX, peripheral, false);
+
+  mmio_region_write32(base_addr, RSTMGR_SW_RST_REGWEN_REG_OFFSET, bitfield);
 
   return kDifOk;
 }
@@ -365,9 +372,11 @@ dif_result_t dif_rstmgr_software_reset_is_held(
     return kDifBadArg;
   }
 
+  uint32_t bitfield =
+      mmio_region_read32(handle->base_addr, RSTMGR_SW_RST_CTRL_N_REG_OFFSET);
+
   // When the bit is cleared - peripheral is held in reset.
-  *asserted = !mmio_region_read32(
-      handle->base_addr, RSTMGR_SW_RST_CTRL_N_0_REG_OFFSET + 4 * peripheral);
+  *asserted = !bitfield_bit32_read(bitfield, peripheral);
 
   return kDifOk;
 }

@@ -233,8 +233,8 @@ dif_result_t dif_usbdev_configure(const dif_usbdev_t *usbdev,
   }
 
   // Check enum fields.
-  if (!is_valid_toggle(config.have_differential_receiver) ||
-      !is_valid_toggle(config.use_tx_d_se0) ||
+  if (!is_valid_toggle(config.differential_rx) ||
+      !is_valid_toggle(config.differential_tx) ||
       !is_valid_toggle(config.single_bit_eop) ||
       !is_valid_toggle(config.pin_flip) ||
       !is_valid_toggle(config.clock_sync_signals)) {
@@ -244,24 +244,24 @@ dif_result_t dif_usbdev_configure(const dif_usbdev_t *usbdev,
   // Determine the value of the PHY_CONFIG register.
   uint32_t phy_config_val = 0;
 
-  if (config.have_differential_receiver == kDifToggleEnabled) {
-    phy_config_val =
-        bitfield_field32_write(phy_config_val,
-                               (bitfield_field32_t){
-                                   .mask = 1,
-                                   .index = USBDEV_PHY_CONFIG_USE_DIFF_RCVR_BIT,
-                               },
-                               1);
+  if (config.differential_rx == kDifToggleEnabled) {
+    phy_config_val = bitfield_field32_write(
+        phy_config_val,
+        (bitfield_field32_t){
+            .mask = 1,
+            .index = USBDEV_PHY_CONFIG_RX_DIFFERENTIAL_MODE_BIT,
+        },
+        1);
   }
 
-  if (config.use_tx_d_se0 == kDifToggleEnabled) {
-    phy_config_val =
-        bitfield_field32_write(phy_config_val,
-                               (bitfield_field32_t){
-                                   .mask = 1,
-                                   .index = USBDEV_PHY_CONFIG_TX_USE_D_SE0_BIT,
-                               },
-                               1);
+  if (config.differential_tx == kDifToggleEnabled) {
+    phy_config_val = bitfield_field32_write(
+        phy_config_val,
+        (bitfield_field32_t){
+            .mask = 1,
+            .index = USBDEV_PHY_CONFIG_TX_DIFFERENTIAL_MODE_BIT,
+        },
+        1);
   }
 
   if (config.single_bit_eop == kDifToggleEnabled) {
@@ -337,13 +337,6 @@ dif_result_t dif_usbdev_endpoint_out_enable(const dif_usbdev_t *usbdev,
                                        endpoint, new_state);
 }
 
-dif_result_t dif_usbdev_endpoint_set_nak_out_enable(const dif_usbdev_t *usbdev,
-                                                    uint8_t endpoint,
-                                                    dif_toggle_t new_state) {
-  return endpoint_functionality_enable(usbdev, USBDEV_SET_NAK_OUT_REG_OFFSET,
-                                       endpoint, new_state);
-}
-
 dif_result_t dif_usbdev_endpoint_stall_enable(const dif_usbdev_t *usbdev,
                                               dif_usbdev_endpoint_id_t endpoint,
                                               dif_toggle_t new_state) {
@@ -379,13 +372,10 @@ dif_result_t dif_usbdev_endpoint_stall_get(const dif_usbdev_t *usbdev,
 dif_result_t dif_usbdev_endpoint_iso_enable(const dif_usbdev_t *usbdev,
                                             dif_usbdev_endpoint_id_t endpoint,
                                             dif_toggle_t new_state) {
-  if (endpoint.direction == USBDEV_ENDPOINT_DIR_IN) {
-    return endpoint_functionality_enable(usbdev, USBDEV_IN_ISO_REG_OFFSET,
-                                         endpoint.number, new_state);
-  } else {
-    return endpoint_functionality_enable(usbdev, USBDEV_OUT_ISO_REG_OFFSET,
-                                         endpoint.number, new_state);
-  }
+  // TODO: Support configuring IN and OUT endpoints independently when the
+  // hardware does.
+  return endpoint_functionality_enable(usbdev, USBDEV_ISO_REG_OFFSET,
+                                       endpoint.number, new_state);
 }
 
 dif_result_t dif_usbdev_endpoint_enable(const dif_usbdev_t *usbdev,

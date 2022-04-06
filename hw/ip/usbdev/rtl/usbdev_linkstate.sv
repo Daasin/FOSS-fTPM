@@ -5,8 +5,6 @@
 // Link state detection
 //
 
-`include "prim_assert.sv"
-
 module usbdev_linkstate (
   input  logic clk_48mhz_i,
   input  logic rst_ni,
@@ -16,7 +14,7 @@ module usbdev_linkstate (
   input  logic usb_dn_i,
   input  logic usb_oe_i,
   input  logic usb_pullup_en_i,
-  input  logic rx_idle_det_i,
+  input  logic rx_jjj_det_i,
   input  logic rx_j_det_i,
   input  logic sof_valid_i,
   input  logic resume_link_active_i, // pulse
@@ -28,7 +26,6 @@ module usbdev_linkstate (
   output logic link_suspend_o,     // level
   output logic link_resume_o,      // pulse
   output logic host_lost_o,        // level
-  output logic sof_missed_o,       // pulse
 
   output logic [2:0] link_state_o
 );
@@ -39,10 +36,6 @@ module usbdev_linkstate (
   // confuse the 2 *low-speed* bit times (1.33us) of SE0 that terminate resume
   // signaling. Use 3us here.
   localparam logic [2:0]  RESET_TIMEOUT   = 3'd3;
-  // Consider an SOF lost after 1.005 ms. The extra 5 us helps accommodate
-  // the worst case frequency difference between the host and device, due to a
-  // +/- 2500 ppm range around 12 MHz.
-  localparam logic [9:0]  SOF_TIMEOUT     = 10'd1005;
 
   typedef enum logic [2:0] {
     // No power and/or no pull-up connected state
@@ -130,7 +123,7 @@ module usbdev_linkstate (
   );
 
   // Simple events
-  assign ev_bus_active = !rx_idle_det_i;
+  assign ev_bus_active = !rx_jjj_det_i;
 
   assign monitor_inac = see_pwr_sense ? ((link_state_q == LinkPowered) | link_active_o) :
                         1'b0;
@@ -354,37 +347,24 @@ module usbdev_linkstate (
     end
   end
 
-  /////////////////////////////////////////
-  // Host loss and missing sof detection //
-  /////////////////////////////////////////
-  // sof_missed if no SOF was observed in 1.005ms and the link is active
-  // host_lost if 4 frames have gone by without observing a SOF
-  logic [2:0] missed_sof_count;
-  logic [9:0] missing_sof_timer;
+  /////////////////////////
+  // Host loss detection //
+  /////////////////////////
+  // host_lost if no sof in 4.096ms (supposed to be every 1ms)
+  // and the link is active
+  logic [12:0] host_presence_timer;
 
-  assign host_lost_o = missed_sof_count[2];
+  assign host_lost_o = host_presence_timer[12];
   always_ff @(posedge clk_48mhz_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      missed_sof_count <= '0;
+      host_presence_timer <= '0;
     end else begin
       if (sof_valid_i || !link_active_o || link_reset) begin
-        missed_sof_count <= '0;
-      end else if (sof_missed_o && !host_lost_o) begin
-        missed_sof_count <= missed_sof_count + 1;
+        host_presence_timer <= '0;
+      end else if (us_tick_i && !host_lost_o) begin
+        host_presence_timer <= host_presence_timer + 1;
       end
     end
   end
 
-  assign sof_missed_o = (missing_sof_timer == SOF_TIMEOUT);
-  always_ff @(posedge clk_48mhz_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      missing_sof_timer <= '0;
-    end else begin
-      if (sof_missed_o || sof_valid_i || !link_active_o || link_reset) begin
-        missing_sof_timer <= '0;
-      end else if (us_tick_i) begin
-        missing_sof_timer <= missing_sof_timer + 1;
-      end
-    end
-  end
 endmodule

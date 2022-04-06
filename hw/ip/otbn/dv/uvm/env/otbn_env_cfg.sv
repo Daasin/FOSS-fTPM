@@ -7,11 +7,7 @@ class otbn_env_cfg extends cip_base_env_cfg #(.RAL_T(otbn_reg_block));
   // ext component cfgs
   rand otbn_model_agent_cfg model_agent_cfg;
 
-  rand otbn_sideload_agent_cfg keymgr_sideload_agent_cfg;
-
-  rand otp_key_agent_cfg key_cfg;
-
-  virtual clk_rst_if otp_clk_rst_vif;
+  rand key_sideload_agent_cfg keymgr_sideload_agent_cfg;
 
   `uvm_object_utils_begin(otbn_env_cfg)
   `uvm_object_utils_end
@@ -66,12 +62,6 @@ class otbn_env_cfg extends cip_base_env_cfg #(.RAL_T(otbn_reg_block));
   // Copied from dv_base_agent_cfg so that we can use a monitor without defining a separate agent.
   int ok_to_end_delay_ns = 1000;
 
-  // otp clk freq
-  rand uint otp_freq_mhz;
-  constraint otp_freq_mhz_c {
-    `DV_COMMON_CLK_CONSTRAINT(otp_freq_mhz)
-  }
-
   function void initialize(bit [31:0] csr_base_addr = '1);
     num_edn = 2;
     // Tell the CIP base code not to look for a "devmode" interface. OTBN doesn't have one.
@@ -84,22 +74,14 @@ class otbn_env_cfg extends cip_base_env_cfg #(.RAL_T(otbn_reg_block));
     // Tell the CIP base code how many interrupts we have (defaults to zero)
     num_interrupts = 1;
 
-    // Tell the CIP base code what alert we generate if we see a TL or sec cm fault.
+    // Tell the CIP base code what alert we generate if we see a TL fault.
     tl_intg_alert_name = "fatal";
-    sec_cm_alert_name = "fatal";
 
     model_agent_cfg  = otbn_model_agent_cfg  ::type_id::create("model_agent_cfg");
-    keymgr_sideload_agent_cfg = otbn_sideload_agent_cfg::type_id::create(
-      "keymgr_sideload_agent_cfg");
-
-
-    // Build OTP Key cfg object
-    key_cfg = otp_key_agent_cfg::type_id::create("key_cfg");
+    keymgr_sideload_agent_cfg = key_sideload_agent_cfg::type_id
+                                ::create("keymgr_sideload_agent_cfg");
 
     super.initialize(csr_base_addr);
-
-    // We can only have one outstanding TL item
-    m_tl_agent_cfg.max_outstanding_req = 1;
 
     // Tell the CIP base code the fields that it should expect to see, together with their expected
     // values, in case of a TL fault.
@@ -262,44 +244,6 @@ class otbn_env_cfg extends cip_base_env_cfg #(.RAL_T(otbn_reg_block));
 
     // Write the scrambled data to memory
     dmem_util.write(BUS_AW'(phys_idx) * 32, scr_data);
-  endfunction
-
-  // Strip off integrity bits from IMEM
-  function logic [31:0] strip_integrity_32(logic [BaseIntgWidth-1:0] data);
-    return data[31:0];
-  endfunction
-
-  // Add new known-good integrity bits to data
-  function logic [BaseIntgWidth-1:0] add_integrity_32(logic [31:0] data);
-    return prim_secded_pkg::prim_secded_inv_39_32_enc(data);
-  endfunction
-
-  // Fix integrity bits of data
-  function logic [BaseIntgWidth-1:0] fix_integrity_32(logic [BaseIntgWidth-1:0] data);
-    return add_integrity_32(strip_integrity_32(data));
-  endfunction
-
-  // Strip off integrity bits from data
-  function logic [WLEN-1:0] strip_integrity_wlen(logic [ExtWLEN-1:0] data);
-    logic [WLEN-1:0] ret;
-    for (int i = 0; i < 8; ++i) begin
-      ret[32*i +: 32] = strip_integrity_32(data[39*i +: 39]);
-    end
-    return ret;
-  endfunction
-
-  // Add new known-good integrity bits to data
-  function logic [ExtWLEN-1:0] add_integrity_wlen(logic [WLEN-1:0] data);
-    logic [ExtWLEN-1:0] ret;
-    for (int i = 0; i < 8; ++i) begin
-      ret[39*i +: 39] = add_integrity_32(data[32*i +: 32]);
-    end
-    return ret;
-  endfunction
-
-  // Fix integrity bits of data
-  function logic [ExtWLEN-1:0] fix_integrity_wlen(logic [ExtWLEN-1:0] data);
-    return add_integrity_wlen(strip_integrity_wlen(data));
   endfunction
 
 endclass

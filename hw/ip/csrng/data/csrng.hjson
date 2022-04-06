@@ -125,6 +125,9 @@
     { name: "CONSTANTS.LC_GATED"
       desc: "Seed diversification based on the lifecycle state."
     }
+    { name: "FSM.LC_GATED"
+      desc: "Debug state machines are gated with lifecycle state."
+    }
     { name: "SW_GENBITS.BUS.CONSISTENCY"
       desc: "Comparison on successive bus values for genbits returned on the software channel."
     }
@@ -190,7 +193,7 @@
       swaccess: "rw",
       hwaccess: "hro",
       regwen: "REGWEN",
-      tags: [// Keep HW from affecting other registers.
+      tags: [// Internal HW can modify status register
                  "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         {
@@ -415,6 +418,8 @@
       desc: "Hardware detection of error conditions status register",
       swaccess: "ro",
       hwaccess: "hwo",
+      tags: [ // The internal HW can modify the error code registers
+              "excl:CsrAllTests:CsrExclCheck"],
       fields: [
         { bits: "0",
           name: "SFIFO_CMD_ERR",
@@ -659,8 +664,8 @@
       hwaccess: "hro",
       hwqe: "true",
       regwen: "REGWEN",
-      tags: [// Keep HW from affecting other registers.
-                "excl:CsrAllTests:CsrExclWrite"]
+      tags: [// Setting this register will force an unwanted fatal alert.
+                 "excl:CsrAllTests:CsrExclWrite"]
       fields: [
         {
             bits: "4:0",
@@ -676,17 +681,84 @@
         },
       ]
     },
-    { name: "MAIN_SM_STATE",
-      desc: "Main state machine state debug register",
+    { name: "SEL_TRACKING_SM",
+      desc: "Select debug tracking state machine register",
+      swaccess: "wo",
+      hwaccess: "hro",
+      fields: [
+        {
+            bits: "1:0",
+            name: "SEL_TRACKING_SM",
+            desc: '''
+                  These encoded bits will select one of four groups of
+                  state machine tracking registers. Each tracking debug field is 8 bits
+                  wide, so up to four debug fields can be observed at one time.
+                  Each tracking field will follow a per instance csrng application command
+                  through the csrng design unit.
+                  '''
+        },
+      ]
+    },
+    { name: "TRACKING_SM_OBS",
+      desc: "CSRNG application command tracking state machine observation register",
       swaccess: "ro",
       hwaccess: "hwo",
       fields: [
         { bits: "7:0",
-          name: "MAIN_SM_STATE",
-          desc: '''This is the state of the CSRNG main state machine.
-                See the RTL file `csrng_main_sm` for the meaning of the values.
+          name: "TRACKING_SM_OBS0",
+          desc: '''
+                This field will hold csrng command tracking state machine status,
+                This field holds tracking information for instance 0 if the
+                !!SEL_TRACKING_SM register is set to 0.
+                If more than 4 instances are active, then the selection register
+                can be programmed to select up to 3 other groups.
+                The life cycle state must be set to debug state to read this field.
                 '''
-          resval: 0x4e
+          tags: [// Internal HW can modify status register
+                 "excl:CsrAllTests:CsrExclCheck"]
+          resval: "0"
+        }
+        { bits: "15:8",
+          name: "TRACKING_SM_OBS1",
+          desc: '''
+                This field will hold csrng command tracking state machine status,
+                This field holds tracking information for instance 1 if the
+                !!SEL_TRACKING_SM register is set to 0.
+                If more than 4 instances are active, then the selection register
+                can be programmed to select up to 3 other groups.
+                The life cycle state must be set to debug state to read this field.
+                '''
+          tags: [// Internal HW can modify status register
+                 "excl:CsrAllTests:CsrExclCheck"]
+          resval: "0"
+        }
+        { bits: "23:16",
+          name: "TRACKING_SM_OBS2",
+          desc: '''
+                This field will hold csrng command tracking state machine status,
+                This field holds tracking information for instance 2 if the
+                !!SEL_TRACKING_SM register is set to 0.
+                If more than 4 instances are active, then the selection register
+                can be programmed to select up to 3 other groups.
+                The life cycle state must be set to debug state to read this field.
+                '''
+          tags: [// Internal HW can modify status register
+                 "excl:CsrAllTests:CsrExclCheck"]
+          resval: "0"
+        }
+        { bits: "31:24",
+          name: "TRACKING_SM_OBS3",
+          desc: '''
+                This field will hold csrng command tracking state machine status,
+                This field holds tracking information for instance 3 if the
+                !!SEL_TRACKING_SM register is set to 0.
+                If more than 4 instances are active, then the selection register
+                can be programmed to select up to 3 other groups.
+                The life cycle state must be set to debug state to read this field.
+                '''
+          tags: [// Internal HW can modify status register
+                 "excl:CsrAllTests:CsrExclCheck"]
+          resval: "0"
         }
       ]
     },

@@ -28,19 +28,17 @@
  * @param array The array expression to measure.
  * @return The number of elements in the array, as a `size_t`.
  */
-// This is a sufficiently well-known macro that we don't really need to bother
-// with a prefix like the others, and a rename will cause churn.
 #define ARRAYSIZE(array) (sizeof(array) / sizeof(array[0]))
 
 /**
  * An annotation that a switch/case fallthrough is the intended behavior.
  */
-#define OT_FALLTHROUGH_INTENDED __attribute__((fallthrough))
+#define FALLTHROUGH_INTENDED __attribute__((fallthrough))
 
 /**
  * A directive to force the compiler to inline a function.
  */
-#define OT_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
 
 /**
  * A variable-argument macro that expands to the number of arguments passed into
@@ -55,17 +53,17 @@
  *              to work correctly.
  * @param ... the variable args list.
  */
-#define OT_VA_ARGS_COUNT(dummy, ...)                                          \
-  OT_SHIFT_N_VARIABLE_ARGS_(dummy, ##__VA_ARGS__, 31, 30, 29, 28, 27, 26, 25, \
-                            24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13,   \
-                            12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
-// Implementation details for `OT_VA_ARGS_COUNT()`.
-#define OT_SHIFT_N_VARIABLE_ARGS_(...) OT_GET_NTH_VARIABLE_ARG_(__VA_ARGS__)
-#define OT_GET_NTH_VARIABLE_ARG_(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, \
-                                 x11, x12, x13, x14, x15, x16, x17, x18, x19, \
-                                 x20, x21, x22, x23, x24, x25, x26, x27, x28, \
-                                 x29, x30, x31, n, ...)                       \
+// Implementation details for `GET_NUM_VARIABLE_ARGS()`.
+#define GET_NUM_VARIABLE_ARGS(dummy, ...)                                      \
+  SHIFT_N_VARIABLE_ARGS_(dummy, ##__VA_ARGS__, 31, 30, 29, 28, 27, 26, 25, 24, \
+                         23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11,   \
+                         10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define SHIFT_N_VARIABLE_ARGS_(...) GET_NTH_VARIABLE_ARG_(__VA_ARGS__)
+#define GET_NTH_VARIABLE_ARG_(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, \
+                              x11, x12, x13, x14, x15, x16, x17, x18, x19, \
+                              x20, x21, x22, x23, x24, x25, x26, x27, x28, \
+                              x29, x30, x31, n, ...)                       \
   n
 
 /**
@@ -125,7 +123,7 @@
 /**
  * Attribute for weak functions that can be overridden, e.g., ISRs.
  */
-#define OT_WEAK __attribute__((weak))
+#define OT_ATTR_WEAK __attribute__((weak))
 
 /**
  * Attribute to construct functions without prologue/epilogue sequences.
@@ -135,7 +133,7 @@
  * See https://gcc.gnu.org/onlinedocs/gcc/RISC-V-Function-Attributes.html
  * #RISC-V-Function-Attributes
  */
-#define OT_NAKED __attribute__((naked))
+#define OT_ATTR_NAKED __attribute__((naked))
 
 /**
  * Attribute to place symbols into particular sections.
@@ -143,7 +141,7 @@
  * See https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html
  * #Common-Function-Attributes
  */
-#define OT_SECTION(name) __attribute__((section(name)))
+#define OT_ATTR_SECTION(name) __attribute__((section(name)))
 
 /**
  * Returns the address of the current function stack frame.
@@ -163,98 +161,5 @@
  * See https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html.
  */
 #define OT_UNREACHABLE() __builtin_unreachable()
-
-/**
- * Attribute for weak alias that can be overridden, e.g., Mock overrides in
- * DIFs.
- */
-#define OT_ALIAS(name) __attribute__((alias(name)))
-
-/**
- * Defines a local symbol named `kName_` whose address resolves to the
- * program counter value an inline assembly block at this location would
- * see.
- *
- * The primary intention of this macro is to allow for peripheral tests to be
- * written that want to assert that a specific program counter reported by the
- * hardware corresponds to actual code that executed.
- *
- * For example, suppose that we're waiting for an interrupt to fire, and want
- * to verify that it fired in a specific region. We have two volatile globals:
- * `irq_happened`, which the ISR sets before returning, and `irq_pc`, which
- * the ISR sets to whatever PC the hardware reports it came from. The
- * code below tests that the reported PC matches expectations.
- *
- * ```
- * OT_ADDRESSABLE_LABEL(kIrqWaitStart);
- * enable_interrupts();
- * while(!irq_happened) {
- *   wait_for_interrupt();
- * }
- * OT_ADDRESSABLE_LABEL(kIrqWaitEnd);
- *
- * CHECK(irq_pc >= &kIrqWaitStart && irq_pc < &IrqWaitEnd);
- * ```
- *
- * Note that this only works if all functions called between the two labels
- * are actually inlined; if the interrupt fires inside of one of those two
- * functions, it will appear to not have the right PC, even though it is
- * logically inside the pair of labels.
- *
- * # Volatile Semantics
- *
- * This has the same semantics as a `volatile` inline assembly block: it
- * may be reordered with respect to all operations except other volatile
- * operations (i.e. volatile assembly and volatile read/write, such as
- * MMIO). For example, in the following code, `kBefore` and `kAfter` can
- * wind up having the same address:
- *
- * ```
- * OT_ADDRESSABLE_LABEL(kBefore);
- * x += 5;
- * OT_ADDRESSABLE_LABEL(kAfter);
- * ```
- *
- * Because it can be reordered and the compiler is free to emit whatever
- * instructions it likes, comparing a program counter value obtained from
- * the hardware with a symbol emitted by this macro is brittle (and,
- * ultimately, futile). Instead, it should be used in pairs to create a
- * range of addresses that a value can be checked for being within.
- *
- * For this primitive to work correctly there must be something that counts as
- * a volatile operation between the two labels. These include:
- *
- * - Direct reads or writes to MMIO registers or CSRs.
- * - A volatile assembly block with at least one instruction.
- * - Any DIF or driver call that may touch an MMIO register or a CSR.
- * - `LOG`ging, `printf`ing, or `CHECK`ing.
- * - `wait_for_interrupt()`.
- * - `barrier32()`, but NOT `launder32()`.
- *
- * This macro should not be used on the host side. It will compile, but will
- * probably not provide any meaningful values. In the future, it may start
- * producing a garbage value on the host side.
- *
- * # Symbol Access
- *
- * The symbol reference `kName_` will only be scoped to the current block
- * in a function, but it can be redeclared in the same file with
- *
- * ```
- * extern const char kName_[];
- * ```
- *
- * if needed elsewhere (although this should be avoided for readability's sake).
- * The name of the constant is global to the current `.c` file only.
- *
- * # Example Uses
- */
-#define OT_ADDRESSABLE_LABEL(kName_)                                         \
-  extern const char kName_[];                                                \
-  asm volatile(".local " #kName_ "; " #kName_ ":;");                         \
-  /* Force this to be at function scope. It could go at global scope, but it \
-   * would give a garbage value dependent on the whims of the linker. */     \
-  do {                                                                       \
-  } while (false)
 
 #endif  // OPENTITAN_SW_DEVICE_LIB_BASE_MACROS_H_

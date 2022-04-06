@@ -173,7 +173,12 @@ module otbn_start_stop_control
   // Logic separate from main FSM code to avoid false combinational loop warning from verilator
   assign controller_start_o = (state_q == OtbnStartStopStateUrndRefresh) & !urnd_reseed_busy_i;
 
-  assign done_o = (state_q == OtbnStartStopSecureWipeComplete);
+  if (SecWipeEn) begin: gen_sec_wipe
+    assign done_o = (state_q == OtbnStartStopSecureWipeComplete);
+  end
+  else begin: gen_bypass_sec_wipe
+      assign done_o = start_secure_wipe_i;
+  end
 
   assign addr_cnt_d = addr_cnt_inc ? (addr_cnt_q + 5'd1) : 5'd0;
 

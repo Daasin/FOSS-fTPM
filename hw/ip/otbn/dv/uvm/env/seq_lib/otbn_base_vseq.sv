@@ -46,29 +46,6 @@ class otbn_base_vseq extends cip_base_vseq #(
   // Load the contents of an ELF file into the DUT's memories, either by a DPI backdoor (if backdoor
   // is true) or with TL transactions. Also, pass loop warp rules to the ISS through the model.
   protected task load_elf(string path, bit backdoor);
-    otbn_pkg::cmd_e wipe_cmd;
-    bit [1:0] num_wipes;
-    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(num_wipes, num_wipes inside { [0:2] };)
-    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(wipe_cmd, wipe_cmd != otbn_pkg::CmdExecute;)
-    case (num_wipes)
-      1 : _run_otbn_cmd(wipe_cmd); // Run a random wipe command
-      2 : begin
-        // First run a random wipe command
-        _run_otbn_cmd(wipe_cmd);
-        // We also would like to try writing to register while we are not in IDLE.
-        // In order to do tht we need to insert a random delay between the operations.
-        // That would result with us sometimes successfully running back to back operations.
-        // And sometimes writing to CMD while still doing the first operation.
-        repeat ($urandom_range(0,20))
-          @(cfg.clk_rst_vif.cbn);
-        // Check the name of the first command, run the other one after the delay.
-        if (wipe_cmd.name() == "CmdSecWipeDmem")
-          _run_otbn_cmd(otbn_pkg::CmdSecWipeImem);
-        else
-          _run_otbn_cmd(otbn_pkg::CmdSecWipeDmem);
-      end
-      default : ;// Do nothing.
-    endcase
     if (backdoor) begin
       load_elf_backdoor(path);
     end else begin
@@ -76,7 +53,7 @@ class otbn_base_vseq extends cip_base_vseq #(
     end
 
     // Pass loop warp rules that we've just loaded into otbn_memutil into the model.
-    cfg.model_agent_cfg.vif.take_loop_warps(cfg.mem_util);
+    otbn_take_loop_warps(cfg.model_agent_cfg.vif.handle, cfg.mem_util);
 
     // We're loading a new program, so the tracking that we've been doing for how long runs take is
     // no longer valid.
@@ -219,7 +196,7 @@ class otbn_base_vseq extends cip_base_vseq #(
       begin
         fork
           // Only _run_otbn will complete
-          _run_otbn_cmd(otbn_pkg::CmdExecute);
+          _run_otbn();
           _run_loop_warps();
           _run_sideload_sequence();
         join_any
@@ -278,27 +255,10 @@ class otbn_base_vseq extends cip_base_vseq #(
 
   // The guts of the run_otbn task. Writes to the CMD register to start OTBN and polls the status
   // register until completion. On reset, this returns immediately.
-  protected task _run_otbn_cmd(logic [7:0] cmd_i);
-
-    logic [7:0] exp_data_status;
-    case (cmd_i)
-      otbn_pkg::CmdSecWipeDmem: begin
-        `uvm_info(`gfn, "\n\t ----| Starting OTBN SecWipeDmem", UVM_MEDIUM)
-        exp_data_status = otbn_pkg::StatusBusySecWipeDmem;
-      end
-      otbn_pkg::CmdSecWipeImem: begin
-        `uvm_info(`gfn, "\n\t ----| Starting OTBN SecWipeImem", UVM_MEDIUM)
-        exp_data_status = otbn_pkg::StatusBusySecWipeImem;
-      end
-      otbn_pkg::CmdExecute: begin
-        `uvm_info(`gfn, "\n\t ----| Starting OTBN Execution", UVM_MEDIUM)
-        exp_data_status = otbn_pkg::StatusBusyExecute;
-      end
-      default:
-        `uvm_fatal(`gfn, "Invalid operation")
-    endcase
-
-    csr_utils_pkg::csr_wr(ral.cmd, cmd_i);
+  protected task _run_otbn();
+    // Start OTBN by writing EXECUTE to the CMD register.
+    `uvm_info(`gfn, "\n\t ----| Starting OTBN", UVM_MEDIUM)
+    csr_utils_pkg::csr_wr(ral.cmd, otbn_pkg::CmdExecute);
 
     // Wait for OTBN to finish, either by polling or by waiting on the interrupt pins
     if (_pick_use_interrupt()) begin
@@ -307,7 +267,7 @@ class otbn_base_vseq extends cip_base_vseq #(
     end else begin
       `uvm_info(`gfn, "\n\t ----| Waiting for OTBN to finish (polling)", UVM_MEDIUM)
       csr_utils_pkg::csr_spinwait(.ptr(ral.status),
-                                  .exp_data(exp_data_status),
+                                  .exp_data(otbn_pkg::StatusBusyExecute),
                                   .compare_op(CompareOpNe));
     end
 
@@ -415,7 +375,7 @@ class otbn_base_vseq extends cip_base_vseq #(
     end else begin
       // If absent keys are not allowed, we want to generate our own sequence that doesn't allow
       // keys to be invalid. We send it with a higher priority to override the default sequence.
-      key_sideload_set_seq#(keymgr_pkg::otbn_key_req_t) sideload_seq;
+      key_sideload_set_seq sideload_seq;
       `uvm_create_on(sideload_seq, p_sequencer.key_sideload_sequencer_h)
       while (stop_tokens == 0) begin
         `DV_CHECK_RANDOMIZE_WITH_FATAL(sideload_seq, sideload_key.valid == 1'b1;)

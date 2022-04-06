@@ -177,7 +177,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     end
   end
 
-  assign seed_err_o = seed_err_q | seed_err_d;
+  assign seed_err_o = seed_err_q;
 
   // seed cnt tracks which seed round we are handling at the moment
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -414,22 +414,21 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
           start = 1'b0;
           state_d = StWait;
         end else if (done_i) begin
-          seed_err_d = |err_i;
+          seed_err_d = |err_i | seed_err_q;
           state_d = StReadEval;
         end
       end // case: StReadSeeds
 
-      StReadEval: begin
-        phase = PhaseSeed;
-        addr_cnt_clr = 1'b1;
-        state_d = StReadSeeds;
+     StReadEval: begin
+         addr_cnt_clr = 1'b1;
+         state_d = StReadSeeds;
 
-        if (validate_q) begin
-          seed_cnt_en = 1'b1;
-          validate_d = 1'b0;
-        end else begin
-          validate_d = 1'b1;
-        end
+         if (validate_q) begin
+            seed_cnt_en = 1'b1;
+            validate_d = 1'b0;
+         end else begin
+            validate_d = 1'b1;
+         end
       end
 
       // Waiting for an rma entry command
@@ -816,14 +815,12 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   // assertion
 
 `ifdef INC_ASSERT
-  logic [DataWidth-1:0] rma_data_q, rma_data;
+  logic [DataWidth-1:0] rma_data;
   always_ff @(posedge clk_i) begin
     if (rma_start && rvalid_i && rready_o) begin
-      rma_data_q <= rma_data;
+      rma_data <= {rma_data[(DataWidth-1) -: BusWidth], rdata_i};
     end
   end
-
-  assign rma_data = {rdata_i, rma_data_q[DataWidth-1 : BusWidth]};
 
   // check the rma programmed value actually matches what was read back
   `ASSERT(ProgRdVerify_A, rma_start & rd_cnt_en & done_i |-> prog_data == rma_data)

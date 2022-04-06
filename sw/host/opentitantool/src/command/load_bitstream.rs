@@ -26,8 +26,8 @@ impl CommandDispatch for LoadBitstream {
         _context: &dyn Any,
         transport: &TransportWrapper,
     ) -> Result<Option<Box<dyn Serialize>>> {
-        Ok(transport.dispatch(&cw310::FpgaProgram {
+        transport.dispatch(&cw310::FpgaProgram {
             bitstream: fs::read(&self.filename)?,
-        })?)
+        })
     }
 }

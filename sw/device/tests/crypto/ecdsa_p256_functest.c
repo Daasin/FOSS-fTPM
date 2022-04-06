@@ -33,20 +33,22 @@ static const ecdsa_p256_private_key_t kPrivateKey = {
 };
 
 hmac_error_t compute_digest(void) {
-  // Compute the SHA-256 digest using the HMAC device.
+  hmac_digest_t act_digest;
+  uint32_t i;
+
   hmac_sha256_init();
   hmac_error_t err = hmac_sha256_update(&kMessage, sizeof(kMessage) - 1);
   if (err != kHmacOk) {
     return err;
   }
-  hmac_digest_t hmac_digest;
-  err = hmac_sha256_final(&hmac_digest);
+  err = hmac_sha256_final(&act_digest);
   if (err != kHmacOk) {
     return err;
   }
 
-  // Copy digest into the destination array.
-  memcpy(digest.h, hmac_digest.digest, sizeof(hmac_digest.digest));
+  for (i = 0; i < kP256ScalarNumWords; i++) {
+    digest.h[i] = act_digest.digest[i];
+  };
 
   return kHmacOk;
 }
@@ -58,9 +60,6 @@ bool sign_then_verify_test(void) {
   // Generate a signature for the message
   LOG_INFO("Signing...");
   otbn_error_t err = ecdsa_p256_sign(&digest, &kPrivateKey, &signature);
-  for (size_t i = 0; i < kP256ScalarNumWords; i++) {
-    LOG_INFO("h[%d] = 0x%08x", i, digest.h[i]);
-  }
   if (err != kOtbnErrorOk) {
     LOG_ERROR("Error from OTBN while signing: 0x%08x.", err);
     otbn_err_bits_t err_bits;

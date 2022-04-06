@@ -11,33 +11,20 @@ module rstmgr_leaf_rst
   import rstmgr_pkg::*;
   import rstmgr_reg_pkg::*;
   import prim_mubi_pkg::mubi4_t; #(
-  parameter bit SecCheck = 1,
-  parameter int SecMaxSyncDelay = 2,
-  parameter bit SwRstReq = 1
+  parameter bit SecCheck = 1
 ) (
   input clk_i,
   input rst_ni,
   input leaf_clk_i,
   input parent_rst_ni,
   input sw_rst_req_ni,
-  input prim_mubi_pkg::mubi4_t scanmode_i,
   input scan_rst_ni,
+  input scan_sel,
   output mubi4_t rst_en_o,
   output logic leaf_rst_o,
   output logic err_o,
   output logic fsm_err_o
 );
-
-  prim_mubi_pkg::mubi4_t scanmode;
-  prim_mubi4_sync #(
-    .NumCopies(1),
-    .AsyncOn(0)
-    ) u_scanmode_sync  (
-    .clk_i,
-    .rst_ni,
-    .mubi_i(scanmode_i),
-    .mubi_o(scanmode)
- );
 
   logic leaf_rst_sync;
   prim_flop_2sync #(
@@ -55,37 +42,27 @@ module rstmgr_leaf_rst
   ) u_rst_mux (
     .clk0_i(leaf_rst_sync),
     .clk1_i(scan_rst_ni),
-    .sel_i(prim_mubi_pkg::mubi4_test_true_strict(scanmode)),
+    .sel_i(scan_sel),
     .clk_o(leaf_rst_o)
   );
 
+  // once software requests a reset, hold on to the request until the consistency
+  // checker passes the assertion check point
   logic sw_rst_req_q;
   logic clr_sw_rst_req;
-  if (SwRstReq) begin : gen_sw_rst_req
-    // once software requests a reset, hold on to the request until the consistency
-    // checker passes the assertion check point
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-      if (!rst_ni) begin
-         sw_rst_req_q <= '0;
-      end else if (sw_rst_req_q && clr_sw_rst_req) begin
-         sw_rst_req_q <= '0;
-      end else if (!sw_rst_req_q && !sw_rst_req_ni && !clr_sw_rst_req) begin
-         sw_rst_req_q <= 1'b1;
-      end
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+       sw_rst_req_q <= '0;
+    end else if (sw_rst_req_q && clr_sw_rst_req) begin
+       sw_rst_req_q <= '0;
+    end else if (!sw_rst_req_q && !sw_rst_req_ni && !clr_sw_rst_req) begin
+       sw_rst_req_q <= 1'b1;
     end
-  end else begin : gen_no_sw_rst_req
-    assign sw_rst_req_q = '0;
-
-    logic unused_clr_sw_rst_req;
-    assign unused_clr_sw_rst_req = clr_sw_rst_req;
   end
 
   if (SecCheck) begin : gen_rst_chk
     // SEC_CM: LEAF.RST.BKGN_CHK
-    rstmgr_cnsty_chk #(
-      .SecMaxSyncDelay(SecMaxSyncDelay),
-      .SwRstReq(SwRstReq)
-    ) u_rst_chk (
+    rstmgr_cnsty_chk u_rst_chk (
       .clk_i,
       .rst_ni,
       .child_clk_i(leaf_clk_i),

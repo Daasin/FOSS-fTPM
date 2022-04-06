@@ -39,8 +39,6 @@ module tb;
       rng_if(.clk(clk), .rst_n(rst_n));
   push_pull_if#(.HostDataWidth(entropy_src_pkg::FIPS_CSRNG_BUS_WIDTH))
       csrng_if(.clk(clk), .rst_n(rst_n & csrng_rst_n));
-  entropy_src_path_if entropy_src_path_if (.entropy_src_hw_if_i(entropy_src_hw_if_i));
-  entropy_src_assert_if entropy_src_assert_if (.entropy_src_hw_if_i(entropy_src_hw_if_i));
 
   `DV_ALERT_IF_CONNECT
 
@@ -52,8 +50,8 @@ module tb;
     .tl_i                         (tl_if.h2d  ),
     .tl_o                         (tl_if.d2h  ),
 
-    .otp_en_entropy_src_fw_read_i (prim_mubi_pkg::mubi8_t'(otp_en_es_fw_read)),
-    .otp_en_entropy_src_fw_over_i (prim_mubi_pkg::mubi8_t'(otp_en_es_fw_over)),
+    .otp_en_entropy_src_fw_read_i (otp_en_es_fw_read),
+    .otp_en_entropy_src_fw_over_i (otp_en_es_fw_over),
 
     .entropy_src_hw_if_o          ({csrng_if.ack,
                                     csrng_if.d_data[entropy_src_pkg::CSRNG_BUS_WIDTH-1:0],
@@ -103,10 +101,6 @@ module tb;
         (null, "*.env.m_rng_agent*", "vif", rng_if);
     uvm_config_db#(virtual push_pull_if#(.HostDataWidth(entropy_src_pkg::FIPS_CSRNG_BUS_WIDTH)))::
         set(null, "*.env.m_csrng_agent*", "vif", csrng_if);
-    uvm_config_db#(virtual entropy_src_assert_if)::set(null, "*.env", "entropy_src_assert_if",
-        entropy_src_assert_if);
-    uvm_config_db#(virtual entropy_src_path_if)::set(null, "*.env", "entropy_src_path_vif",
-        entropy_src_path_if);
     $timeformat(-12, 0, " ps", 12);
     run_test();
   end

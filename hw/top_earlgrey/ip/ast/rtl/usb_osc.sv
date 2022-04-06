@@ -10,7 +10,6 @@ module usb_osc (
   input vcore_pok_h_i,    // VCORE POK @3.3V
   input usb_en_i,         // USB Source Clock Enable
   input usb_ref_val_i,    // USB Reference Valid
-  input usb_osc_cal_i,    // USB Oscillator Calibrated
 `ifdef AST_BYPASS_CLK
   input clk_usb_ext_i,    // FPGA/VERILATOR Clock input
 `endif
@@ -24,17 +23,15 @@ module usb_osc (
 timeunit 1ns / 1ps;
 import ast_bhv_pkg::* ;
 
-real CLK_PERIOD;
+localparam real UsbClkPeriod = 1000000/48;  // ~20833.33333ps (48Mhz)
 integer rand32;
-
 reg init_start = 1'b0;
-initial init_start = 1'b0;
 
 initial begin
-  #1; init_start  = 1'b1;
-  $display("\nUSB Power-up Clock Frequency: %0d Hz", $rtoi(10**9/CLK_PERIOD));
+  $display("\nUSB Clock Period: %0dps", UsbClkPeriod);
   rand32 = $urandom_range((9'd416), -(9'd416));  // +/-416ps (+/-2% max)
   $display("USB Clock Drift: %0dps", rand32);
+  #1; init_start  = 1'b1;
 end
 
 // Enable 5us RC Delay on rise
@@ -43,32 +40,24 @@ buf #(IO_EN_RDLY, 0) b0 (en_osc_re_buf, (vcore_pok_h_i && usb_en_i));
 assign en_osc_re = en_osc_re_buf && init_start;
 
 logic ref_val_buf, ref_val;
-buf #(USB_VAL_RDLY, USB_VAL_FDLY) b1 (ref_val_buf, (vcore_pok_h_i && usb_ref_val_i));
+buf #(USB_VAL_RDLY, USB_VAL_FDLY) b1 (ref_val_buf, usb_ref_val_i);
 assign ref_val = ref_val_buf && init_start;
 
 // Clock Oscillator
 ////////////////////////////////////////
-real CalUsbClkPeriod, UncUsbClkPeriod, UsbClkPeriod, drift;
+logic en_osc;
+reg clk_osc = 1'b1;
 
-initial CalUsbClkPeriod = $itor( 1000000/48 );                    // ~20833.33333ps (48MHz)
-initial UncUsbClkPeriod = $itor( $urandom_range(55555, 25000) );  // 55555-25000ps (18-40MHz)
-
-assign drift = ref_val ? 0.0 : $itor(rand32);
-assign UsbClkPeriod = (usb_osc_cal_i && init_start) ? CalUsbClkPeriod : UncUsbClkPeriod;
-assign CLK_PERIOD = (UsbClkPeriod + drift)/1000;
-
-// Free running oscillator
-reg clk_osc;
-initial clk_osc = 1'b1;
+shortreal drift;
+assign drift = ref_val ? 0 : rand32;
 
 always begin
-  #(CLK_PERIOD/2) clk_osc = ~clk_osc;
+  #((UsbClkPeriod + drift)/2000) clk_osc = ~clk_osc;
 end
 
-logic en_osc;
-
 // HDL Clock Gate
-logic en_clk, clk;
+logic clk;
+reg en_clk;
 
 always_latch begin
   if ( !clk_osc ) en_clk <= en_osc;
@@ -132,7 +121,7 @@ prim_clock_buf #(
 // Unused Signals
 ///////////////////////
 logic unused_sigs;
-assign unused_sigs = ^{ usb_osc_cal_i, usb_ref_val_i };
+assign unused_sigs = ^{ usb_ref_val_i };  // Used in ASIC implementation
 `endif
 
 endmodule : usb_osc

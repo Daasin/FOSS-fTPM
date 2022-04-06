@@ -51,8 +51,7 @@ static_assert(ALERT_HANDLER_LOC_ALERT_CLASS_SHADOWED_MULTIREG_COUNT <=
   void unmocked_##name_
 #else
 #define SHUTDOWN_FUNC(modifiers_, name_) \
-  OT_ALWAYS_INLINE                       \
-  static modifiers_ void name_
+  static ALWAYS_INLINE modifiers_ void name_
 #endif
 
 // Convert the alert class to an index.
@@ -225,9 +224,8 @@ rom_error_t shutdown_init(lifecycle_state_t lc_state) {
  *
  * This function must be inlined because it is called from `shutdown_finalize`.
  */
-OT_ALWAYS_INLINE
-static uint32_t shutdown_redact_inline(rom_error_t reason,
-                                       shutdown_error_redact_t severity) {
+static ALWAYS_INLINE uint32_t
+shutdown_redact_inline(rom_error_t reason, shutdown_error_redact_t severity) {
   uint32_t redacted = (uint32_t)reason;
   if (reason == kErrorOk) {
     return 0;
@@ -235,14 +233,14 @@ static uint32_t shutdown_redact_inline(rom_error_t reason,
   switch (severity) {
     case kShutdownErrorRedactModule:
       redacted = bitfield_field32_write(redacted, ROM_ERROR_FIELD_MODULE, 0);
-      OT_FALLTHROUGH_INTENDED;
+      FALLTHROUGH_INTENDED;
     case kShutdownErrorRedactError:
       redacted = bitfield_field32_write(redacted, ROM_ERROR_FIELD_ERROR, 0);
-      OT_FALLTHROUGH_INTENDED;
+      FALLTHROUGH_INTENDED;
     case kShutdownErrorRedactNone:
       break;
     case kShutdownErrorRedactAll:
-      OT_FALLTHROUGH_INTENDED;
+      FALLTHROUGH_INTENDED;
     default:
       redacted = kErrorUnknown;
   }
@@ -258,9 +256,8 @@ uint32_t shutdown_redact(rom_error_t reason, shutdown_error_redact_t severity) {
  *
  * This function must be inlined because it is called from `shutdown_finalize`.
  */
-OT_ALWAYS_INLINE
-static shutdown_error_redact_t shutdown_redact_policy_inline(
-    uint32_t raw_state) {
+static ALWAYS_INLINE shutdown_error_redact_t
+shutdown_redact_policy_inline(uint32_t raw_state) {
   switch (raw_state) {
     case LC_CTRL_LC_STATE_STATE_VALUE_TEST_UNLOCKED0:
     case LC_CTRL_LC_STATE_STATE_VALUE_TEST_UNLOCKED1:
@@ -331,8 +328,8 @@ enum {
  * @param prefix Prefix encoded as a 32-bit value.
  * @param val Integer to print.
  */
-OT_ALWAYS_INLINE
-static void shutdown_print(shutdown_log_prefix_t prefix, uint32_t val) {
+static ALWAYS_INLINE void shutdown_print(shutdown_log_prefix_t prefix,
+                                         uint32_t val) {
   // Print the 4 character `prefix`.
   abs_mmio_write32(kUartBase + UART_WDATA_REG_OFFSET, prefix);
   abs_mmio_write32(kUartBase + UART_WDATA_REG_OFFSET, prefix >> 8);

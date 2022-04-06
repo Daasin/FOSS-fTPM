@@ -71,18 +71,13 @@ class sysrst_ctrl_scoreboard extends cip_base_scoreboard #(
         // FIXME
       end
       "intr_test": begin
+        // FIXME
       end
       "pin_out_ctl","pin_allowed_ctl","pin_out_value": begin
       end
       "key_invert_ctl": begin
       end
       "com_out_ctl_0", "com_sel_ctl_0", "com_det_ctl_0": begin
-      end
-      "com_out_ctl_1", "com_sel_ctl_1", "com_det_ctl_1": begin
-      end
-      "com_out_ctl_2", "com_sel_ctl_2", "com_det_ctl_2": begin
-      end
-      "com_out_ctl_3", "com_sel_ctl_3", "com_det_ctl_3": begin
       end
       "ec_rst_ctl": begin
       end
@@ -95,20 +90,15 @@ class sysrst_ctrl_scoreboard extends cip_base_scoreboard #(
       "auto_block_debounce_ctl", "auto_block_out_ctl": begin
       end
       "wkup_status": begin
-        do_read_check = 1'b0;
       end
       "pin_in_value": begin
         do_read_check = 1'b0;  //This check is done in sequence
       end
-      "auto_block_debounce_ctl", "auto_block_out_ctl": begin
-      end
-      "ulp_ctl", "ulp_ac_debounce_ctl", "ulp_lid_debounce_ctl", "ulp_pwrb_debounce_ctl": begin
-      end
-      "ulp_status": begin
-        do_read_check = 1'b0; // This check is done in sequence
+      "wkup_status": begin
+        do_read_check = 1'b0;  //This check is done in sequence
       end
       default: begin
-       `uvm_error(`gfn, $sformatf("invalid csr: %0s", csr.get_full_name()))
+        `uvm_error(`gfn, $sformatf("invalid csr: %0s", csr.get_full_name()))
       end
     endcase
 

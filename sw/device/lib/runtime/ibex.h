@@ -10,7 +10,6 @@
 #include <stdint.h>
 
 #include "sw/device/lib/arch/device.h"
-#include "sw/device/lib/base/math.h"
 #include "sw/device/lib/base/stdasm.h"
 
 /**
@@ -138,10 +137,8 @@ void ibex_mepc_write(uint32_t mepc);
  * @return The initialized timeout value.
  */
 inline ibex_timeout_t ibex_timeout_init(uint32_t timeout_usec) {
-  return (ibex_timeout_t){
-      .cycles = udiv64_slow(kClockFreqCpuHz * timeout_usec, 1000000, NULL),
-      .start = ibex_mcycle_read(),
-  };
+  return (ibex_timeout_t){.cycles = kClockFreqCpuHz * timeout_usec / 1000000,
+                          .start = ibex_mcycle_read()};
 }
 
 /**
@@ -152,7 +149,7 @@ inline ibex_timeout_t ibex_timeout_init(uint32_t timeout_usec) {
  * @return Boolean indicating the timeout expired.
  */
 inline bool ibex_timeout_check(const ibex_timeout_t *timeout) {
-  return ibex_mcycle_read() - timeout->start > timeout->cycles;
+  return ibex_mcycle_read() - timeout->start < timeout->cycles;
 }
 
 /**
@@ -163,8 +160,7 @@ inline bool ibex_timeout_check(const ibex_timeout_t *timeout) {
  * @return Time elapsed in microseconds.
  */
 inline uint64_t ibex_timeout_elapsed(const ibex_timeout_t *timeout) {
-  return udiv64_slow((ibex_mcycle_read() - timeout->start) * 1000000,
-                     kClockFreqCpuHz, NULL);
+  return ((ibex_mcycle_read() - timeout->start) * 1000000 / kClockFreqCpuHz);
 }
 
 /**
@@ -177,7 +173,7 @@ inline uint64_t ibex_timeout_elapsed(const ibex_timeout_t *timeout) {
   do {                                                                    \
     const ibex_timeout_t timeout_ = ibex_timeout_init(timeout_usec);      \
     while (!(expr)) {                                                     \
-      CHECK(ibex_timeout_check(&timeout_),                                \
+      CHECK(!ibex_timeout_check(&timeout_),                               \
             "Timed out after %d usec (%d CPU cycles) waiting for " #expr, \
             timeout_usec, (uint32_t)timeout_.cycles);                     \
     }                                                                     \

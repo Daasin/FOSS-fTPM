@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::Result;
 use log;
 use safe_ftdi as ftdi;
 use std::cell::RefCell;
@@ -10,7 +11,6 @@ use std::rc::Rc;
 use crate::io::spi::{ClockPolarity, SpiError, Target, Transfer, TransferMode};
 use crate::transport::ultradebug::mpsse;
 use crate::transport::ultradebug::Ultradebug;
-use crate::transport::{Result, TransportError, WrapInTransportError};
 
 struct Inner {
     mode: TransferMode,
@@ -36,8 +36,7 @@ impl UltradebugSpi {
         log::debug!("Setting SPI_ZB");
         mpsse
             .borrow_mut()
-            .gpio_set(UltradebugSpi::PIN_SPI_ZB, false)
-            .wrap(TransportError::FtdiError)?;
+            .gpio_set(UltradebugSpi::PIN_SPI_ZB, false)?;
 
         Ok(UltradebugSpi {
             device: mpsse,
@@ -72,21 +71,18 @@ impl Target for UltradebugSpi {
     }
     fn set_max_speed(&self, frequency: u32) -> Result<()> {
         let mut device = self.device.borrow_mut();
-        device
-            .set_clock_frequency(frequency)
-            .wrap(TransportError::FtdiError)?;
-        Ok(())
+        device.set_clock_frequency(frequency)
     }
 
-    fn get_max_transfer_count(&self) -> Result<usize> {
+    fn get_max_transfer_count(&self) -> usize {
         // Arbitrary value: number of `Transfers` that can be in a single transaction.
-        Ok(42)
+        42
     }
 
-    fn max_chunk_size(&self) -> Result<usize> {
+    fn max_chunk_size(&self) -> usize {
         // Size of the FTDI read buffer.  We can't perform a read larger than this;
         // the FTDI device simply won't read any more.
-        Ok(65536)
+        65536
     }
 
     fn run_transaction(&self, transaction: &mut [Transfer]) -> Result<()> {
@@ -143,9 +139,6 @@ impl Target for UltradebugSpi {
             device.gpio_direction,
             device.gpio_value | chip_select,
         ));
-        device
-            .execute(&mut command)
-            .wrap(TransportError::FtdiError)?;
-        Ok(())
+        device.execute(&mut command)
     }
 }

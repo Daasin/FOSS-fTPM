@@ -1060,9 +1060,6 @@ module ast_reg_top (
 
 
   // R[regal]: V(True)
-  logic regal_qe;
-  logic [0:0] regal_flds_we;
-  assign regal_qe = &regal_flds_we;
   prim_subreg_ext #(
     .DW    (32)
   ) u_regal (
@@ -1071,11 +1068,10 @@ module ast_reg_top (
     .wd     (regal_wd),
     .d      (hw2reg.regal.d),
     .qre    (),
-    .qe     (regal_flds_we[0]),
+    .qe     (reg2hw.regal.qe),
     .q      (reg2hw.regal.q),
     .qs     (regal_qs)
   );
-  assign reg2hw.regal.qe = regal_qe;
 
 
   // Subregister 0 of Multireg regb

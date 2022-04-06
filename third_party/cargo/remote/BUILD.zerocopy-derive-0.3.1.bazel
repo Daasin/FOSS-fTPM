@@ -44,7 +44,6 @@ rust_proc_macro(
     ],
     tags = [
         "cargo-raze",
-        "crate-name=zerocopy-derive",
         "manual",
     ],
     version = "0.3.1",

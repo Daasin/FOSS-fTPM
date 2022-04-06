@@ -13,7 +13,7 @@ name = "opentitantool"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = {version="1.0", features=["backtrace"]}
+anyhow = "1.0"
 hex = "0.4"
 thiserror = "1.0"
 opentitanlib = {path="../opentitanlib"}
