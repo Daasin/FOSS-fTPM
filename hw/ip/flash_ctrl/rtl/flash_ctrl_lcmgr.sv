@@ -20,6 +20,9 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   // only access seeds when provisioned
   input provision_en_i,
 
+  // combined escalation disable
+  input prim_mubi_pkg::mubi4_t disable_i,
+
   // interface to ctrl arb control ports
   output flash_ctrl_reg_pkg::flash_ctrl_reg2hw_control_reg_t ctrl_o,
   output logic req_o,
@@ -34,10 +37,11 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   input wready_i,
 
   // direct form rd_fifo
-  input [BusWidth-1:0] rdata_i,
+  // rdata_i is {data_integrity, data}, the upper bits store integrity
+  input [BusFullWidth-1:0] rdata_i,
 
   // direct to wr_fifo
-  output logic [BusWidth-1:0] wdata_o,
+  output logic [BusFullWidth-1:0] wdata_o,
 
   // external rma request
   // This should be simplified to just multi-bit request and multi-bit response
@@ -52,6 +56,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
 
   // fatal errors
   output logic fatal_err_o,
+  output logic intg_err_o,
 
   // error status to registers
   output logic seed_err_o,
@@ -130,21 +135,8 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   lcmgr_state_e state_q, state_d;
   logic state_err;
 
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateWidth-1:0] state_raw_q;
-  assign state_q = lcmgr_state_e'(state_raw_q);
-  //SEC_CM: FSM.SPARSE
-  prim_sparse_fsm_flop #(
-    .StateEnumT(lcmgr_state_e),
-    .Width(StateWidth),
-    .ResetValue(StateWidth'(StIdle))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( state_d ),
-    .state_o ( state_raw_q )
-  );
+  //SEC_CM: CTRL.FSM.SPARSE
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q, lcmgr_state_e, StIdle)
 
   lc_ctrl_pkg::lc_tx_t err_sts_d, err_sts_q;
   logic err_sts_set;
@@ -177,27 +169,74 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     end
   end
 
-  assign seed_err_o = seed_err_q;
+  assign seed_err_o = seed_err_q | seed_err_d;
 
   // seed cnt tracks which seed round we are handling at the moment
+  // SEC_CM: CTR.REDUN
+  logic seed_cnt_err_d, seed_cnt_err_q;
+  prim_count #(
+    .Width(SeedCntWidth),
+    .OutSelDnCnt(1'b0),
+    .CntStyle(prim_count_pkg::DupCnt)
+  ) u_seed_cnt (
+    .clk_i,
+    .rst_ni,
+    .clr_i(seed_cnt_clr),
+    .set_i('0),
+    .set_cnt_i('0),
+    .en_i(seed_cnt_en),
+    .step_i(SeedCntWidth'(1'b1)),
+    .cnt_o(seed_cnt_q),
+    .err_o(seed_cnt_err_d)
+  );
+
+  // SEC_CM: CTR.REDUN
+  logic addr_cnt_err_d, addr_cnt_err_q;
+  prim_count #(
+    .Width(SeedRdsWidth),
+    .OutSelDnCnt(1'b0),
+    .CntStyle(prim_count_pkg::DupCnt)
+  ) u_addr_cnt (
+    .clk_i,
+    .rst_ni,
+    .clr_i(addr_cnt_clr),
+    .set_i('0),
+    .set_cnt_i('0),
+    .en_i(addr_cnt_en),
+    .step_i(SeedRdsWidth'(1'b1)),
+    .cnt_o(addr_cnt_q),
+    .err_o(addr_cnt_err_d)
+  );
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      seed_cnt_q <= '0;
-    end else if (seed_cnt_clr) begin
-      seed_cnt_q <= '0;
-    end else if (seed_cnt_en) begin
-      seed_cnt_q <= seed_cnt_q + 1'b1;
+      addr_cnt_err_q <= '0;
+      seed_cnt_err_q <= '0;
+    end else begin
+      addr_cnt_err_q <= addr_cnt_err_q | addr_cnt_err_d;
+      seed_cnt_err_q <= seed_cnt_err_q | seed_cnt_err_d;
     end
   end
 
-  // addr cnt tracks how far we are in an address looop
+  // read data integrity check
+  logic data_err;
+  logic data_intg_ok;
+  tlul_data_integ_dec u_data_intg_chk (
+    .data_intg_i(rdata_i),
+    .data_err_o(data_err)
+  );
+  assign data_intg_ok = ~data_err;
+
+  // hold on to failed integrity until reset
+  logic data_invalid_d, data_invalid_q;
+  assign data_invalid_d = data_invalid_q |
+                          (rvalid_i & ~data_intg_ok);
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      addr_cnt_q <= '0;
-    end else if (addr_cnt_clr) begin
-      addr_cnt_q <= '0;
-    end else if (addr_cnt_en) begin
-      addr_cnt_q <= addr_cnt_q + 1'b1;
+      data_invalid_q <= '0;
+    end else begin
+      data_invalid_q <= data_invalid_d;
     end
   end
 
@@ -210,9 +249,9 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     // validate current value
     if (seed_phase && validate_q && rvalid_i) begin
       seeds_q[seed_idx][rd_idx] <= seeds_q[seed_idx][rd_idx] &
-                                   rdata_i;
+                                   rdata_i[BusWidth-1:0];
     end else if (seed_phase && rvalid_i) begin
-      seeds_q[seed_idx][rd_idx] <= rdata_i;
+      seeds_q[seed_idx][rd_idx] <= rdata_i[BusWidth-1:0];
     end
   end
 
@@ -414,21 +453,22 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
           start = 1'b0;
           state_d = StWait;
         end else if (done_i) begin
-          seed_err_d = |err_i | seed_err_q;
+          seed_err_d = |err_i;
           state_d = StReadEval;
         end
       end // case: StReadSeeds
 
-     StReadEval: begin
-         addr_cnt_clr = 1'b1;
-         state_d = StReadSeeds;
+      StReadEval: begin
+        phase = PhaseSeed;
+        addr_cnt_clr = 1'b1;
+        state_d = StReadSeeds;
 
-         if (validate_q) begin
-            seed_cnt_en = 1'b1;
-            validate_d = 1'b0;
-         end else begin
-            validate_d = 1'b1;
-         end
+        if (validate_q) begin
+          seed_cnt_en = 1'b1;
+          validate_d = 1'b0;
+        end else begin
+          validate_d = 1'b1;
+        end
       end
 
       // Waiting for an rma entry command
@@ -492,6 +532,13 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
       end
 
     endcase // unique case (state_q)
+
+    // this fsm does not directly interface with flash so can be
+    // be transitioned to invalid immediately
+    if (prim_mubi_pkg::mubi4_test_true_loose(disable_i)) begin
+      state_d = StInvalid;
+    end
+
   end // always_comb
 
   ///////////////////////////////
@@ -521,23 +568,11 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
                     RmaWipeEntries[rma_wipe_idx].num_pages;
 
   rma_state_e rma_state_d, rma_state_q;
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [RmaStateWidth-1:0] rma_state_raw_q;
-  assign rma_state_q = rma_state_e'(rma_state_raw_q);
-  // SEC_CM: FSM.SPARSE
-  prim_sparse_fsm_flop #(
-    .StateEnumT(rma_state_e),
-    .Width(RmaStateWidth),
-    .ResetValue(RmaStateWidth'(StRmaIdle))
-  ) u_rma_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( rma_state_d ),
-    .state_o ( rma_state_raw_q )
-  );
 
-  // SEC_CM: CTR.SPARSE
+  // SEC_CM: CTRL.FSM.SPARSE
+  `PRIM_FLOP_SPARSE_FSM(u_rma_state_regs, rma_state_d, rma_state_q, rma_state_e, StRmaIdle)
+
+  // SEC_CM: CTR.REDUN
   logic page_err_q, page_err_d;
   prim_count #(
     .Width(PageCntWidth),
@@ -556,6 +591,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   );
 
   logic word_err_q, word_err_d;
+  //SEC_CM: CTR.REDUN
   prim_count #(
     .Width(WordCntWidth),
     .OutSelDnCnt(1'b0),
@@ -573,6 +609,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   );
 
   logic rma_idx_err_q, rma_idx_err_d;
+  //SEC_CM: CTR.REDUN
   prim_count #(
     .Width(WipeIdxWidth),
     .OutSelDnCnt(1'b0),
@@ -694,16 +731,24 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     fsm_err = 1'b0;
 
     unique case (rma_state_q)
-
+      // Transition to invalid state via disable only when any ongoing stateful
+      // operations are complete. This ensures we do not electically disturb
+      // any ongoing operation.
+      // This of course cannot be guaranteed if the FSM state is directly disturbed,
+      // and that is considered an extremely invasive attack.
       StRmaIdle: begin
-        if (rma_wipe_req_int) begin
+        if (prim_mubi_pkg::mubi4_test_true_loose(disable_i)) begin
+          rma_state_d = StRmaInvalid;
+        end else if (rma_wipe_req_int) begin
           rma_state_d = StRmaPageSel;
           page_cnt_ld = 1'b1;
         end
       end
 
       StRmaPageSel: begin
-        if (page_cnt < end_page) begin
+        if (prim_mubi_pkg::mubi4_test_true_loose(disable_i)) begin
+          rma_state_d = StRmaInvalid;
+        end else if (page_cnt < end_page) begin
           rma_state_d = StRmaErase;
         end else begin
           rma_wipe_done = 1'b1;
@@ -727,7 +772,9 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
       end
 
       StRmaWordSel: begin
-        if (word_cnt < BusWordsPerPage) begin
+        if (prim_mubi_pkg::mubi4_test_true_loose(disable_i)) begin
+          rma_state_d = StRmaInvalid;
+        end else if (word_cnt < BusWordsPerPage) begin
           rma_state_d = StRmaProgram;
         end else begin
           word_cnt_clr = 1'b1;
@@ -763,14 +810,13 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
         rd_cnt_en = 1'b1;
 
         if ((beat_cnt == MaxBeatCnt[BeatCntWidth-1:0]) && done_i) begin
-        //if ((beat_cnt == MaxBeatCnt[BeatCntWidth-1:0])) begin
           beat_cnt_clr = 1'b1;
           word_cnt_incr = 1'b1;
           rma_state_d = StRmaWordSel;
         end
 
         if (rvalid_i && rready_o) begin
-          err_sts_set = prog_data[beat_cnt] != rdata_i;
+          err_sts_set = prog_data[beat_cnt] != rdata_i[BusWidth-1:0];
         end
       end
 
@@ -784,9 +830,15 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
       end
 
     endcase // unique case (rma_state_q)
+
   end // always_comb
 
-  assign wdata_o = rand_i;
+  // TODO: Replace with a wrapper from tlul, that way the module does not need to know what this is
+  prim_secded_inv_39_32_enc u_bus_intg (
+    .data_i(rand_i),
+    .data_o(wdata_o)
+  );
+
   assign wvalid_o = prog_cnt_en;
   assign ctrl_o.start.q = seed_phase ? start : rma_start;
   assign ctrl_o.op.q = seed_phase ? op : rma_op;
@@ -807,7 +859,11 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   assign rma_ack_o = rma_ack_q;
 
   // all of these are considered fatal errors
-  assign fatal_err_o = page_err_q | word_err_q | fsm_err | state_err | rma_idx_err_q;
+  assign fatal_err_o = page_err_q | word_err_q | fsm_err | state_err | rma_idx_err_q |
+                       addr_cnt_err_q | seed_cnt_err_q;
+
+  // integrity error is its own category
+  assign intg_err_o = data_invalid_q;
 
   logic unused_seed_valid;
   assign unused_seed_valid = otp_key_rsp_i.seed_valid;
@@ -815,12 +871,14 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   // assertion
 
 `ifdef INC_ASSERT
-  logic [DataWidth-1:0] rma_data;
+  logic [DataWidth-1:0] rma_data_q, rma_data;
   always_ff @(posedge clk_i) begin
     if (rma_start && rvalid_i && rready_o) begin
-      rma_data <= {rma_data[(DataWidth-1) -: BusWidth], rdata_i};
+      rma_data_q <= rma_data;
     end
   end
+
+  assign rma_data = {rdata_i, rma_data_q[DataWidth-1 : BusWidth]};
 
   // check the rma programmed value actually matches what was read back
   `ASSERT(ProgRdVerify_A, rma_start & rd_cnt_en & done_i |-> prog_data == rma_data)

@@ -17,6 +17,7 @@ class aes_deinit_vseq extends aes_base_vseq;
   bit                back2back = 0;
   clear_t            clear     = 2'b00;
   string             txt ="";
+  status_t           status;
 
   task body();
     `uvm_info(`gfn, $sformatf("\n\n\t ----| STARTING AES DE-INIT SEQUENCE |----\n %s",
@@ -66,5 +67,32 @@ class aes_deinit_vseq extends aes_base_vseq;
       end
     end
 
+    // read IV
+    read_iv(prev_data, back2back);
+
+    // now clear key/iv/data and try to manually trigger an operation
+    clear.key_iv_data_in = 1'b1;
+    clear_regs(clear);
+    csr_spinwait(.ptr(ral.status.idle), .exp_data(1'b1));
+    // make sure that IV was cleared
+    read_iv(data, back2back);
+
+    if ((data == prev_data) || (data == 32'h00000000)) begin
+      txt = "\n IV ERROR: the output register was not cleared correctly";
+      txt = {txt, $sformatf("\n Current IV: \t 0x%0h", data) };
+      txt = {txt, $sformatf("\n prev IV:    \t 0x%0h", prev_data) };
+      `uvm_fatal(`gfn, $sformatf("%s", txt))
+    end
+
+    // make sure we cant trigger an operation
+    trigger();
+    csr_spinwait(.ptr(ral.status.idle), .exp_data(1'b1));
+    for (int nn = 0; nn <10; nn++) begin
+        csr_rd(.ptr(ral.status), .value(status), .blocking(1));
+        if ((!status.idle && !status.alert_fatal_fault) || status.output_valid)
+          `uvm_fatal(`gfn, $sformatf("WAS ABLE TO TRIGGER OPERATION AFTER CLEAR MODE"))
+
+        cfg.clk_rst_vif.wait_clks(25);
+      end
   endtask : body
 endclass

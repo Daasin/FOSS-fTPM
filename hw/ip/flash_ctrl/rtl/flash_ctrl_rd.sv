@@ -17,19 +17,20 @@ module flash_ctrl_rd import flash_ctrl_pkg::*; (
   input [BusAddrW-1:0]     op_addr_i,
   input                    op_addr_oob_i,
   output logic [BusAddrW-1:0] op_err_addr_o,
+  output logic             cnt_err_o,
 
   // FIFO Interface
   input                    data_rdy_i,
-  output logic [BusWidth-1:0] data_o,
+  output logic [BusFullWidth-1:0] data_o,
   output logic             data_wr_o,
 
   // Flash Macro Interface
   output logic             flash_req_o,
   output logic [BusAddrW-1:0] flash_addr_o,
   output logic             flash_ovfl_o,
-  input [BusWidth-1:0]     flash_data_i,
+  input [BusFullWidth-1:0] flash_data_i,
   input                    flash_done_i,
-  input                    flash_phy_err_i,
+  input                    flash_macro_err_i,
   input                    flash_rd_err_i,
   input                    flash_mp_err_i
 );
@@ -66,15 +67,31 @@ module flash_ctrl_rd import flash_ctrl_pkg::*; (
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      cnt <= '0;
-    end else if (op_start_i && op_done_o) begin
-      cnt <= '0;
-    end else if (data_wr_o) begin
-      cnt <= cnt + 1'b1;
-    end
-  end
+  prim_count #(
+    .Width(12),
+    .OutSelDnCnt(0),
+    .CntStyle(prim_count_pkg::DupCnt)
+  ) u_cnt (
+    .clk_i,
+    .rst_ni,
+    .clr_i(op_start_i && op_done_o),
+    .set_i('0),
+    .set_cnt_i('0),
+    .en_i(data_wr_o),
+    .step_i(12'h1),
+    .cnt_o(cnt),
+    .err_o(cnt_err_o)
+  );
+
+  //always_ff @(posedge clk_i or negedge rst_ni) begin
+  //  if (!rst_ni) begin
+  //    cnt <= '0;
+  //  end else if (op_start_i && op_done_o) begin
+  //    cnt <= '0;
+  //  end else if (data_wr_o) begin
+  //    cnt <= cnt + 1'b1;
+  //  end
+  //end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -85,7 +102,7 @@ module flash_ctrl_rd import flash_ctrl_pkg::*; (
   end
 
   assign txn_done = flash_req_o & flash_done_i;
-  assign cnt_hit = (cnt == op_num_words_i);
+  assign cnt_hit = (cnt >= op_num_words_i);
 
 
   // when error'd, continue to complete existing read transaction but fill in with all 1's
@@ -101,7 +118,10 @@ module flash_ctrl_rd import flash_ctrl_pkg::*; (
 
     unique case (st_q)
       StIdle: begin
-        if (op_start_i) begin
+        if (cnt_err_o) begin
+          // if counter error is encountered, just go to error state
+          st_d = StErr;
+        end else if (op_start_i) begin
           op_err_d.oob_err = op_addr_oob_i;
           st_d = |op_err_d ? StErr : StNorm;
         end
@@ -115,7 +135,7 @@ module flash_ctrl_rd import flash_ctrl_pkg::*; (
         if (txn_done) begin
           op_err_d.mp_err = flash_mp_err_i;
           op_err_d.rd_err = flash_rd_err_i;
-          op_err_d.phy_err = flash_phy_err_i;
+          op_err_d.macro_err = flash_macro_err_i;
 
           data_wr_o = 1'b1;
 
@@ -146,7 +166,7 @@ module flash_ctrl_rd import flash_ctrl_pkg::*; (
   assign flash_ovfl_o = int_addr[BusAddrW];
   // if error, return "empty" data
   assign err_sel = data_wr_o & |op_err_o;
-  assign data_o = err_sel ? {BusWidth{1'b1}} : flash_data_i;
+  assign data_o = err_sel ? {BusFullWidth{1'b1}} : flash_data_i;
   assign op_err_o = op_err_q | op_err_d;
 
 

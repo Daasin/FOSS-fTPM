@@ -69,7 +69,7 @@ class rstmgr_smoke_vseq extends rstmgr_base_vseq;
     set_alert_and_cpu_info_for_capture(alert_dump, cpu_dump);
 
     // Send sw reset.
-    send_sw_reset();
+    send_sw_reset(MuBi4True);
     check_reset_info(8, "Expected reset_info to indicate sw reset");
     check_alert_and_cpu_info_after_reset(alert_dump, cpu_dump, 0);
 
@@ -80,24 +80,25 @@ class rstmgr_smoke_vseq extends rstmgr_base_vseq;
     if (is_standalone) begin : sw_rst
       logic [NumSwResets-1:0] exp_ctrl_n;
       const logic [NumSwResets-1:0] sw_rst_all_ones = '1;
-      alert_pkg::alert_crashdump_t bogus_alert_dump = '1;
-      ibex_pkg::crash_dump_t bogus_cpu_dump = '1;
+      alert_crashdump_t bogus_alert_dump = '1;
+      cpu_crash_dump_t bogus_cpu_dump = '1;
 
       set_alert_and_cpu_info_for_capture(bogus_alert_dump, bogus_cpu_dump);
-      csr_rd_check(.ptr(ral.sw_rst_ctrl_n[0]), .compare_value(sw_rst_all_ones),
-                   .err_msg("expected no reset on"));
-      csr_wr(.ptr(ral.sw_rst_regwen[0]), .value(sw_rst_regwen));
+      rstmgr_csr_rd_check_unpack(.ptr(ral.sw_rst_ctrl_n), .compare_value(sw_rst_all_ones),
+                                 .err_msg("expected no reset on"));
+      rstmgr_csr_wr_unpack(.ptr(ral.sw_rst_regwen), .value(sw_rst_regwen));
       `uvm_info(`gfn, $sformatf("sw_rst_regwen set to 0x%0h", sw_rst_regwen), UVM_LOW)
-      csr_rd_check(.ptr(ral.sw_rst_regwen[0]), .compare_value(sw_rst_regwen));
+      rstmgr_csr_rd_check_unpack(.ptr(ral.sw_rst_regwen), .compare_value(sw_rst_regwen));
 
-      // Check sw_rst_regwen can not be set to all ones again because it is rw0c.
-      csr_wr(.ptr(ral.sw_rst_regwen[0]), .value('1));
-      csr_rd_check(.ptr(ral.sw_rst_regwen[0]), .compare_value(sw_rst_regwen),
-                   .err_msg("Expected sw_rst_regwen block raising individual bits because rw0c"));
+// XXX: Need a review
+//      // Check sw_rst_regwen can not be set to all ones again because it is rw0c.
+//      rstmgr_csr_wr_unpack(.ptr(ral.sw_rst_regwen), .value({NumSwResets{1'b1}}));
+//      rstmgr_csr_rd_check_unpack(.ptr(ral.sw_rst_regwen), .compare_value(sw_rst_regwen),
+//                   .err_msg("Expected sw_rst_regwen block raising individual bits because rw0c"));
 
       // Check that the regwen disabled bits block corresponding updated to ctrl_n.
-      csr_wr(.ptr(ral.sw_rst_ctrl_n[0]), .value(sw_rst_regwen));
-      csr_rd_check(.ptr(ral.sw_rst_ctrl_n[0]), .compare_value(sw_rst_all_ones),
+      rstmgr_csr_wr_unpack(.ptr(ral.sw_rst_ctrl_n), .value(sw_rst_regwen));
+      rstmgr_csr_rd_check_unpack(.ptr(ral.sw_rst_ctrl_n), .compare_value(sw_rst_all_ones),
                    .err_msg("Expected sw_rst_ctrl_n not to change"));
 
       check_sw_rst_ctrl_n(sw_rst_ctrl_n, sw_rst_regwen, 1);

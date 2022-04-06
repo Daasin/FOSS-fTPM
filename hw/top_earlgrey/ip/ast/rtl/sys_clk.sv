@@ -7,18 +7,18 @@
 //############################################################################
 
 module sys_clk (
-  input clk_src_sys_jen_i,                 // System Source Clock Jitter Enable
-  input clk_src_sys_en_i,                  // System Source Clock Enable
-  input clk_sys_pd_ni,                     // System Clock Power-down
-  input rst_sys_clk_ni,                    // System Clock Logic reset
-  input vcore_pok_h_i,                     // VCORE POK @3.3V (for OSC)
-  input scan_mode_i,                       // Scan Mode
-  input scan_reset_ni,                     // Scan Reset
+  input clk_src_sys_jen_i,           // System Source Clock Jitter Enable
+  input clk_src_sys_en_i,            // System Source Clock Enable
+  input clk_sys_pd_ni,               // System Clock Power-down
+  input rst_sys_clk_ni,              // System Clock Logic reset
+  input vcore_pok_h_i,               // VCORE POK @3.3V (for OSC)
+  input scan_mode_i,                 // Scan Mode
+  input sys_osc_cal_i,               // System Oscillator Calibrated
 `ifdef AST_BYPASS_CLK
-  input clk_sys_ext_i,                     // FPGA/VERILATOR Clock input
+  input clk_sys_ext_i,               // FPGA/VERILATOR Clock input
 `endif
-  output logic clk_src_sys_o,              // System Source Clock
-  output logic clk_src_sys_val_o           // System Source Clock Valid
+  output logic clk_src_sys_o,        // System Source Clock
+  output logic clk_src_sys_val_o     // System Source Clock Valid
 );
 
 logic clk, osc_en, sys_clk_en;
@@ -32,6 +32,7 @@ sys_osc u_sys_osc (
   .vcore_pok_h_i ( vcore_pok_h_i ),
   .sys_en_i ( sys_clk_en ),
   .sys_jen_i ( clk_src_sys_jen_i ),
+  .sys_osc_cal_i ( sys_osc_cal_i ),
 `ifdef AST_BYPASS_CLK
   .clk_sys_ext_i ( clk_sys_ext_i ),
 `endif
@@ -49,12 +50,12 @@ prim_clock_buf #(
 
 // 2-stage de-assertion
 logic rst_val_n;
-assign rst_val_n = scan_mode_i ? scan_reset_ni : sys_clk_en;
+assign rst_val_n = sys_clk_en;
 
 prim_flop_2sync #(
   .Width ( 1 ),
   .ResetValue ( 1'b0 )
-) u_val_sync (
+) u_no_scan_val_sync (
   .clk_i ( clk_src_sys_o ),
   .rst_ni ( rst_val_n ),
   .d_i ( 1'b1 ),

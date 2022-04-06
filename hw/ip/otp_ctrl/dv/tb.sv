@@ -25,7 +25,7 @@ module tb;
   // since partner base tests inherit from otp_ctrl_base_test#(CFG_T, ENV_T) and
   // specify directly (CFG_T, ENV_T) via the class extension and use a different
   // UVM_TESTNAME
-  if (`PRIM_DEFAULT_IMPL==prim_pkg::ImplGeneric) begin : gen_spec_base_test_params
+  if (`PRIM_DEFAULT_IMPL == prim_pkg::ImplGeneric) begin : gen_spec_base_test_params
     typedef otp_ctrl_base_test #(.CFG_T(otp_ctrl_env_cfg),
                                  .ENV_T(otp_ctrl_env)) otp_ctrl_base_test_t;
   end
@@ -71,14 +71,20 @@ module tb;
 
   assign otp_ctrl_if.lc_prog_req = lc_prog_if.req;
   assign otp_ctrl_if.lc_prog_err = lc_prog_if.d_data;
+
+  // Assign to otp_ctrl_if for assertion checks.
+  assign otp_ctrl_if.lc_prog_ack = lc_prog_if.ack;
+  assign otp_ctrl_if.flash_acks = flash_data_if.ack;
+  assign otp_ctrl_if.otbn_ack  = otbn_if.ack;
+
   // This signal probes design's alert request to avoid additional logic for triggering alert and
   // disable assertions.
   // Alert checkings are done independently in otp_ctrl's scb.
   // The correctness of this probed signal is checked in otp_ctrl's scb as well.
   assign otp_ctrl_if.alert_reqs = dut.alerts[0] | dut.alerts[1];
 
-  // leave this unconnected for now.
-  wire otp_ext_voltage_h;
+  // connected to interface
+  wire otp_ext_voltage_h = otp_ctrl_if.ext_voltage_h_io;
 
   // dut
   otp_ctrl dut (
@@ -144,9 +150,10 @@ module tb;
   );
 
   for (genvar i = 0; i < NumSramKeyReqSlots; i++) begin : gen_sram_pull_if
-    assign sram_req[i]       = sram_if[i].req;
-    assign sram_if[i].ack    = sram_rsp[i].ack;
-    assign sram_if[i].d_data = {sram_rsp[i].key, sram_rsp[i].nonce, sram_rsp[i].seed_valid};
+    assign sram_req[i]              = sram_if[i].req;
+    assign sram_if[i].ack           = sram_rsp[i].ack;
+    assign sram_if[i].d_data        = {sram_rsp[i].key, sram_rsp[i].nonce, sram_rsp[i].seed_valid};
+    assign otp_ctrl_if.sram_acks[i] = sram_rsp[i].ack;
     initial begin
       uvm_config_db#(virtual push_pull_if#(.DeviceDataWidth(SRAM_DATA_SIZE)))::set(null,
                      $sformatf("*env.m_sram_pull_agent[%0d]*", i), "vif", sram_if[i]);
@@ -193,24 +200,40 @@ module tb;
   initial begin
     // These SVA checks the lc_escalate_en is either Off or On, we will use more than these
     // 2 values.
-    // If it's not Off, it should be On.
+    // If the value is not lc_ctrl_pkg::Off, design will treat it as lc_ctrl_pkg::On.
     $assertoff(0, tb.dut.u_prim_lc_sync_escalate_en.PrimLcSyncCheckTransients_A);
     $assertoff(0, tb.dut.u_prim_lc_sync_escalate_en.PrimLcSyncCheckTransients0_A);
     $assertoff(0, tb.dut.u_prim_lc_sync_escalate_en.PrimLcSyncCheckTransients1_A);
 
     // These SVA checks the lc_sync_seed_hw_rd_en is either Off or On, we will use more than these
     // 2 values.
-    // If it's not On, it should be Off.
+    // If the value is not lc_ctrl_pkg::On, design will treat it as lc_ctrl_pkg::Off.
     $assertoff(0, tb.dut.u_prim_lc_sync_seed_hw_rd_en.PrimLcSyncCheckTransients_A);
     $assertoff(0, tb.dut.u_prim_lc_sync_seed_hw_rd_en.PrimLcSyncCheckTransients0_A);
     $assertoff(0, tb.dut.u_prim_lc_sync_seed_hw_rd_en.PrimLcSyncCheckTransients1_A);
 
     // These SVA checks the lc_check_byp_en is either Off or On, we will use more than these
     // 2 values.
-    // If it's not On, it should be Off.
+    // If the value is not lc_ctrl_pkg::On, design will treat it as lc_ctrl_pkg::Off.
     $assertoff(0, tb.dut.u_prim_lc_sync_check_byp_en.PrimLcSyncCheckTransients_A);
     $assertoff(0, tb.dut.u_prim_lc_sync_check_byp_en.PrimLcSyncCheckTransients0_A);
     $assertoff(0, tb.dut.u_prim_lc_sync_check_byp_en.PrimLcSyncCheckTransients1_A);
+
+    // These SVA checks the lc_dft_en is either Off or On, we will use more than these 2 values.
+    // If the value is not lc_ctrl_pkg::On, design will treat it as lc_ctrl_pkg::Off.
+    $assertoff(0, tb.dut.u_prim_lc_sync_dft_en.PrimLcSyncCheckTransients_A);
+    $assertoff(0, tb.dut.u_prim_lc_sync_dft_en.PrimLcSyncCheckTransients0_A);
+    $assertoff(0, tb.dut.u_prim_lc_sync_dft_en.PrimLcSyncCheckTransients1_A);
+    $assertoff(0, tb.dut.u_tlul_lc_gate.u_prim_lc_sync.PrimLcSyncCheckTransients_A);
+    $assertoff(0, tb.dut.u_tlul_lc_gate.u_prim_lc_sync.PrimLcSyncCheckTransients0_A);
+    $assertoff(0, tb.dut.u_tlul_lc_gate.u_prim_lc_sync.PrimLcSyncCheckTransients1_A);
+
+    // These SVA checks the lc_sync_creator_seed_sw_rw_en is either Off or On, we will use more
+    // than these 2 values.
+    // If the value is not lc_ctrl_pkg::On, design will treat it as lc_ctrl_pkg::Off.
+    $assertoff(0, tb.dut.u_prim_lc_sync_creator_seed_sw_rw_en.PrimLcSyncCheckTransients_A);
+    $assertoff(0, tb.dut.u_prim_lc_sync_creator_seed_sw_rw_en.PrimLcSyncCheckTransients0_A);
+    $assertoff(0, tb.dut.u_prim_lc_sync_creator_seed_sw_rw_en.PrimLcSyncCheckTransients1_A);
 
     // DV forced otp_cmd_i to reach invalid state, thus violate the assertions
     $assertoff(0, tb.dut.gen_partitions[3].gen_buffered.u_part_buf.OtpErrorState_A);

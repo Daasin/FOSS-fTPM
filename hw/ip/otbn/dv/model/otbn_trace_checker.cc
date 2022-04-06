@@ -235,7 +235,7 @@ bool OtbnTraceChecker::MatchPair() {
   rtl_pending_ = false;
   iss_pending_ = false;
   iss_started_ = false;
-  if (!(rtl_entry_ == iss_entry_)) {
+  if (!(rtl_entry_.compare_rtl_iss_entries(iss_entry_))) {
     std::cerr
         << ("ERROR: Mismatch between RTL and ISS trace entries.\n"
             "  RTL entry is:\n");
@@ -246,10 +246,12 @@ bool OtbnTraceChecker::MatchPair() {
     return false;
   }
 
-  // We've got a matching pair. Move the ISS data out of the (now defunct)
-  // iss_entry_ and into last_data_.
-  last_data_ = std::move(iss_entry_.data_);
-  last_data_vld_ = true;
+  // We've got a matching pair of entries. Move the ISS data out of the (now
+  // defunct) iss_entry_ and into last_data_.
+  if (rtl_entry_.trace_type() == OtbnTraceEntry::Exec) {
+    last_data_ = std::move(iss_entry_.data_);
+    last_data_vld_ = true;
+  }
 
   return true;
 }

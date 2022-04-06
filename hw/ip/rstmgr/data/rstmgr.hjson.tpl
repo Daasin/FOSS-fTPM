@@ -25,7 +25,14 @@
   alert_list: [
     { name: "fatal_fault",
       desc: '''
-      This fatal alert is triggered when a fatal TL-UL bus integrity fault is detected.
+        This fatal alert is triggered when a fatal structural fault is detected.
+        Structural faults include errors such as sparse fsm errors and tlul integrity errors.
+      '''
+    }
+    { name: "fatal_cnsty_fault",
+      desc: '''
+        This fatal alert is triggered when a reset consistency fault is detected.
+        It is separated from the category above for clearer error collection and debug.
       '''
     }
   ],
@@ -40,7 +47,7 @@
       desc: "Background consistency checks for each leaf reset."
     }
     { name: "LEAF.RST.SHADOW",
-      desc: "Lead resets to blocks containing shadow registers are shadowed"
+      desc: "Leaf resets to blocks containing shadow registers are shadowed"
     }
     { name: "LEAF.FSM.SPARSE",
       desc: "Sparsely encoded fsm for each leaf rst check. The Hamming delta is only 3 as there are a significant number of leaf resets"
@@ -94,6 +101,16 @@
       local:   "false",
       expose:  "true"
     },
+
+    { name:    "SecMaxSyncDelay",
+      type:    "int",
+      default: "2",
+      desc:    '''
+        The maximum synchronization delay for parent / child reset checks.
+      '''
+      local:   "false",
+      expose:  "true"
+    },
   ],
 
   // Define rstmgr struct package
@@ -127,11 +144,6 @@
 
     { struct:  "logic",
       type:    "uni",
-      name:    "rst_cpu_n",
-      act:     "rcv",
-    },
-    { struct:  "logic",
-      type:    "uni",
       name:    "ndmreset_req",
       act:     "rcv",
     },
@@ -143,11 +155,11 @@
       package: "alert_pkg",
     },
 
-    { struct:  "crash_dump",
+    { struct:  "cpu_crash_dump",
       type:    "uni",
       name:    "cpu_dump",
       act:     "rcv",
-      package: "ibex_pkg",
+      package: "rv_core_ibex_pkg",
     },
 
     { struct:  "mubi4",
@@ -305,8 +317,9 @@
             The number of 32-bit values contained in the ${dump_src} info dump.
             '''
           resval: "0",
-          tags: [// This field only reflects the status of the design, thus the
-                 // default value is likely to change and not remain 0
+          tags: [// This field is tied to a design constant, thus the
+                 // default value is never 0.  Since there is not a way
+                 // to express this behavior at the moment, exclude from automated checks.
                  "excl:CsrAllTests:CsrExclCheck"]
         },
       ]
@@ -347,7 +360,8 @@
         ''',
         count: "NumSwResets",
         swaccess: "rw0c",
-        hwaccess: "hro",
+        hwaccess: "none",
+        compact: false,
         fields: [
           {
             bits: "0",
@@ -369,9 +383,9 @@
         ''',
         count: "NumSwResets",
         swaccess: "rw",
-        hwaccess: "hrw",
-        hwext: "true",
-        hwqe: "true",
+        hwaccess: "hro",
+        regwen: "SW_RST_REGWEN",
+        regwen_multi: true,
         fields: [
           {
             bits: "0",

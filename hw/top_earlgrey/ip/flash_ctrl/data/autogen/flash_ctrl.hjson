@@ -41,6 +41,9 @@
     { name: "recov_err",
       desc: "flash recoverable errors",
     },
+    { name: "fatal_std_err",
+      desc: "flash standard fatal errors"
+    },
     { name: "fatal_err",
       desc: "flash fatal errors"
     },
@@ -178,10 +181,31 @@
       package: "flash_ctrl_pkg"
     }
 
+    { struct: "ast_obs_ctrl",
+      type: "uni",
+      name: "obs_ctrl",
+      act: "rcv",
+      package: "ast_pkg"
+    }
+
+    { struct: "logic",
+      type: "uni",
+      name: "fla_obs",
+      act: "req",
+      width: "8",
+      package: ""
+    }
+
   ],
   countermeasures: [
     { name: "BUS.INTEGRITY",
-      desc: "End-to-end bus integrity scheme."
+      desc: '''
+        End-to-end bus integrity scheme.
+        Since there are multiple access points for flash, please see
+        Transmission Integrity Faults in the documentation for more details.
+
+        The bus integrity scheme for flash is different from other comportable modules.
+      '''
     }
     { name: "SCRAMBLE.KEY.SIDELOAD",
       desc: "The scrambling key is sideloaded from OTP and thus unreadable by SW."
@@ -213,29 +237,59 @@
     { name: "MEM.CTRL.GLOBAL_ESC",
       desc: "Global escalation causes memory to no longer be accessible."
     }
+    { name: "MEM.CTRL.LOCAL_ESC",
+      desc: '''
+        A subset of fatal errors cause memory to no longer be accessible.
+        This subset is defined in !!STD_FAULT_STATUS.
+      '''
+    }
     { name: "MEM_DISABLE.CONFIG.MUBI",
-      desc: "Software control for flash disable is multibit."
+      desc: '''
+        Software control for flash disable is multibit.
+        The register is !!DIS.
+      '''
     }
     { name: "MEM_EN.CONFIG.REDUN",
-      desc: "Software control for flash enable is 32-bit constant."
+      desc: '''
+        Software control for flash enable is 32-bit constant.
+        The register is !!EXEC.
+      '''
     }
     { name: "MEM.SCRAMBLE",
-      desc: "Memory is XEX scrambled."
+      desc: '''
+        Memory is XEX scrambled.
+        The cipher used is PRINCE.
+        Please see Flash Scrambling in documentation for more details.
+      '''
     }
     { name: "MEM.INTEGRITY",
-      desc: "Memory is protected with two layers of ECC integrity."
+      desc: '''
+        Memory is protected with two layers of ECC integrity.
+        Please see Flash ECC in the documentation for more details.
+      '''
     }
     { name: "RMA_ENTRY.MEM.SEC_WIPE",
       desc: "RMA entry entry wipes flash memory with random data."
     }
-    { name: "FSM.SPARSE",
-      desc: "RMA handling FSMs are sparsely encoded."
+    { name: "CTRL.FSM.SPARSE",
+      desc: '''
+        RMA handling FSMs in flash_ctrl_lcmgr are sparsely encoded.
+        FSM in flash_ctrl_arb is sparsely encoded.
+      '''
     }
-    { name: "CTR.SPARSE",
-      desc: "RMA handling counters are sparsely encoded."
+    { name: "PHY.FSM.SPARSE",
+      desc: "PHY FSMs are sparsely encoded."
     }
-
-
+    { name: "PHY_PROG.FSM.SPARSE",
+      desc: "PHY program FSMs are sparsely encoded."
+    }
+    { name: "CTR.REDUN",
+      desc: '''
+        flash_ctrl_lcmgr handling counters are redundantly encoded.
+        This includes seed count and address count used during seed reading phase,
+        as well as word count, page count and wipe index in RMA entry phase.
+      '''
+    }
   ]
 
   scan: "true",       // Enable `scanmode_i` port
@@ -314,7 +368,13 @@
     },
 
     // The following parameters are derived from topgen and should not be
-    // direclty modified.
+    // directly modified.
+    { name: "NumInfoTypes",
+      desc: "Number of info partition types",
+      type: "int",
+      default: "3",
+      local: "true"
+    },
     { name: "NumInfos0",
       desc: "Number of configurable flash info pages for info type 0",
       type: "int",
@@ -365,9 +425,17 @@
     // hex value of 0xa26a38f7
     { name:      "ExecEn",
       desc:      "Constant value that enables flash execution",
-      type:      "int"
+      type:      "int unsigned"
       default:   "2724870391",
       local:     "true"
+    },
+
+    { name:      "SecScrambleEn",
+      desc:      "Compile-time option to enable flash scrambling",
+      type:      "bit",
+      default:   "1",
+      local:     "false",
+      expose:    "true",
     },
   ],
 
@@ -387,7 +455,7 @@
                This is a shortcut mechanism used by the software to completely
                kill flash in case of emergency.
 
-               To disable, set this field to anything other than false.
+               To disable, set this field to anything other than kMultiBitBool4False.
               '''
             resval: false,
             tags: [// Dont touch disable, it has several side effects on the system
@@ -1532,38 +1600,113 @@
           { bits: "2",
             name: "rd_err",
             desc: '''
-              Flash read has an uncorrectable data error.
-              Please see !!ERR_ADDR for exact address.
+              Flash read has an error.
+              This could be a reliability ECC error or an storage integrity error
+              encountered during a software issued controller read, see !!STD_FAULT_STATUS.
+              See !!ERR_ADDR for exact address.
               This is a synchronous error.
             '''
           },
           { bits: "3",
-            name: "prog_win_err",
+            name: "prog_err",
             desc: '''
-              Flash program has a window resolution error.  Ie, the start of program
-              and end of program are in different windows.  Please check !!ADDR.
+              Flash program has an error.
+              This could be a program integrity error, see !!STD_FAULT_STATUS.
               This is a synchronous error.
             '''
           },
           { bits: "4",
+            name: "prog_win_err",
+            desc: '''
+              Flash program has a window resolution error.  Ie, the start of program
+              and end of program are in different windows.  Please check !!ERR_ADDR.
+              This is a synchronous error.
+            '''
+          },
+          { bits: "5",
             name: "prog_type_err",
             desc: '''
               Flash program selected unavailable type, see !!PROG_TYPE_EN.
               This is a synchronous error.
             '''
           },
-          { bits: "5",
-            name: "flash_phy_err",
+          { bits: "6",
+            name: "flash_macro_err",
             desc: '''
-              The flash access encountered a native flash error.
+              The flash access encountered a native flash macro error.
               Please check the vendor specs for details of the error.
               This is a synchronous error.
             '''
           },
-          { bits: "6",
+          { bits: "7",
             name: "update_err",
             desc: '''
               A shadow register encountered an update error.
+              This is an asynchronous error.
+            '''
+          },
+        ]
+      },
+
+      { name: "STD_FAULT_STATUS",
+        desc: '''
+          This register tabulates standard fault status of the flash.
+
+          These represent errors that occur in the standard structures of the design.
+          For example fsm integrity, counter integrity and tlul integrity.
+        '''
+        swaccess: "ro",
+        hwaccess: "hrw",
+        fields: [
+          { bits: "0",
+            name: "reg_intg_err",
+            desc: '''
+              The flash controller encountered a register integrity error.
+            '''
+          },
+          { bits: "1",
+            name: "prog_intg_err",
+            desc: '''
+              The flash controller encountered a program data transmission integrity error.
+            '''
+          },
+          { bits: "2",
+            name: "lcmgr_err",
+            desc: '''
+              The life cycle management interface has encountered a fatal error.
+              The error is either an FSM sparse encoding error or a count error.
+              '''
+          },
+          { bits: "3",
+            name: "lcmgr_intg_err",
+            desc: '''
+              The life cycle management interface has encountered a transmission
+              integrity error.  This is an integrity error on the generated integrity
+              during a life cycle management interface read.
+            '''
+          },
+          { bits: "4",
+            name: "arb_fsm_err",
+            desc: '''
+              The arbiter fsm has encountered a sparse encoding error.
+              '''
+          },
+          { bits: "5",
+            name: "storage_err",
+            desc: '''
+              A shadow register encountered a storage error.
+            '''
+          },
+          { bits: "6",
+            name: "phy_fsm_err",
+            desc: '''
+              A flash phy fsm has encountered a sparse encoding error.
+            '''
+          },
+          { bits: "7",
+            name: "ctrl_cnt_err",
+            desc: '''
+              Flash ctrl read/prog has encountered a count error.
             '''
           },
         ]
@@ -1571,8 +1714,7 @@
 
       { name: "FAULT_STATUS",
         desc: '''
-          Flash fault status register.
-          This register tabulates detailed fault status of the flash.
+          This register tabulates customized fault status of the flash.
 
           These are errors that are impossible to have been caused by software or unrecoverable
           in nature.
@@ -1583,68 +1725,59 @@
           { bits: "1",
             name: "mp_err",
             desc: '''
-              The flash hardware interface encountered a memory permission error.
+              The flash life cycle management interface encountered a memory permission error.
             '''
           },
           { bits: "2",
             name: "rd_err",
             desc: '''
-              The flash hardware interface encountered a read data error.
+              The flash life cycle management interface encountered a read error.
+              This could be a reliability ECC error or an integrity ECC error
+              encountered during a read, see !!STD_FAULT_STATUS for more details.
             '''
           },
           { bits: "3",
-            name: "prog_win_err",
+            name: "prog_err",
             desc: '''
-              The flash hardware interface encountered a program resolution error.
+              The flash life cycle management interface encountered a program error.
+              This could be a program integirty eror, see !!STD_FAULT_STATUS for more details.
             '''
           },
           { bits: "4",
-            name: "prog_type_err",
+            name: "prog_win_err",
             desc: '''
-              The flash hardware interface encountered a program type error.
+              The flash life cycle management interface encountered a program resolution error.
             '''
           },
           { bits: "5",
-            name: "flash_phy_err",
+            name: "prog_type_err",
             desc: '''
-              The flash hardware interface encountered a native flash error.
+              The flash life cycle management interface encountered a program type error.
+              A program type not supported by the flash macro was issued.
             '''
           },
           { bits: "6",
-            name: "reg_intg_err",
+            name: "flash_macro_err",
             desc: '''
-              The flash controller encountered a register integrity error.
+              The flash life cycle management interface encountered a native flash macro error.
             '''
           },
           { bits: "7",
-            name: "phy_intg_err",
-            desc: '''
-              The flash memory encountered a register integrity error.
-            '''
-          },
-          { bits: "8",
-            name: "lcmgr_err",
-            desc: '''
-              The life cycle management interface has encountered a fatal error.
-              There is an error with the RMA state machine or counts.
-              '''
-          },
-          { bits: "9",
-            name: "arb_fsm_err",
-            desc: '''
-              The software / hardware interface has encountered a fatal error.
-              '''
-          },
-          { bits: "10",
-            name: "storage_err",
-            desc: '''
-              A shadow register encountered a storage fault.
-            '''
-          },
-          { bits: "11",
             name: "seed_err",
             desc: '''
               The seed reading process encountered an unexpected error.
+            '''
+          },
+          { bits: "8",
+            name: "phy_relbl_err",
+            desc: '''
+              The flash macro encountered a storage reliability ECC error.
+            '''
+          },
+          { bits: "9",
+            name: "phy_storage_err",
+            desc: '''
+              The flash macro encountered a storage integrity ECC error.
             '''
           },
         ]

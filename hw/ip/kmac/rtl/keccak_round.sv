@@ -7,7 +7,9 @@
 
 `include "prim_assert.sv"
 
-module keccak_round #(
+module keccak_round
+  import prim_mubi_pkg::*;
+#(
   parameter int Width = 1600, // b= {25, 50, 100, 200, 400, 800, 1600}
 
   // Derived
@@ -80,7 +82,7 @@ module keccak_round #(
   // 1: Select Phase2 (Chi -> Iota)
   // `sel_mux` need to be asserted until the Chi stage is consumed,
   // It means sel_mux should be 1 until one cycle after `rand_valid_i` is asserted.
-  logic sel_mux;
+  mubi4_t sel_mux;
 
 
   // Increase/ Reset Round number
@@ -187,23 +189,10 @@ module keccak_round #(
       StTerminalError = 6'b110110
   } keccak_st_e;
   keccak_st_e keccak_st, keccak_st_d;
-
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateWidth-1:0] state_raw_q;
-  assign keccak_st = keccak_st_e'(state_raw_q);
-  prim_sparse_fsm_flop #(
-    .StateEnumT(keccak_st_e),
-    .Width(StateWidth),
-    .ResetValue(StateWidth'(StIdle))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( keccak_st_d ),
-    .state_o ( state_raw_q )
-  );
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, keccak_st_d, keccak_st, keccak_st_e, StIdle)
 
   // Next state logic and output logic
+  // SEC_CM: FSM.SPARSE
   always_comb begin
     // Default values
     keccak_st_d = StIdle;
@@ -217,7 +206,7 @@ module keccak_round #(
 
     keccak_rand_consumed = 1'b 0;
 
-    sel_mux = 1'b 0;
+    sel_mux = MuBi4False;
 
     complete_d = 1'b 0;
 
@@ -271,12 +260,12 @@ module keccak_round #(
         keccak_st_d = StPhase2;
 
         update_storage = 1'b 1;
-        sel_mux        = 1'b 0;
+        sel_mux        = MuBi4False;
       end
 
       StPhase2: begin
         // Second phase (Chi 1/2)
-        sel_mux = 1'b 1;
+        sel_mux = MuBi4True;
 
         if (keccak_rand_valid) begin
           keccak_st_d = StPhase3;
@@ -288,7 +277,7 @@ module keccak_round #(
       end
 
       StPhase3: begin
-        sel_mux = 1'b 1;
+        sel_mux = MuBi4True;
         update_storage = 1'b 1;
 
         if (rnd_eq_end) begin
@@ -319,6 +308,7 @@ module keccak_round #(
       end
     endcase
 
+    // SEC_CM: FSM.GLOBAL_ESC, FSM.LOCAL_ESC
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
     if (lc_escalate_en_i != lc_ctrl_pkg::Off) begin
@@ -334,10 +324,20 @@ module keccak_round #(
   ////////////////////////////
   // Keccak state registers //
   ////////////////////////////
+
+  // SEC_CM: LOGIC.INTEGRITY
+  logic rst_n;
+  prim_sec_anchor_buf #(
+   .Width(1)
+  ) u_prim_sec_anchor_buf (
+    .in_i(rst_ni),
+    .out_o(rst_n)
+  );
+
   logic [Width-1:0] storage   [Share];
   logic [Width-1:0] storage_d [Share];
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
+  always_ff @(posedge clk_i or negedge rst_n) begin
+    if (!rst_n) begin
       storage <= '{default:'0};
     end else if (rst_storage) begin
       storage <= '{default:'0};
@@ -400,6 +400,7 @@ module keccak_round #(
 
   // Round number
   // This primitive is used to place a hardened counter
+  // SEC_CM: CTR.REDUN
   prim_count #(
     .Width(RndW),
     .OutSelDnCnt(1'b 0), // 0 selects up count

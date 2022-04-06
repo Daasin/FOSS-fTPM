@@ -2,31 +2,35 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-package(default_visibility = ["//visibility:public"])
-
 load("//rules:opentitan.bzl", "OPENTITAN_CPU")
+load("//rules:cross_platform.bzl", "dual_cc_device_library_of", "dual_cc_library", "dual_inputs")
+
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "epmp",
     srcs = ["epmp.c"],
     hdrs = ["epmp.h"],
     target_compatible_with = [OPENTITAN_CPU],
-    deps = [
-        "//sw/device/lib/base/freestanding",
-    ],
 )
 
-cc_library(
+dual_cc_library(
     name = "hart",
-    srcs = ["hart.c"],
+    srcs = dual_inputs(
+        device = ["hart.c"],
+        host = ["hart_polyfills.c"],
+    ),
     hdrs = ["hart.h"],
-    target_compatible_with = [OPENTITAN_CPU],
-    deps = [
-        ":ibex",
-        "//sw/device/lib/arch:device",
-        "//sw/device/lib/base",
-        "//sw/device/lib/base/freestanding",
-    ],
+    deps = dual_inputs(
+        device = [
+            ":ibex",
+            "//sw/device/lib/arch:device",
+        ],
+        shared = [
+            "//sw/device/lib/base:math",
+            "//sw/device/lib/base:stdasm",
+        ],
+    ),
 )
 
 cc_library(
@@ -36,7 +40,9 @@ cc_library(
     target_compatible_with = [OPENTITAN_CPU],
     deps = [
         "//sw/device/lib/arch:device",
-        "//sw/device/lib/base",
+        "//sw/device/lib/base:csr",
+        "//sw/device/lib/base:math",
+        "//sw/device/lib/base:stdasm",
     ],
 )
 
@@ -47,8 +53,9 @@ cc_library(
     target_compatible_with = [OPENTITAN_CPU],
     deps = [
         "//sw/device/lib/arch:device",
-        "//sw/device/lib/base",
-        "//sw/device/lib/base/freestanding",
+        "//sw/device/lib/base:macros",
+        "//sw/device/lib/base:memory",
+        "//sw/device/lib/base:mmio",
         "//sw/device/lib/runtime:print",
     ],
 )
@@ -68,10 +75,10 @@ cc_library(
     srcs = ["pmp.c"],
     hdrs = ["pmp.h"],
     target_compatible_with = [OPENTITAN_CPU],
-    textual_hdrs = ["pmp_regions.def"],
     deps = [
-        "//sw/device/lib/base",
-        "//sw/device/lib/base/freestanding",
+        "//sw/device/lib/base:bitfield",
+        "//sw/device/lib/base:csr",
+        "//sw/device/lib/base:macros",
     ],
 )
 
@@ -80,7 +87,8 @@ cc_library(
     srcs = ["print.c"],
     hdrs = ["print.h"],
     deps = [
-        "//sw/device/lib/base",
+        "//sw/device/lib/base:macros",
+        "//sw/device/lib/base:memory",
         "//sw/device/lib/dif:uart",
     ],
 )
@@ -90,8 +98,6 @@ cc_test(
     srcs = ["print_unittest.cc"],
     deps = [
         ":print",
-        "//sw/device/lib/base/testing",
-        "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
 )

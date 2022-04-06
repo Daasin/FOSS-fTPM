@@ -116,6 +116,36 @@
       package: "",
       default: "1'b0"
     },
+    { name:    "usb_dppullup_en_upwr",
+      type:    "uni",
+      act:     "rcv",
+      package: "",
+      struct:  "logic",
+      width:   "1"
+    },
+    { name:    "usb_dnpullup_en_upwr",
+      type:    "uni",
+      act:     "rcv",
+      package: "",
+      struct:  "logic",
+      width:   "1"
+    },
+    { name:    "usb_dppullup_en",
+      type:    "uni",
+      act:     "req",
+      package: "",
+      struct:  "logic",
+      width:   "1"
+      default: "1'b0"
+    },
+    { name:    "usb_dnpullup_en",
+      type:    "uni",
+      act:     "req",
+      package: "",
+      struct:  "logic",
+      width:   "1"
+      default: "1'b0"
+    },
     { struct:  "logic",
       type:    "uni",
       name:    "usb_wkup_req",
@@ -368,20 +398,53 @@
                   regwen:       "MIO_PAD_ATTR_REGWEN",
                   regwen_multi: "true",
                   cname:        "MIO_PAD",
+                  resval:       0
                   fields: [
-                    { bits: "12:0",
-                      name: "ATTR",
-                      desc: '''Bit   0:  input/output inversion,
-                               Bit   1:  Virtual open drain enable.
-                               Bit   2:  Pull enable.
-                               Bit   3:  Pull select (0: pull down, 1: pull up).
-                               Bit   4:  Keeper enable.
-                               Bit   5:  Schmitt trigger enable.
-                               Bit   6:  Open drain enable
-                               Bit 7/8:  Slew rate (0x0: slowest, 0x3: fastest).
-                               Bit 9/12: Drive strength (0x0: weakest, 0xf: strongest).
-                      '''
-                      resval: 0
+                    { bits: "0",
+                      name: "invert",
+                      desc: "Invert input and output levels."
+                    },
+                    { bits: "1",
+                      name: "virtual_od_en",
+                      desc: "Enable virtual open drain."
+                    },
+                    { bits: "2",
+                      name: "pull_en",
+                      desc: "Enable pull-up or pull-down resistor."
+                    },
+                    { bits: "3",
+                      name: "pull_select",
+                      desc: "Pull select (0: pull-down, 1: pull-up)."
+                      enum: [
+                        { value: "0",
+                          name:  "pull_down",
+                          desc:  "Select the pull-down resistor."
+                        },
+                        { value: "1",
+                          name:  "pull_up",
+                          desc:  "Select the pull-up resistor."
+                        }
+                      ]
+                    },
+                    { bits: "4",
+                      name: "keeper_en",
+                      desc: "Enable pull-up or pull-down resistor."
+                    },
+                    { bits: "5",
+                      name: "schmitt_en",
+                      desc: "Enable the schmitt trigger."
+                    },
+                    { bits: "6",
+                      name: "od_en",
+                      desc: "Enable open drain."
+                    },
+                    { bits: "17:16",
+                      name: "slew_rate",
+                      desc: "Slew rate (0x0: slowest, 0x3: fastest)."
+                    },
+                    { bits: "23:20",
+                      name: "drive_strength",
+                      desc: "Drive strength (0x0: weakest, 0xf: strongest)"
                     }
                   ],
                   // these CSRs have WARL behavior and may not
@@ -430,20 +493,53 @@
                   regwen:       "DIO_PAD_ATTR_REGWEN",
                   regwen_multi: "true",
                   cname:        "DIO_PAD",
+		  resval:       0,
                   fields: [
-                    { bits: "12:0",
-                      name: "ATTR",
-                      desc: '''Bit   0:  input/output inversion,
-                               Bit   1:  Virtual open drain enable.
-                               Bit   2:  Pull enable.
-                               Bit   3:  Pull select (0: pull down, 1: pull up).
-                               Bit   4:  Keeper enable.
-                               Bit   5:  Schmitt trigger enable.
-                               Bit   6:  Open drain enable
-                               Bit 7/8:  Slew rate (0x0: slowest, 0x3: fastest).
-                               Bit 9/12: Drive strength (0x0: weakest, 0xf: strongest).
-                      '''
-                      resval: 0
+                    { bits: "0",
+                      name: "invert",
+                      desc: "Invert input and output levels."
+                    },
+                    { bits: "1",
+                      name: "virtual_od_en",
+                      desc: "Enable virtual open drain."
+                    },
+                    { bits: "2",
+                      name: "pull_en",
+                      desc: "Enable pull-up or pull-down resistor."
+                    },
+                    { bits: "3",
+                      name: "pull_select",
+                      desc: "Pull select (0: pull-down, 1: pull-up)."
+                      enum: [
+                        { value: "0",
+                          name:  "pull_down",
+                          desc:  "Select the pull-down resistor."
+                        },
+                        { value: "1",
+                          name:  "pull_up",
+                          desc:  "Select the pull-up resistor."
+                        }
+                      ]
+                    },
+                    { bits: "4",
+                      name: "keeper_en",
+                      desc: "Enable pull-up or pull-down resistor."
+                    },
+                    { bits: "5",
+                      name: "schmitt_en",
+                      desc: "Enable the schmitt trigger."
+                    },
+                    { bits: "6",
+                      name: "od_en",
+                      desc: "Enable open drain."
+                    },
+                    { bits: "17:16",
+                      name: "slew_rate",
+                      desc: "Slew rate (0x0: slowest, 0x3: fastest)."
+                    },
+                    { bits: "23:20",
+                      name: "drive_strength",
+                      desc: "Drive strength (0x0: weakest, 0xf: strongest)"
                     }
                   ],
                   // these CSRs have WARL behavior and may not
@@ -745,6 +841,9 @@
                                 Note that these registers are synced to the always-on clock.
                                 The first write access always completes immediately.
                                 However, read/write accesses following a write will block until that write has completed.
+
+                                Note that the wkup detector should be disabled by setting !!WKUP_DETECTOR_EN_0 before changing the detection mode.
+                                The reason for that is that the pulse width counter is NOT cleared upon a mode change while the detector is enabled.
                                 '''
                   count:        "NWkupDetect",
                   compact:      "false",
@@ -758,7 +857,7 @@
                     { bits: "2:0",
                       name: "MODE",
                       resval: 0,
-                      desc: "Wakeup detection mode."
+                      desc: "Wakeup detection mode. Out of range values default to Posedge."
                       enum: [
                         { value: "0",
                           name: "Posedge",

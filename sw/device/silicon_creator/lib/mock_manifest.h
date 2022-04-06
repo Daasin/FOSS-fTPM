@@ -5,6 +5,7 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_MANIFEST_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_MANIFEST_H_
 
+#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/silicon_creator/lib/manifest.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
 
@@ -14,7 +15,7 @@ namespace internal {
 /**
  * Mock class for manifest.h.
  */
-class MockManifest : public GlobalMock<MockManifest> {
+class MockManifest : public global_mock::GlobalMock<MockManifest> {
  public:
   MOCK_METHOD(rom_error_t, Check, (const manifest_t *));
   MOCK_METHOD(manifest_digest_region_t, DigestRegion, (const manifest_t *));
@@ -26,6 +27,7 @@ class MockManifest : public GlobalMock<MockManifest> {
 
 using MockManifest = testing::StrictMock<internal::MockManifest>;
 
+#ifdef IS_MESON_FOR_MIGRATIONS_ONLY
 extern "C" {
 
 rom_error_t manifest_check(const manifest_t *manifest) {
@@ -46,6 +48,7 @@ uintptr_t manifest_entry_point_get(const manifest_t *manifest) {
 }
 
 }  // extern "C"
+#endif
 }  // namespace mask_rom_test
 
 #endif  // OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_MANIFEST_H_

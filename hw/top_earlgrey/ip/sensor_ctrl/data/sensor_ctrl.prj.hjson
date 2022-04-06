@@ -9,11 +9,12 @@
     hw_checklist:       "../doc/checklist",
     revisions: [
       {
-        version:            "0.1",
+        version:            "1.0",
         life_stage:         "L1",
-        design_stage:       "D1",
-        verification_stage: "V0",
-        //notes:              ""
+        design_stage:       "D2",
+        // block level verification not planned
+        verification_stage: "N/A",
+        notes:              "Verified at the top-level."
       }
     ]
 }

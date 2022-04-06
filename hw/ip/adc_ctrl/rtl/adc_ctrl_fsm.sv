@@ -6,6 +6,7 @@
 
 module adc_ctrl_fsm
   import adc_ctrl_reg_pkg::*;
+  import adc_ctrl_pkg::*;
 (
   input clk_aon_i,
   input rst_aon_ni,
@@ -33,6 +34,7 @@ module adc_ctrl_fsm
   logic trigger_q;
   logic trigger_l2h, trigger_h2l;
 
+
   logic [3:0] pwrup_timer_cnt_d, pwrup_timer_cnt_q;
   logic pwrup_timer_cnt_clr, pwrup_timer_cnt_en;
   logic [9:0] chn0_val_d, chn1_val_d;
@@ -49,31 +51,6 @@ module adc_ctrl_fsm
   logic [7:0] lp_sample_cnt_thresh;
   logic [15:0] np_sample_cnt_thresh;
 
-  //FSM flow
-  //1. PWRDN->PWRUP->IDLE->ONEST_0->ONEST_021->ONEST_1->ONEST_DONE->PWRDN
-  //2. PWRDN->PWRUP->IDLE->LP_0->LP_021->LP_1->LP_EVAL->LP_SLP->LP_PWRUP->LP0->
-  //   LP_021->LP_1->LP_EVAL->NP_0->NP_021->NP_1->NP_EVAL->NP_0...repeat
-  //3. PWRDN->PWRUP->IDLE->NP_0->NP_021->NP_1->NP_EVAL->NP_0/NP_DONE....repeat
-  typedef enum logic [4:0] {
-    PWRDN,// in the power down state
-    PWRUP,// being powered up
-    IDLE,// powered up after the pwrup_timer
-    ONEST_0,// in oneshot mode; sample channel0 value
-    ONEST_021,// in oneshot mode; transition from chn0 to chn1
-    ONEST_1,// in oneshot mode; sample channel1 value
-    ONEST_DONE,
-    LP_0,// in low-power mode, sample channel0 value
-    LP_021,// in low-power mode, transition from chn0 to chn1
-    LP_1,// in low-power mode, sample channel1 value
-    LP_EVAL,// in low-power mode, evaluate if there is a match
-    LP_SLP,// in low-power mode, go to sleep
-    LP_PWRUP,// in low-power mode, being powered up
-    NP_0,// in normal-power mode, sample channel0 value
-    NP_021,// in normal-power mode, transition from chn0 to chn1
-    NP_1,// in normal-power mode, sample channel1 value
-    NP_EVAL, // in normal-power mode, detection is done
-    NP_DONE
-  } fsm_state_e;
 
   fsm_state_e fsm_state_q, fsm_state_d;
 
@@ -97,7 +74,7 @@ module adc_ctrl_fsm
     if (!rst_aon_ni) begin
       pwrup_timer_cnt_q    <= '0;
     end
-    else if (pwrup_timer_cnt_clr || cfg_fsm_rst_i) begin
+    else if (pwrup_timer_cnt_clr || cfg_fsm_rst_i || trigger_h2l) begin
        pwrup_timer_cnt_q <= '0;
     end else begin
        pwrup_timer_cnt_q <= pwrup_timer_cnt_d;
@@ -110,7 +87,7 @@ module adc_ctrl_fsm
     if (!rst_aon_ni) begin
       lp_sample_cnt_q    <= '0;
     end
-    else if (lp_sample_cnt_clr || cfg_fsm_rst_i) begin
+    else if (lp_sample_cnt_clr || cfg_fsm_rst_i || trigger_h2l) begin
       lp_sample_cnt_q <= '0;
     end else begin
       lp_sample_cnt_q <= lp_sample_cnt_d;
@@ -123,7 +100,7 @@ module adc_ctrl_fsm
     if (!rst_aon_ni) begin
       np_sample_cnt_q    <= '0;
     end
-    else if (np_sample_cnt_clr || cfg_fsm_rst_i) begin
+    else if (np_sample_cnt_clr || cfg_fsm_rst_i || trigger_h2l) begin
       np_sample_cnt_q <= '0;
     end else begin
       np_sample_cnt_q <= np_sample_cnt_d;
@@ -137,7 +114,7 @@ module adc_ctrl_fsm
     if (!rst_aon_ni) begin
       wakeup_timer_cnt_q    <= '0;
     end
-    else if (wakeup_timer_cnt_clr || cfg_fsm_rst_i) begin
+    else if (wakeup_timer_cnt_clr || cfg_fsm_rst_i || trigger_h2l) begin
       wakeup_timer_cnt_q <= '0;
     end else begin
       wakeup_timer_cnt_q <= wakeup_timer_cnt_d;
@@ -249,19 +226,15 @@ module adc_ctrl_fsm
         end
         else if (pwrup_timer_cnt_q == cfg_pwrup_time_i) begin
           pwrup_timer_cnt_clr = 1'b1;
-          fsm_state_d = IDLE;
-        end
-      end
-
-      IDLE: begin
-        if (cfg_oneshot_mode_i) begin
-          fsm_state_d = ONEST_0;
-        end
-        else if (cfg_lp_mode_i) begin
-          fsm_state_d = LP_0;
-        end
-        else if (!cfg_lp_mode_i) begin
-          fsm_state_d = NP_0;
+          if (cfg_oneshot_mode_i) begin
+            fsm_state_d = ONEST_0;
+          end
+          else if (cfg_lp_mode_i) begin
+            fsm_state_d = LP_0;
+          end
+          else if (!cfg_lp_mode_i) begin
+            fsm_state_d = NP_0;
+          end
         end
       end
 
@@ -330,6 +303,7 @@ module adc_ctrl_fsm
       end
 
       LP_SLP: begin
+        adc_pd_o = 1'b1;
         if (wakeup_timer_cnt_q  != cfg_wakeup_time_i) begin
           wakeup_timer_cnt_en = 1'b1;
         end
@@ -373,6 +347,14 @@ module adc_ctrl_fsm
         // do not transition forward until handshake with ADC is complete
         if (!adc_d_val_i) begin
           ld_match = 1'b1;
+          // if there is no match, clear counter and begin sampling again.
+          // if there is a match, there are 3 conditions:
+          // 1. the sample count is less than the threshold -> still attempting to make a new match,
+          //    keep sampling.
+          // 2. the sample count is equal to the threshold -> a new match has just been made, go to
+          //    DONE.
+          // 3, the sample count is greater than the threshold -> this is a continued stable match,
+          //    keep sampling.
           if (!stay_match) begin
             fsm_state_d = NP_0;
             np_sample_cnt_clr = 1'b1;
@@ -381,7 +363,9 @@ module adc_ctrl_fsm
             np_sample_cnt_en = 1'b1;
           end else if (np_sample_cnt_q == np_sample_cnt_thresh) begin
             fsm_state_d = NP_DONE;
-            np_sample_cnt_clr = 1'b1;
+            np_sample_cnt_en = 1'b1;
+          end else if (np_sample_cnt_q > np_sample_cnt_thresh) begin
+            fsm_state_d = NP_0;
           end
         end
       end
@@ -392,14 +376,17 @@ module adc_ctrl_fsm
         fsm_state_d = NP_0;
       end
 
-
       default: fsm_state_d = PWRDN;
     endcase
   end
 
    `ASSUME(LpSampleCntCfg_M, cfg_lp_sample_cnt_i > '0, clk_aon_i, !rst_aon_ni)
    `ASSUME(NpSampleCntCfg_M, cfg_np_sample_cnt_i > '0, clk_aon_i, !rst_aon_ni)
-   `ASSERT(NpCntCheckClr_A, ld_match & $rose(stay_match) |->
-     (np_sample_cnt_q == '0), clk_aon_i, !rst_aon_ni)
+   `ASSERT(NpCntClrPwrDn_A, fsm_state_q == PWRDN |-> (np_sample_cnt_q == '0),
+           clk_aon_i, !rst_aon_ni)
+
+   // This statement should hold true even during low power scanning
+   `ASSERT(NpCntClrMisMatch_A, ld_match & !stay_match |=>
+           (np_sample_cnt_q == '0), clk_aon_i, !rst_aon_ni)
 
 endmodule

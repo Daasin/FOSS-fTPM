@@ -18,19 +18,20 @@ class clkmgr_base_vseq extends cip_base_vseq #(
 
   // This delay in io_clk cycles is needed to allow updates to the hints_status CSR to go through
   // synchronizers.
-  localparam int IO_DIV4_SYNC_CYCLES = 8;
+  localparam int IO_DIV4_SYNC_CYCLES = 16;
 
-  rand bit         io_ip_clk_en;
-  rand bit         main_ip_clk_en;
-  rand bit         usb_ip_clk_en;
+  rand bit              io_ip_clk_en;
+  rand bit              main_ip_clk_en;
+  rand bit              usb_ip_clk_en;
 
-  rand hintables_t idle;
+  rand mubi_hintables_t idle;
 
-  mubi4_t          scanmode;
-  int              scanmode_on_weight         = 8;
+  mubi4_t               scanmode;
+  int                   scanmode_on_weight         = 8;
 
-  lc_tx_t          extclk_ctrl_low_speed_sel;
-  lc_tx_t          extclk_ctrl_sel;
+  lc_tx_t               extclk_ctrl_low_speed_sel;
+  lc_tx_t               extclk_ctrl_sel;
+  clkmgr_mubi_e         mubi_mode;
 
   virtual function void set_scanmode_on_low_weight();
     scanmode_on_weight = 2;
@@ -49,10 +50,10 @@ class clkmgr_base_vseq extends cip_base_vseq #(
     super.post_randomize();
   endfunction
 
-  task initialize_on_start();
+  virtual task initialize_on_start();
     `uvm_info(`gfn, "In clkmgr_if initialize_on_start", UVM_MEDIUM)
-    idle = '1;
-    scanmode = prim_mubi_pkg::MuBi4False;
+    idle = {NUM_TRANS{MuBi4True}};
+    scanmode = MuBi4False;
     cfg.clkmgr_vif.init(.idle(idle), .scanmode(scanmode), .lc_debug_en(Off));
     io_ip_clk_en   = 1'b1;
     main_ip_clk_en = 1'b1;
@@ -60,29 +61,55 @@ class clkmgr_base_vseq extends cip_base_vseq #(
     control_ip_clocks();
   endtask
 
+  // Converts to bool with strict true.
+  protected function hintables_t mubi_hintables_to_hintables(mubi_hintables_t mubi_hints);
+    hintables_t ret;
+    foreach (mubi_hints[i]) ret[i] = prim_mubi_pkg::mubi4_test_true_strict(mubi_hints[i]);
+    return ret;
+  endfunction
+
   local function void disable_unnecessary_exclusions();
     ral.get_excl_item().enable_excl("clkmgr_reg_block.clk_enables", 0);
     ral.get_excl_item().enable_excl("clkmgr_reg_block.clk_hints", 0);
-    ral.get_excl_item().enable_excl("clkmgr_reg_block.io_meas_ctrl_shadowed.en", 0);
-    ral.get_excl_item().enable_excl("clkmgr_reg_block.io_div2_meas_ctrl_shadowed.en", 0);
-    ral.get_excl_item().enable_excl("clkmgr_reg_block.io_div4_meas_ctrl_shadowed.en", 0);
-    ral.get_excl_item().enable_excl("clkmgr_reg_block.main_meas_ctrl_shadowed.en", 0);
-    ral.get_excl_item().enable_excl("clkmgr_reg_block.usb_meas_ctrl_shadowed.en", 0);
+
+    // enable these will cause RECOV_ERR_CODE failure in csr tests
+    // TODO: review with @matutem
+//    ral.get_excl_item().enable_excl("clkmgr_reg_block.io_meas_ctrl_shadowed.en", 0);
+//    ral.get_excl_item().enable_excl("clkmgr_reg_block.io_div2_meas_ctrl_shadowed.en", 0);
+//    ral.get_excl_item().enable_excl("clkmgr_reg_block.io_div4_meas_ctrl_shadowed.en", 0);
+//    ral.get_excl_item().enable_excl("clkmgr_reg_block.main_meas_ctrl_shadowed.en", 0);
+//    ral.get_excl_item().enable_excl("clkmgr_reg_block.usb_meas_ctrl_shadowed.en", 0);
     `uvm_info(`gfn, "Adjusted exclusions", UVM_MEDIUM)
     ral.get_excl_item().print_exclusions(UVM_MEDIUM);
   endfunction
 
   task pre_start();
-    cfg.clkmgr_vif.init(.idle('1), .scanmode(scanmode), .lc_debug_en(Off));
+    mubi_mode = ClkmgrMubiNone;
+    `DV_GET_ENUM_PLUSARG(clkmgr_mubi_e, mubi_mode, clkmgr_mubi_mode)
+    `uvm_info(`gfn, $sformatf("mubi_mode = %s", mubi_mode.name), UVM_MEDIUM)
+    // Disable the assertions requiring strict mubi4 and lc_tx_t to test non-strict-true values.
+    $assertoff(0, "prim_mubi4_sync");
+    $assertoff(0, "prim_lc_sync");
+    cfg.clkmgr_vif.init(.idle({NUM_TRANS{MuBi4True}}), .scanmode(scanmode), .lc_debug_en(Off));
     cfg.clkmgr_vif.update_io_ip_clk_en(1'b0);
     cfg.clkmgr_vif.update_main_ip_clk_en(1'b0);
     cfg.clkmgr_vif.update_usb_ip_clk_en(1'b0);
-    cfg.clkmgr_vif.update_all_clk_byp_ack(prim_mubi_pkg::MuBi4False);
-    cfg.clkmgr_vif.update_io_clk_byp_ack(prim_mubi_pkg::MuBi4False);
-    // There is something strange with exclusions. Don't disable for now.
-    // disable_unnecessary_exclusions();
+    cfg.clkmgr_vif.update_all_clk_byp_ack(MuBi4False);
+    cfg.clkmgr_vif.update_div_step_down_req(MuBi4False);
+    cfg.clkmgr_vif.update_io_clk_byp_ack(MuBi4False);
+
+    disable_unnecessary_exclusions();
     clkmgr_init();
     super.pre_start();
+    if (common_seq_type inside {"shadow_reg_errors", "shadow_reg_errors_with_csr_rw"}) begin
+      expect_fatal_alerts = 1;
+      $assertoff(0, "tb.dut.u_io_err_sync.SrcPulseCheck_M");
+      $assertoff(0, "tb.dut.u_main_err_sync.SrcPulseCheck_M");
+      $assertoff(0, "tb.dut.u_usb_err_sync.SrcPulseCheck_M");
+      $assertoff(0, "tb.dut.u_io_div2_err_sync.SrcPulseCheck_M");
+      $assertoff(0, "tb.dut.u_io_div4_err_sync.SrcPulseCheck_M");
+    end
+
   endtask
 
   virtual task dut_init(string reset_kind = "HARD");
@@ -324,5 +351,4 @@ class clkmgr_base_vseq extends cip_base_vseq #(
     // Increasing its frequency improves DV efficiency without compromising quality.
     cfg.aon_clk_rst_vif.set_freq_mhz((1.0 * FakeAonClkHz) / 1_000_000);
   endtask
-
 endclass : clkmgr_base_vseq

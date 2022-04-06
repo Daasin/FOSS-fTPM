@@ -6,23 +6,18 @@
 pub mod command;
 pub mod conf;
 
+use crate::io::emu::Emulator;
 use crate::io::gpio::{GpioPin, PinMode, PullMode};
 use crate::io::i2c::Bus;
 use crate::io::spi::Target;
 use crate::io::uart::Uart;
+use crate::transport::{ProxyOps, Result, Transport, TransportError};
 
-use anyhow::Result;
 use erased_serde::Serialize;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Invalid pin strapping name \"{0}\"")]
-    InvalidStrappingName(String),
-}
 
 #[derive(Default)]
 pub struct PinConfiguration {
@@ -38,12 +33,11 @@ pub struct PinConfiguration {
 // replacing the "bare" Transport argument.  The fields other than
 // transport will have been computed from a number ConfigurationFiles.
 pub struct TransportWrapper {
-    transport: RefCell<Box<dyn crate::transport::Transport>>,
+    transport: RefCell<Box<dyn Transport>>,
     pin_map: HashMap<String, String>,
     uart_map: HashMap<String, String>,
     spi_map: HashMap<String, String>,
     i2c_map: HashMap<String, String>,
-    flash_map: HashMap<String, conf::FlashConfiguration>,
     pin_conf_map: HashMap<String, PinConfiguration>,
     strapping_conf_map: HashMap<String, HashMap<String, PinConfiguration>>,
 }
@@ -56,7 +50,6 @@ impl TransportWrapper {
             uart_map: HashMap::new(),
             spi_map: HashMap::new(),
             i2c_map: HashMap::new(),
-            flash_map: HashMap::new(),
             pin_conf_map: HashMap::new(),
             strapping_conf_map: HashMap::new(),
         }
@@ -64,7 +57,7 @@ impl TransportWrapper {
 
     /// Returns a `Capabilities` object to check the capabilities of this
     /// transport object.
-    pub fn capabilities(&self) -> crate::transport::Capabilities {
+    pub fn capabilities(&self) -> Result<crate::transport::Capabilities> {
         self.transport.borrow().capabilities()
     }
 
@@ -94,6 +87,16 @@ impl TransportWrapper {
         self.transport
             .borrow()
             .gpio_pin(Self::map_name(&self.pin_map, name).as_str())
+    }
+
+    /// Returns a [`Emulator`] implementation.
+    pub fn emulator(&self) -> Result<Rc<dyn Emulator>> {
+        self.transport.borrow().emulator()
+    }
+
+    /// Methods available only on Proxy implementation.
+    pub fn proxy_ops(&self) -> Result<Rc<dyn ProxyOps>> {
+        self.transport.borrow().proxy_ops()
     }
 
     /// Invoke non-standard functionality of some Transport implementations.
@@ -135,18 +138,20 @@ impl TransportWrapper {
         Ok(())
     }
 
-    /// Configure all pins as input/output, pullup, etc. as declared in cofiguration files.
+    /// Configure all pins as input/output, pullup, etc. as declared in configuration files.
     pub fn apply_default_pin_configurations(&self) -> Result<()> {
         self.apply_pin_configurations(&self.pin_conf_map)
     }
 
     /// Configure a specific set of pins as strong/weak pullup/pulldown as declared in
-    /// cofiguration files under a given strapping name.
+    /// configuration files under a given strapping name.
     pub fn apply_pin_strapping(&self, strapping_name: &str) -> Result<()> {
         if let Some(strapping_conf_map) = self.strapping_conf_map.get(strapping_name) {
             self.apply_pin_configurations(&strapping_conf_map)
         } else {
-            Err(Error::InvalidStrappingName(strapping_name.to_string()).into())
+            Err(TransportError::InvalidStrappingName(
+                strapping_name.to_string(),
+            ))
         }
     }
 
@@ -162,7 +167,9 @@ impl TransportWrapper {
             }
             Ok(())
         } else {
-            Err(Error::InvalidStrappingName(strapping_name.to_string()).into())
+            Err(TransportError::InvalidStrappingName(
+                strapping_name.to_string(),
+            ))
         }
     }
 
@@ -197,7 +204,7 @@ impl TransportWrapper {
         }
     }
 
-    pub fn add_configuration_file(&mut self, file: conf::ConfigurationFile) -> Result<()> {
+    pub fn add_configuration_file(&mut self, file: conf::ConfigurationFile) -> anyhow::Result<()> {
         // Merge content of configuration file into pin_map and other
         // members.
         for pin_conf in file.pins {
@@ -223,10 +230,6 @@ impl TransportWrapper {
             }
             // TODO(#8769): Record baud / parity configration for later
             // use when opening uart.
-        }
-        for flash_conf in file.flash {
-            self.flash_map
-                .insert(flash_conf.name.clone(), flash_conf.clone());
         }
         Ok(())
     }

@@ -172,14 +172,14 @@ _mask_rom_start_boot:
   csrc mie, t0
 
   // Check if AST initialization should be skipped.
-  li   t0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
-            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
-            OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET)
+  li   a0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
+            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET)
+  lw   t0, OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET(a0)
   li   t1, MULTIBIT_ASM_BOOL4_TRUE
   bne  t0, t1, .L_ast_init_skip
 
   // Copy the AST configuration from OTP.
-  li   a0, (TOP_EARLGREY_AST_BASE_ADDR + AST_REGA_0_REG_OFFSET)
+  li   a0, (TOP_EARLGREY_AST_BASE_ADDR)
   li   a1, (TOP_EARLGREY_AST_BASE_ADDR + AST_REGAL_REG_OFFSET + 4)
   li   a2, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
             OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
@@ -202,8 +202,7 @@ _mask_rom_start_boot:
   // to prevent the release of FIPS entropy until all the thresholds are set
   li t0, (0x5 << ENTROPY_SRC_CONF_FIPS_ENABLE_OFFSET) | \
          (0x5 << ENTROPY_SRC_CONF_ENTROPY_DATA_REG_ENABLE_OFFSET) | \
-         (0x5 << ENTROPY_SRC_CONF_BOOT_BYPASS_DISABLE_OFFSET) | \
-         (0x5 << ENTROPY_SRC_CONF_HEALTH_TEST_CLR_OFFSET) | \
+         (0x5 << ENTROPY_SRC_CONF_THRESHOLD_SCOPE_OFFSET) | \
          (0x5 << ENTROPY_SRC_CONF_RNG_BIT_ENABLE_OFFSET)
   sw t0, ENTROPY_SRC_CONF_REG_OFFSET(a0)
 

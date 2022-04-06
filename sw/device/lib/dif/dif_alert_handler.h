@@ -36,8 +36,8 @@ extern "C" {
 
 /**
  * Helper macro for defining a `dif_alert_handler_class_t` enumeration constant.
- * @name_ Name of the enumeration constant.
- * @value Value of the enumeration constant.
+ * @class_ Alert class of the enumeration constant.
+ * @value_ Value of the enumeration constant.
  */
 #define ALERT_CLASS_ENUM_INIT_(class_, value_) \
   kDifAlertHandlerClass##class_ = value_,
@@ -390,7 +390,8 @@ dif_result_t dif_alert_handler_configure_class(
  * @param locked The locked state to configure ping timer in.
  * @return The result of the operation.
  */
-OT_WARN_UNUSED_RESULT dif_result_t dif_alert_handler_configure_ping_timer(
+OT_WARN_UNUSED_RESULT
+dif_result_t dif_alert_handler_configure_ping_timer(
     const dif_alert_handler_t *alert_handler, uint32_t ping_timeout,
     dif_toggle_t enabled, dif_toggle_t locked);
 
@@ -408,7 +409,8 @@ OT_WARN_UNUSED_RESULT dif_result_t dif_alert_handler_configure_ping_timer(
  * @param locked The locked state to configure ping timer in after enabling it.
  * @return The result of the operation.
  */
-OT_WARN_UNUSED_RESULT dif_result_t dif_alert_handler_ping_timer_set_enabled(
+OT_WARN_UNUSED_RESULT
+dif_result_t dif_alert_handler_ping_timer_set_enabled(
     const dif_alert_handler_t *alert_handler, dif_toggle_t locked);
 
 /**
@@ -433,7 +435,7 @@ dif_result_t dif_alert_handler_lock_alert(
  *
  * @param alert_handler An alert handler handle.
  * @param alert The alert to check is locked.
- * @param is_locked Out-param for the locked state.
+ * @param[out] is_locked Out-param for the locked state.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -464,7 +466,7 @@ dif_result_t dif_alert_handler_lock_local_alert(
  *
  * @param alert_handler An alert handler handle.
  * @param local_alert The local alert to check is locked.
- * @param is_locked Out-param for the locked state.
+ * @param[out] is_locked Out-param for the locked state.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -495,7 +497,7 @@ dif_result_t dif_alert_handler_lock_class(
  *
  * @param alert_handler An alert handler handle.
  * @param alert_class The alert class to check is locked.
- * @param is_locked Out-param for the locked state.
+ * @param[out] is_locked Out-param for the locked state.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -523,7 +525,7 @@ dif_result_t dif_alert_handler_lock_ping_timer(
  * Checks whether alert handler's ping timer is locked.
  *
  * @param alert_handler An alert handler handle.
- * @param is_locked Out-param for the locked state.
+ * @param[out] is_locked Out-param for the locked state.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -537,7 +539,7 @@ dif_result_t dif_alert_handler_is_ping_timer_locked(
  *
  * @param alert_handler An alert handler handle.
  * @param alert The alert to check.
- * @param is_cause Out-param for whether this alert is a cause.
+ * @param[out] is_cause Out-param for whether this alert is a cause.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -563,7 +565,7 @@ dif_result_t dif_alert_handler_alert_acknowledge(
  *
  * @param alert_handler An alert handler handle.
  * @param local_alert The local alert to check.
- * @param is_cause Out-param for whether this alert is a cause.
+ * @param[out] is_cause Out-param for whether this alert is a cause.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -593,7 +595,7 @@ dif_result_t dif_alert_handler_local_alert_acknowledge(
  *
  * @param alert_handler An alert handler handle.
  * @param alert_class The class to check.
- * @param can_clear Out-param for the clear enablement state.
+ * @param[out] can_clear Out-param for the clear enablement state.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -643,7 +645,8 @@ dif_result_t dif_alert_handler_escalation_clear(
  *
  * @param alert_handler An alert handler handle.
  * @param alert_class The class to get the accumulator for.
- * @param num_alerts Out-param for the number of alerts that have accumulated.
+ * @param[out] num_alerts Out-param for the number of alerts that have
+ * accumulated.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -662,7 +665,7 @@ dif_result_t dif_alert_handler_get_accumulator(
  *
  * @param alert_handler An alert handler handle.
  * @param alert_class The class to set the counter for.
- * @param cycles Out-param for the counter.
+ * @param[out] cycles Out-param for the counter.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT
@@ -677,7 +680,7 @@ dif_result_t dif_alert_handler_get_escalation_counter(
  *
  * @param alert_handler An alert handler handle.
  * @param alert_class The class to get the state of
- * @param state Out-param for the class state.
+ * @param[out] state Out-param for the class state.
  * @return The result of the operation.
  */
 OT_WARN_UNUSED_RESULT

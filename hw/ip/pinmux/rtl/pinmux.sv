@@ -46,6 +46,10 @@ module pinmux
   output jtag_pkg::jtag_req_t      dft_jtag_o,
   input  jtag_pkg::jtag_rsp_t      dft_jtag_i,
   // Direct USB connection
+  input                            usb_dppullup_en_upwr_i,
+  input                            usb_dnpullup_en_upwr_i,
+  output                           usb_dppullup_en_o,
+  output                           usb_dnpullup_en_o,
   input                            usb_out_of_rst_i,
   input                            usb_aon_wake_en_i,
   input                            usb_aon_wake_ack_i,
@@ -141,14 +145,30 @@ module pinmux
     end else begin
       // dedicated pads
       for (int kk = 0; kk < NDioPads; kk++) begin
-        if (reg2hw.dio_pad_attr[kk].qe) begin
-          dio_pad_attr_q[kk] <= reg2hw.dio_pad_attr[kk].q;
+        if (reg2hw.dio_pad_attr[kk].invert.qe) begin // All from one CSR: Shared qe.
+          dio_pad_attr_q[kk].drive_strength <= reg2hw.dio_pad_attr[kk].drive_strength.q;
+          dio_pad_attr_q[kk].slew_rate      <= reg2hw.dio_pad_attr[kk].slew_rate.q;
+          dio_pad_attr_q[kk].od_en          <= reg2hw.dio_pad_attr[kk].od_en.q;
+          dio_pad_attr_q[kk].schmitt_en     <= reg2hw.dio_pad_attr[kk].schmitt_en.q;
+          dio_pad_attr_q[kk].keep_en        <= reg2hw.dio_pad_attr[kk].keeper_en.q;
+          dio_pad_attr_q[kk].pull_select    <= reg2hw.dio_pad_attr[kk].pull_select.q;
+          dio_pad_attr_q[kk].pull_en        <= reg2hw.dio_pad_attr[kk].pull_en.q;
+          dio_pad_attr_q[kk].virt_od_en     <= reg2hw.dio_pad_attr[kk].virtual_od_en.q;
+          dio_pad_attr_q[kk].invert         <= reg2hw.dio_pad_attr[kk].invert.q;
         end
       end
       // muxed pads
       for (int kk = 0; kk < NMioPads; kk++) begin
-        if (reg2hw.mio_pad_attr[kk].qe) begin
-          mio_pad_attr_q[kk] <= reg2hw.mio_pad_attr[kk].q;
+        if (reg2hw.mio_pad_attr[kk].invert.qe) begin // All from one CSR: Shared qe.
+          mio_pad_attr_q[kk].drive_strength <= reg2hw.mio_pad_attr[kk].drive_strength.q;
+          mio_pad_attr_q[kk].slew_rate      <= reg2hw.mio_pad_attr[kk].slew_rate.q;
+          mio_pad_attr_q[kk].od_en          <= reg2hw.mio_pad_attr[kk].od_en.q;
+          mio_pad_attr_q[kk].schmitt_en     <= reg2hw.mio_pad_attr[kk].schmitt_en.q;
+          mio_pad_attr_q[kk].keep_en        <= reg2hw.mio_pad_attr[kk].keeper_en.q;
+          mio_pad_attr_q[kk].pull_select    <= reg2hw.mio_pad_attr[kk].pull_select.q;
+          mio_pad_attr_q[kk].pull_en        <= reg2hw.mio_pad_attr[kk].pull_en.q;
+          mio_pad_attr_q[kk].virt_od_en     <= reg2hw.mio_pad_attr[kk].virtual_od_en.q;
+          mio_pad_attr_q[kk].invert         <= reg2hw.mio_pad_attr[kk].invert.q;
         end
       end
     end
@@ -168,8 +188,16 @@ module pinmux
       .attr_warl_o(warl_mask)
     );
 
-    assign dio_attr[k]              = dio_pad_attr_q[k] & warl_mask;
-    assign hw2reg.dio_pad_attr[k].d = dio_pad_attr_q[k] & warl_mask;
+    assign dio_attr[k]                             = dio_pad_attr_q[k] & warl_mask;
+    assign hw2reg.dio_pad_attr[k].drive_strength.d = dio_attr[k].drive_strength;
+    assign hw2reg.dio_pad_attr[k].slew_rate.d      = dio_attr[k].slew_rate;
+    assign hw2reg.dio_pad_attr[k].od_en.d          = dio_attr[k].od_en;
+    assign hw2reg.dio_pad_attr[k].schmitt_en.d     = dio_attr[k].schmitt_en;
+    assign hw2reg.dio_pad_attr[k].keeper_en.d      = dio_attr[k].keep_en;
+    assign hw2reg.dio_pad_attr[k].pull_select.d    = dio_attr[k].pull_select;
+    assign hw2reg.dio_pad_attr[k].pull_en.d        = dio_attr[k].pull_en;
+    assign hw2reg.dio_pad_attr[k].virtual_od_en.d  = dio_attr[k].virt_od_en;
+    assign hw2reg.dio_pad_attr[k].invert.d         = dio_attr[k].invert;
   end
 
   pad_attr_t [NMioPads-1:0] mio_attr;
@@ -182,8 +210,16 @@ module pinmux
       .attr_warl_o(warl_mask)
     );
 
-    assign mio_attr[k]              = mio_pad_attr_q[k] & warl_mask;
-    assign hw2reg.mio_pad_attr[k].d = mio_pad_attr_q[k] & warl_mask;
+    assign mio_attr[k]                             = mio_pad_attr_q[k] & warl_mask;
+    assign hw2reg.mio_pad_attr[k].drive_strength.d = mio_attr[k].drive_strength;
+    assign hw2reg.mio_pad_attr[k].slew_rate.d      = mio_attr[k].slew_rate;
+    assign hw2reg.mio_pad_attr[k].od_en.d          = mio_attr[k].od_en;
+    assign hw2reg.mio_pad_attr[k].schmitt_en.d     = mio_attr[k].schmitt_en;
+    assign hw2reg.mio_pad_attr[k].keeper_en.d      = mio_attr[k].keep_en;
+    assign hw2reg.mio_pad_attr[k].pull_select.d    = mio_attr[k].pull_select;
+    assign hw2reg.mio_pad_attr[k].pull_en.d        = mio_attr[k].pull_en;
+    assign hw2reg.mio_pad_attr[k].virtual_od_en.d  = mio_attr[k].virt_od_en;
+    assign hw2reg.mio_pad_attr[k].invert.d         = mio_attr[k].invert;
   end
 
 
@@ -248,8 +284,12 @@ module pinmux
     .usb_dp_async_alw_i(dio_to_periph_o[TargetCfg.usb_dp_idx]),
     .usb_dn_async_alw_i(dio_to_periph_o[TargetCfg.usb_dn_idx]),
     .usb_sense_async_alw_i(mio_to_periph_o[TargetCfg.usb_sense_idx]),
-    .usb_dppullup_en_alw_i(dio_out_o[TargetCfg.usb_dp_pullup_idx]),
-    .usb_dnpullup_en_alw_i(dio_out_o[TargetCfg.usb_dn_pullup_idx]),
+    .usb_dppullup_en_upwr_i(usb_dppullup_en_upwr_i),
+    .usb_dnpullup_en_upwr_i(usb_dnpullup_en_upwr_i),
+
+    // output signals for pullup connectivity
+    .usb_dppullup_en_o(usb_dppullup_en_o),
+    .usb_dnpullup_en_o(usb_dnpullup_en_o),
 
     // tie this to something from usbdev to indicate its out of reset
     .usb_out_of_rst_upwr_i(usb_out_of_rst_i),

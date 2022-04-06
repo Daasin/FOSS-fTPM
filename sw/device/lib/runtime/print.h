@@ -64,17 +64,24 @@ typedef struct buffer_sink {
  * - %h and %H, which are aliases for %x and %X, respectively.
  * - %b, which prints an unsigned binary uint32_t.
  *
- * Finally, an additional nonstandard format specifier is supported:
- * - %z, which takes a size_t followed by a pointer to a buffer, and prints
+ * Finally, additional nonstandard format specifiers is supported:
+ * - %!s, which takes a size_t followed by a pointer to a buffer, and prints
  *   out that many characters from the buffer.
+ * - %!x, %!X, %!y, and %!Y, which are like %!s but print out a hex dump
+ *   instead; casing is as with %x, and %!x will print in big-endian order
+ *   (i.e., last byte printed first) while %!y will print in little-endian
+ *   order (i.e., first byte printed first). This makes sure %!x is consistent
+ *   with %x.
+ * - %!b, which takes a bool and prints either true or false.
  *
  * When compiled for a DV testbench, this function will not read any pointers,
- * and as such the specifiers %s and %z will behave as if they were printing
- * garbage, and are, as such, unsupported.
+ * and as such the specifiers %s, %!s, %!x, %!X, %!y, and %!Y will behave as if
+ * they were printing garbage, and are, as such, unsupported.
  *
  * This function furthermore supports width modifiers for integer specifiers,
- * such as `%10d`. It does not support dynamic widths like `%*d`, and will also
- * always pad with zeroes, rather than spaces.
+ * such as `%010d`. It does not support dynamic widths like `%*d`. If the width
+ * specifier starts with a `0`, it is padded with zeroes; otherwise, it is
+ * padded with spaces, consistent with the standard C behavior.
  *
  * Of course, providing arguments for formatting which are incompatible with a
  * given format specifier is Undefined Behavior.
@@ -82,7 +89,7 @@ typedef struct buffer_sink {
  * Note that for logging in DV, the following script updates the format
  * specifiers supported in C above and changes them to match the SystemVerilog
  * language semantics: util/device_sw_utils/extract_sw_logs.py
- * It also makes fixes as needed for custom speficiers such as %z.
+ * It also makes fixes as needed for custom speficiers such as %!s.
  *
  * @param format the format spec.
  * @param ... values to interpolate in the format spec.
@@ -160,6 +167,98 @@ size_t base_fprintf(buffer_sink_t out, const char *format, ...);
  * @param args values to interpolate in the format spec.
  */
 size_t base_vfprintf(buffer_sink_t out, const char *format, va_list args);
+
+/**
+ * Configuration options for `base_hexdump` and friends.
+ */
+typedef struct base_hexdump_fmt {
+  /** How many bytes to print per word of output. */
+  size_t bytes_per_word;
+  /** How many words (as defined above) per line of output. */
+  size_t words_per_line;
+  /**
+   * The alphabet to use for char-ifying a byte.
+   *
+   * These characters will be written as-is to the sink.
+   */
+  const char (*alphabet)[256];
+} base_hexdump_fmt_t;
+
+/**
+ * The default alphabet used by `base_hexdump()` functions.
+ */
+extern const char kBaseHexdumpDefaultFmtAlphabet[256];
+
+/**
+ * Dumps `hex` in an xxd-style hexdump to stdout, using default formatting
+ * options.
+ *
+ * @param buf the buffer to dump.
+ * @param len the number of bytes to dump from hex.
+ */
+size_t base_hexdump(const char *buf, size_t len);
+
+/**
+ * Dumps `hex` in an xxd-style hexdump to the buffer `buf`, capped at the given
+ * length, using default formatting options.
+ *
+ * @param out a buffer to print to.
+ * @param out_len the length of the output buffer.
+ * @param buf the buffer to dump.
+ * @param len the number of bytes to dump from hex.
+ */
+size_t base_snhexdump(char *out, size_t out_len, const char *buf, size_t len);
+
+/**
+ * Dumps `hex` in an xxd-style hexdump to `out`, using default formatting
+ * options.
+ *
+ * If `out.sink` is `NULL`, writes are treated as-if they were written to a
+ * UNIX-like /dev/null: writes succeed, but the actual bytes are not printed
+ * anywhere.
+ *
+ * @param out a sink to print to.
+ * @param buf the buffer to dump.
+ * @param len the number of bytes to dump from hex.
+ */
+size_t base_fhexdump(buffer_sink_t out, const char *buf, size_t len);
+
+/**
+ * Dumps `hex` in an xxd-style hexdump to stdout.
+ *
+ * @param fmt the format for dumping.
+ * @param buf the buffer to dump.
+ * @param len the number of bytes to dump from hex.
+ */
+size_t base_hexdump_with(base_hexdump_fmt_t fmt, const char *buf, size_t len);
+
+/**
+ * Dumps `hex` in an xxd-style hexdump to the buffer `buf`, capped at the given
+ * length.
+ *
+ * @param out a buffer to print to.
+ * @param out_len the length of the output buffer.
+ * @param fmt the format for dumping.
+ * @param buf the buffer to dump.
+ * @param len the number of bytes to dump from hex.
+ */
+size_t base_snhexdump_with(char *out, size_t out_len, base_hexdump_fmt_t fmt,
+                           const char *buf, size_t len);
+
+/**
+ * Dumps `hex` in an xxd-style hexdump to `out`.
+ *
+ * If `out.sink` is `NULL`, writes are treated as-if they were written to a
+ * UNIX-like /dev/null: writes succeed, but the actual bytes are not printed
+ * anywhere.
+ *
+ * @param out a sink to print to.
+ * @param fmt the format for dumping.
+ * @param buf the buffer to dump.
+ * @param len the number of bytes to dump from hex.
+ */
+size_t base_fhexdump_with(buffer_sink_t out, base_hexdump_fmt_t fmt,
+                          const char *buf, size_t len);
 
 /**
  * Sets what the "stdout" sink is, which is used by `base_printf()`.

@@ -24,11 +24,12 @@
 module flash_phy_prog import flash_phy_pkg::*; (
   input clk_i,
   input rst_ni,
+  input prim_mubi_pkg::mubi4_t disable_i,
   input req_i,
   input scramble_i,
   input ecc_i,
   input [WordSelW-1:0] sel_i,
-  input [BusWidth-1:0] data_i,
+  input [BusFullWidth-1:0] data_i,
   input last_i,
   input ack_i,  // ack means request has been accepted by flash
   input done_i, // done means requested transaction has completed
@@ -43,28 +44,55 @@ module flash_phy_prog import flash_phy_pkg::*; (
   output logic ack_o,
   // block data does not contain ecc / metadata portion
   output logic [DataWidth-1:0] block_data_o,
-  output logic [FullDataWidth-1:0] data_o
+  output logic [FullDataWidth-1:0] data_o,
+  output logic fsm_err_o,
+  output logic intg_err_o
 );
 
-  typedef enum logic [3:0] {
-    StIdle,
-    StPrePack,
-    StPackData,
-    StPostPack,
-    StCalcPlainEcc,
-    StReqFlash,
-    StWaitFlash,
-    StCalcMask,
-    StScrambleData,
-    StCalcEcc
-  } prog_state_e;
+  // Encoding generated with:
+  // $ ./util/design/sparse-fsm-encode.py -d 5 -m 11 -n 11 \
+  //      -s 2968771430 --language=sv
+  //
+  // Hamming distance histogram:
+  //
+  //  0: --
+  //  1: --
+  //  2: --
+  //  3: --
+  //  4: --
+  //  5: |||||||||||||||||||| (40.00%)
+  //  6: ||||||||||||||||| (34.55%)
+  //  7: |||||| (12.73%)
+  //  8: ||||| (10.91%)
+  //  9:  (1.82%)
+  // 10: --
+  // 11: --
+  //
+  // Minimum Hamming distance: 5
+  // Maximum Hamming distance: 9
+  // Minimum Hamming weight: 2
+  // Maximum Hamming weight: 8
+  //
+  localparam int StateWidth = 11;
+  typedef enum logic [StateWidth-1:0] {
+    StIdle          = 11'b00101010010,
+    StPrePack       = 11'b00110101001,
+    StPackData      = 11'b00000011101,
+    StPostPack      = 11'b11111101100,
+    StCalcPlainEcc  = 11'b10110011110,
+    StReqFlash      = 11'b01111000111,
+    StWaitFlash     = 11'b11001110101,
+    StCalcMask      = 11'b01000100000,
+    StScrambleData  = 11'b11001001010,
+    StCalcEcc       = 11'b11110110011,
+    StInvalid       = 11'b10011000001
+  } state_e;
+  state_e state_d, state_q;
 
   typedef enum logic [1:0] {
     Filler,
     Actual
   } data_sel_e;
-
-  prog_state_e state_d, state_q;
 
   // The currently observed data beat
   logic [WordSelW-1:0] idx;
@@ -80,7 +108,39 @@ module flash_phy_prog import flash_phy_pkg::*; (
   logic plain_ecc_en;
 
   // selects empty data or real data
-  assign pack_data  = (data_sel == Actual) ? data_i : {BusWidth{1'b1}};
+  assign pack_data  = (data_sel == Actual) ? data_i[BusWidth-1:0] : {BusWidth{1'b1}};
+
+  logic data_intg_ok;
+  logic data_err;
+
+  // use the tlul integrity module directly for bus integrity
+  tlul_data_integ_dec u_data_intg_chk (
+    .data_intg_i(data_i),
+    .data_err_o(data_err)
+  );
+  assign data_intg_ok = ~data_err;
+
+  logic data_invalid_q, data_invalid_d;
+  // hold on integrity failure indication until reset
+  assign data_invalid_d = data_invalid_q |
+                          (pack_valid & ~data_intg_ok);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      data_invalid_q <= '0;
+    end else begin
+      data_invalid_q <= data_invalid_d;
+    end
+  end
+
+  // indication to upper layer prescence of error
+  assign intg_err_o = data_invalid_q;
+
+  // if integrity failure is seen, fake communication with flash
+  // and simply terminate
+  logic ack, done;
+  assign ack = ack_i | data_invalid_q;
+  assign done = done_i | data_invalid_q;
 
   // next idx will be aligned
   assign idx_sub_one = idx - 1'b1;
@@ -98,13 +158,9 @@ module flash_phy_prog import flash_phy_pkg::*; (
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      state_q <= StIdle;
-    end else begin
-      state_q <= state_d;
-    end
-  end
+
+  // SEC_CM: PHY_PROG.FSM.SPARSE
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q, state_e, StIdle)
 
   // If the first beat of an incoming transaction is not aligned to word boundary (for example
   // if each flash word is 4 bus words wide, and the first word to program starts at index 1),
@@ -124,11 +180,17 @@ module flash_phy_prog import flash_phy_pkg::*; (
     last_o = 1'b0;
     calc_req_o = 1'b0;
     scramble_req_o = 1'b0;
+    fsm_err_o = 1'b0;
 
     unique case (state_q)
       StIdle: begin
         // if first beat of a transaction is not aligned, prepack with empty bits
-        if (req_i && |sel_i) begin
+        if (prim_mubi_pkg::mubi4_test_true_loose(disable_i)) begin
+          // only disable during idle state to ensure program is able to gracefully complete
+          // this is important as we do not want to accidentally disturb any electrical procedure
+          // internal to the flash macro
+          state_d = StInvalid;
+        end else if (req_i && |sel_i) begin
           state_d = StPrePack;
         end else if (req_i) begin
           state_d = StPackData;
@@ -195,7 +257,8 @@ module flash_phy_prog import flash_phy_pkg::*; (
       end
 
       StReqFlash: begin
-        req_o = 1'b1;
+        // only request flash if data integrity was valid
+        req_o = ~data_invalid_q;
         last_o = last_i;
 
         // if this is the last beat of the program burst
@@ -203,23 +266,30 @@ module flash_phy_prog import flash_phy_pkg::*; (
         // if this is NOT the last beat
         //   - ack the upstream request and accept more beats
         if (last_i) begin
-          state_d = ack_i ? StWaitFlash : StReqFlash;
+          state_d = ack ? StWaitFlash : StReqFlash;
         end else begin
-          ack_o = ack_i;
-          state_d = ack_i ? StIdle : StReqFlash;
+          ack_o = ack;
+          state_d = ack ? StIdle : StReqFlash;
         end
       end
 
       StWaitFlash: begin
-
-        if (done_i) begin
+        if (done) begin
           ack_o = 1'b1;
           state_d = StIdle;
         end
       end
 
-      default:;
+      StInvalid: begin
+        fsm_err_o = 1'b1;
+      end
+
+      default: begin
+        state_d = StInvalid;
+      end
+
     endcase // unique case (state_q)
+
   end
 
   logic [DataWidth-1:0] mask_q;
@@ -228,7 +298,7 @@ module flash_phy_prog import flash_phy_pkg::*; (
     if (!rst_ni) begin
       packed_data <= '0;
       mask_q <= '0;
-    end else if (req_o && ack_i) begin
+    end else if (req_o && ack) begin
       packed_data <= '0;
     end else if (calc_req_o && calc_ack_i) begin
       packed_data <= packed_data ^ mask_i;
@@ -268,6 +338,10 @@ module flash_phy_prog import flash_phy_pkg::*; (
   // integrity ECC calculation
   // This instance can technically be merged with the instance above, but is
   // kept separate for the sake of convenience
+  // The plain data ecc is calculated continously from packed data (which changes
+  // from packed data to masked/scrambled data based on software configuration).
+  // The actual plain data ECC is explicitly captured during this process when
+  // it is required.
   prim_secded_hamming_72_64_enc u_plain_enc (
     .data_i(packed_data),
     .data_o(plain_data_w_ecc)
@@ -293,7 +367,7 @@ module flash_phy_prog import flash_phy_pkg::*; (
       done_cnt <= '0;
     end else if (txn_done) begin
       done_cnt <= '0;
-    end else if (done_i) begin
+    end else if (done) begin
       done_cnt <= done_cnt + 1'b1;
     end
   end

@@ -101,7 +101,6 @@ module tb;
     .pwr_o(rstmgr_if.pwr_o),
 
     .sw_rst_req_o(rstmgr_if.sw_rst_req_o),
-    .rst_cpu_n_i(rstmgr_if.cpu_i.rst_cpu_n),
     .ndmreset_req_i(rstmgr_if.cpu_i.ndmreset_req),
 
     .alert_dump_i(rstmgr_if.alert_dump_i),
@@ -129,8 +128,8 @@ module tb;
     uvm_config_db#(devmode_vif)::set(null, "*.env", "devmode_vif", devmode_if);
     uvm_config_db#(virtual tl_if)::set(null, "*.env.m_tl_agent*", "vif", tl_if);
 
-    uvm_config_db#(parameterized_pwrmgr_rstmgr_sva_vif)::set(null, "*.env", "pwrmgr_rstmgr_sva_vif",
-                                                             dut.pwrmgr_rstmgr_sva_if);
+    uvm_config_db#(virtual pwrmgr_rstmgr_sva_if)::set(null, "*.env", "pwrmgr_rstmgr_sva_vif",
+                                                      dut.pwrmgr_rstmgr_sva_if);
     uvm_config_db#(virtual rstmgr_if)::set(null, "*.env", "rstmgr_vif", rstmgr_if);
 
     $timeformat(-12, 0, " ps", 12);

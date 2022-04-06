@@ -13,7 +13,7 @@ module aes_control_fsm
   import aes_pkg::*;
   import aes_reg_pkg::*;
 #(
-  parameter bit Masking = 0
+  parameter bit SecMasking = 0
 ) (
   input  logic                                    clk_i,
   input  logic                                    rst_ni,
@@ -115,7 +115,7 @@ module aes_control_fsm
 );
 
   // Encoding generated with:
-  // $ ./util/design/sparse-fsm-encode.py -d 3 -m 7 -n 6 \
+  // $ ./util/design/sparse-fsm-encode.py -d 3 -m 8 -n 6 \
   //      -s 31468618 --language=sv
   //
   // Hamming distance histogram:
@@ -135,13 +135,14 @@ module aes_control_fsm
   //
   localparam int StateWidth = 6;
   typedef enum logic [StateWidth-1:0] {
-    IDLE        = 6'b111100,
-    LOAD        = 6'b101001,
-    PRNG_UPDATE = 6'b010000,
-    PRNG_RESEED = 6'b100010,
-    FINISH      = 6'b011011,
-    CLEAR       = 6'b110111,
-    ERROR       = 6'b001110
+    IDLE        = 6'b001001,
+    LOAD        = 6'b100011,
+    PRNG_UPDATE = 6'b111101,
+    PRNG_RESEED = 6'b010000,
+    FINISH      = 6'b100100,
+    CLEAR_I     = 6'b111010,
+    CLEAR_CO    = 6'b001110,
+    ERROR       = 6'b010111
   } aes_ctrl_e;
 
   // Signals
@@ -353,6 +354,10 @@ module aes_control_fsm
         idle    = ~(start_core | (prng_reseed_o & prng_reseed_we_o));
         idle_we = 1'b1;
 
+        // Clear the start trigger when seeing invalid configurations or performing automatic
+        // operation.
+        start_we = start_i & ((mode_i == AES_NONE) | ~manual_operation_i);
+
         if (!start_core) begin
           // Initial key and IV updates are ignored if the core is about to start. If key sideload
           // is enabled, software writes to the initial key registers are ignored.
@@ -370,7 +375,7 @@ module aes_control_fsm
 
         if (prng_reseed_i) begin
           // PRNG reseeding has highest priority.
-          if (!Masking) begin
+          if (!SecMasking) begin
             prng_reseed_done_d = 1'b0;
             aes_ctrl_ns        = PRNG_RESEED;
           end else begin
@@ -459,7 +464,7 @@ module aes_control_fsm
       PRNG_UPDATE: begin
         // Fresh pseudo-random data is used to:
         // - clear the state in the final cipher round,
-        // - clear any other registers in the CLEAR state.
+        // - clear any other registers in the CLEAR_I/CO states.
 
         // IV control in case of ongoing encryption/decryption
         // - CTR: IV registers are updated by counter during cipher operation
@@ -485,7 +490,7 @@ module aes_control_fsm
             // We have work for the cipher core, perform handshake.
             cipher_in_valid_o = 1'b1;
             if (cipher_in_ready_i) begin
-              aes_ctrl_ns = CLEAR;
+              aes_ctrl_ns = CLEAR_I;
             end
           end else begin
             // Another write to the trigger register must have overwritten the trigger bits that
@@ -499,7 +504,7 @@ module aes_control_fsm
         // Request a reseed of the clearing PRNG.
         prng_reseed_req_o = ~prng_reseed_done_q;
 
-        if (!Masking) begin
+        if (!SecMasking) begin
           if (prng_reseed_done_q) begin
             // Clear the trigger and return.
             prng_reseed_we     = 1'b1;
@@ -583,8 +588,8 @@ module aes_control_fsm
         end
       end
 
-      CLEAR: begin
-        // Initial Key, IV and input data registers can be cleared right away.
+      CLEAR_I: begin
+        // Clear input registers such as Initial Key, IV and input data registers.
         if (key_iv_data_in_clear_i) begin
           // Initial Key
           key_init_sel_o = KEY_INIT_CLEAR;
@@ -601,6 +606,12 @@ module aes_control_fsm
           data_in_prev_sel_o = DIP_CLEAR;
           data_in_prev_we_o  = 1'b1;
         end
+        aes_ctrl_ns = CLEAR_CO;
+      end
+
+      CLEAR_CO: begin
+        // Wait for cipher core to clear internal Full Key and Decryption Key registers and/or
+        // the state register and clear output data registers afterwards.
 
         // Perform handshake with cipher core.
         cipher_out_ready_o = 1'b1;
@@ -647,20 +658,7 @@ module aes_control_fsm
   end
 
   // SEC_CM: MAIN.FSM.SPARSE
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateWidth-1:0] aes_ctrl_cs_raw;
-  assign aes_ctrl_cs = aes_ctrl_e'(aes_ctrl_cs_raw);
-  prim_sparse_fsm_flop #(
-    .StateEnumT(aes_ctrl_e),
-    .Width(StateWidth),
-    .ResetValue(StateWidth'(IDLE))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( aes_ctrl_ns     ),
-    .state_o ( aes_ctrl_cs_raw )
-  );
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, aes_ctrl_ns, aes_ctrl_cs, aes_ctrl_e, IDLE)
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : reg_fsm
     if (!rst_ni) begin
@@ -737,9 +735,9 @@ module aes_control_fsm
 
   // Collect writes to data input registers. Cleared if:
   // - data is loaded into cipher core,
-  // - clearing data input registers with random data,
+  // - clearing data input registers with random data (all data_in_qe_i bits high in next cycle),
   // - clearing the status tracking.
-  assign data_in_new_d = data_in_load || data_in_we_o || clear_in_out_status ? '0 :
+  assign data_in_new_d = data_in_load || &data_in_qe_i || clear_in_out_status ? '0 :
       data_in_new_q | data_in_qe_i;
   assign data_in_new   = &data_in_new_d;
 
@@ -830,19 +828,22 @@ module aes_control_fsm
   ////////////////////////////
   // Count the number of blocks since the start of the message to determine when the masking PRNG
   // inside the cipher core needs to be reseeded.
-  if (Masking) begin : gen_block_ctr
+  if (SecMasking) begin : gen_block_ctr
     logic                     block_ctr_set;
     logic [BlockCtrWidth-1:0] block_ctr_d, block_ctr_q;
+    logic [BlockCtrWidth-1:0] block_ctr_set_val, block_ctr_decr_val;
 
     assign block_ctr_expr = block_ctr_q == '0;
     assign block_ctr_set  = ctrl_we_q | (block_ctr_decr & (block_ctr_expr | cipher_prng_reseed_i));
 
-    assign block_ctr_d =
-        block_ctr_set  ?
-            (prng_reseed_rate_i == PER_1  ? BlockCtrWidth'(0)    :
-             prng_reseed_rate_i == PER_64 ? BlockCtrWidth'(63)   :
-             prng_reseed_rate_i == PER_8K ? BlockCtrWidth'(8191) : BlockCtrWidth'(0)) :
-        block_ctr_decr ? block_ctr_q - BlockCtrWidth'(1) : block_ctr_q;
+    assign block_ctr_set_val  = prng_reseed_rate_i == PER_1  ? '0                   :
+                                prng_reseed_rate_i == PER_64 ? BlockCtrWidth'(63)   :
+                                prng_reseed_rate_i == PER_8K ? BlockCtrWidth'(8191) : '0;
+
+    assign block_ctr_decr_val = block_ctr_q - BlockCtrWidth'(1);
+
+    assign block_ctr_d = block_ctr_set  ? block_ctr_set_val  :
+                         block_ctr_decr ? block_ctr_decr_val : block_ctr_q;
 
     always_ff @(posedge clk_i or negedge rst_ni) begin : reg_block_ctr
       if (!rst_ni) begin
@@ -868,6 +869,9 @@ module aes_control_fsm
   // Assertions //
   ////////////////
 
+  // Create a lint error to reduce the risk of accidentally disabling the masking.
+  `ASSERT_STATIC_LINT_ERROR(AesControlFsmSecMaskingNonDefault, SecMasking == 1)
+
   // Selectors must be known/valid
   `ASSERT(AesModeValid, !ctrl_err_storage_i |-> mode_i inside {
       AES_ECB,
@@ -891,7 +895,8 @@ module aes_control_fsm
       PRNG_UPDATE,
       PRNG_RESEED,
       FINISH,
-      CLEAR
+      CLEAR_I,
+      CLEAR_CO
       })
 
   // Check parameters

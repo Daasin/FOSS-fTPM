@@ -112,6 +112,9 @@ module rv_dm_regs_reg_top (
 
   // Register instances
   // R[alert_test]: V(True)
+  logic alert_test_qe;
+  logic [0:0] alert_test_flds_we;
+  assign alert_test_qe = &alert_test_flds_we;
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test (
@@ -120,10 +123,11 @@ module rv_dm_regs_reg_top (
     .wd     (alert_test_wd),
     .d      ('0),
     .qre    (),
-    .qe     (reg2hw.alert_test.qe),
+    .qe     (alert_test_flds_we[0]),
     .q      (reg2hw.alert_test.q),
     .qs     ()
   );
+  assign reg2hw.alert_test.qe = alert_test_qe;
 
 
 
@@ -163,17 +167,7 @@ module rv_dm_regs_reg_top (
   assign shadow_busy = 1'b0;
 
   // register busy
-  logic reg_busy_sel;
-  assign reg_busy = reg_busy_sel | shadow_busy;
-  always_comb begin
-    reg_busy_sel = '0;
-    unique case (1'b1)
-      default: begin
-        reg_busy_sel  = '0;
-      end
-    endcase
-  end
-
+  assign reg_busy = shadow_busy;
 
   // Unused signal tieoff
 

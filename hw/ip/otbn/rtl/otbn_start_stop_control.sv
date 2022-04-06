@@ -62,20 +62,9 @@ module otbn_start_stop_control
   logic addr_cnt_inc;
   logic [4:0] addr_cnt_q, addr_cnt_d;
 
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateStartStopWidth-1:0] state_raw_q;
-  assign state_q = otbn_start_stop_state_e'(state_raw_q);
-  prim_sparse_fsm_flop #(
-    .StateEnumT(otbn_start_stop_state_e),
-    .Width(StateStartStopWidth),
-    .ResetValue(StateStartStopWidth'(OtbnStartStopStateHalt))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( state_d     ),
-    .state_o ( state_raw_q )
-  );
+  // SEC_CM: START_STOP_CTRL.FSM.SPARSE
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q,
+      otbn_start_stop_state_e, OtbnStartStopStateHalt)
 
   always_comb begin
     urnd_reseed_req_o      = 1'b0;
@@ -164,8 +153,15 @@ module otbn_start_stop_control
         secure_wipe_running_o = 1'b1;
         state_d = OtbnStartStopStateHalt;
       end
-      default: begin
+      OtbnStartStopStateError: begin
+        // SEC_CM: START_STOP_CTRL.FSM.LOCAL_ESC
+        // Terminal error state
         state_error_o = 1'b1;
+      end
+      default: begin
+        // We should never get here. If we do (e.g. via a malicious glitch), error out immediately.
+        state_error_o = 1'b1;
+        state_d = OtbnStartStopStateError;
       end
     endcase
   end
@@ -173,12 +169,7 @@ module otbn_start_stop_control
   // Logic separate from main FSM code to avoid false combinational loop warning from verilator
   assign controller_start_o = (state_q == OtbnStartStopStateUrndRefresh) & !urnd_reseed_busy_i;
 
-  if (SecWipeEn) begin: gen_sec_wipe
-    assign done_o = (state_q == OtbnStartStopSecureWipeComplete);
-  end
-  else begin: gen_bypass_sec_wipe
-      assign done_o = start_secure_wipe_i;
-  end
+  assign done_o = (state_q == OtbnStartStopSecureWipeComplete);
 
   assign addr_cnt_d = addr_cnt_inc ? (addr_cnt_q + 5'd1) : 5'd0;
 

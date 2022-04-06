@@ -29,7 +29,9 @@ module tb;
   `DV_ALERT_IF_CONNECT
 
   // dut
-  rv_dm dut (
+  rv_dm #(
+    .IdcodeValue          (rv_dm_env_pkg::RV_DM_JTAG_IDCODE)
+  ) dut (
     .clk_i                (clk  ),
     .rst_ni               (rst_n),
 
@@ -66,16 +68,29 @@ module tb;
     uvm_config_db#(virtual clk_rst_if)::set(
         null, "*.env", "clk_rst_vif_rv_dm_regs_reg_block", clk_rst_if);
     uvm_config_db#(virtual clk_rst_if)::set(
-        null, "*.env", "clk_rst_vif_rv_dm_rom_reg_block", clk_rst_if);
+        null, "*.env", "clk_rst_vif_rv_dm_debug_mem_reg_block", clk_rst_if);
     uvm_config_db#(virtual tl_if)::set(
         null, "*.env.m_tl_agent_rv_dm_regs_reg_block*", "vif", regs_tl_if);
     uvm_config_db#(virtual tl_if)::set(
-        null, "*.env.m_tl_agent_rv_dm_rom_reg_block*", "vif", rom_tl_if);
+        null, "*.env.m_tl_agent_rv_dm_debug_mem_reg_block*", "vif", rom_tl_if);
     uvm_config_db#(virtual tl_if)::set(null, "*.env.m_tl_sba_agent*", "vif", sba_tl_if);
     uvm_config_db#(virtual jtag_if)::set(null, "*.env.m_jtag_agent*", "vif", jtag_if);
     uvm_config_db#(virtual rv_dm_if)::set(null, "*.env*", "rv_dm_vif", rv_dm_if);
     $timeformat(-12, 0, " ps", 12);
     run_test();
+  end
+
+  // Disable TLUL host SBA assertions when injecting intg errors on the response channel.
+  initial begin
+    forever @rv_dm_if.disable_tlul_assert_host_sba_resp_svas begin
+      if (rv_dm_if.disable_tlul_assert_host_sba_resp_svas) begin
+        $assertoff(0, dut.tlul_assert_host_sba.gen_host.respOpcode_M);
+        $assertoff(0, dut.tlul_assert_host_sba.gen_host.respSzEqReqSz_M);
+      end else begin
+        $asserton(0, dut.tlul_assert_host_sba.gen_host.respOpcode_M);
+        $asserton(0, dut.tlul_assert_host_sba.gen_host.respSzEqReqSz_M);
+      end
+    end
   end
 
 endmodule

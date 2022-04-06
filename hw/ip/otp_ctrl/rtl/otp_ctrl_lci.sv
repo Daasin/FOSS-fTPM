@@ -5,7 +5,7 @@
 // Life cycle interface for performing life cycle transitions in OTP.
 //
 
-`include "prim_assert.sv"
+`include "prim_flop_macros.sv"
 
 module otp_ctrl_lci
   import otp_ctrl_pkg::*;
@@ -34,6 +34,13 @@ module otp_ctrl_lci
   // Note that most errors are not recoverable and move the partition FSM into
   // a terminal error state.
   output otp_err_e                          error_o,
+  // This error signal is pulsed high if the FSM has been glitched into an invalid state.
+  // Although it is somewhat redundant with the error code in error_o above, it is
+  // meant to cover cases where we already latched an error code while the FSM is
+  // glitched into an invalid state (since in that case, the error code will not be
+  // overridden with the FSM error code so that the original error code is still
+  // discoverable).
+  output logic                              fsm_err_o,
   output logic                              lci_prog_idle_o,
   // OTP interface
   output logic                              otp_req_o,
@@ -98,10 +105,10 @@ module otp_ctrl_lci
     ErrorSt     = 9'b011111101
   } state_e;
 
+  state_e state_d, state_q;
   logic cnt_clr, cnt_en, cnt_err;
   logic [CntWidth-1:0] cnt;
   otp_err_e error_d, error_q;
-  state_e state_d, state_q;
 
   // Output LCI errors
   assign error_o = error_q;
@@ -126,6 +133,7 @@ module otp_ctrl_lci
 
     // Error Register
     error_d = error_q;
+    fsm_err_o = 1'b0;
 
     unique case (state_q)
       ///////////////////////////////////////////////////////////////////
@@ -204,6 +212,7 @@ module otp_ctrl_lci
       // glitch), error out immediately.
       default: begin
         state_d = ErrorSt;
+        fsm_err_o = 1'b1;
       end
       ///////////////////////////////////////////////////////////////////
     endcase // state_q
@@ -212,6 +221,7 @@ module otp_ctrl_lci
     // SEC_CM: LCI.FSM.LOCAL_ESC, LCI.FSM.GLOBAL_ESC
     if (escalate_en_i != lc_ctrl_pkg::Off || cnt_err) begin
       state_d = ErrorSt;
+      fsm_err_o = 1'b1;
       if (error_q == NoError) begin
         error_d = FsmStateError;
       end
@@ -260,20 +270,7 @@ module otp_ctrl_lci
   // Registers //
   ///////////////
 
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateWidth-1:0] state_raw_q;
-  assign state_q = state_e'(state_raw_q);
-  prim_sparse_fsm_flop #(
-    .StateEnumT(state_e),
-    .Width(StateWidth),
-    .ResetValue(StateWidth'(ResetSt))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( state_d     ),
-    .state_o ( state_raw_q )
-  );
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q, state_e, ResetSt)
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : p_regs
     if (!rst_ni) begin

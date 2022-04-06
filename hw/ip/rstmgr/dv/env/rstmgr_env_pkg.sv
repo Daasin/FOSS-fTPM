@@ -21,21 +21,59 @@ package rstmgr_env_pkg;
   import rstmgr_reg_pkg::NumHwResets;
   import rstmgr_reg_pkg::NumSwResets;
 
+  import alert_pkg::alert_crashdump_t;
+  import rv_core_ibex_pkg::cpu_crash_dump_t;
+
+  import sec_cm_pkg::*;
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
 
   // parameters
   // TODO: add the names of alerts in order
-  parameter string LIST_OF_ALERTS[] = {"fatal_fault"};
-  parameter uint NUM_ALERTS = 1;
+  parameter string LIST_OF_ALERTS[] = {"fatal_fault", "fatal_cnsty_fault"};
+  parameter uint NUM_ALERTS = 2;
+
+  // leaf reset modules for top_earlgrey
+  parameter string LIST_OF_LEAFS[] = {"u_daon_por",
+                                      "u_daon_por_io",
+                                      "u_daon_por_io_div2",
+                                      "u_daon_por_io_div4",
+                                      "u_daon_por_io_div4_shadowed",
+                                      "u_daon_por_usb",
+                                      "u_daon_sys_aon",
+                                      "u_daon_sys_io_div4",
+                                      "u_d0_lc",
+                                      "u_d0_lc_shadowed",
+                                      "u_d0_lc_io_div4",
+                                      "u_d0_lc_io_div4_shadowed",
+                                      "u_daon_lc_aon",
+                                      "u_daon_lc_io_div4",
+                                      "u_daon_lc_io_div4_shadowed",
+                                      "u_d0_sys",
+                                      "u_d0_sys_shadowed",
+                                      "u_d0_sys_io_div4",
+                                      "u_d0_sys_aon",
+                                      "u_d0_spi_device",
+                                      "u_d0_spi_host0",
+                                      "u_d0_spi_host1",
+                                      "u_d0_usb",
+                                      "u_d0_usbif",
+                                      "u_d0_i2c0",
+                                      "u_d0_i2c1",
+                                      "u_d0_i2c2"};
+
+  // leaf reset which has shadow pair
+  parameter string LIST_OF_SHADOW_LEAFS[] = {"u_daon_por_io_div4",
+                                             "u_d0_lc",
+                                             "u_d0_lc_io_div4",
+                                             "u_daon_lc_io_div4",
+                                             "u_d0_sys"};
 
   // types
   typedef logic [NumSwResets-1:0] sw_rst_t;
 
-  typedef logic [$bits(alert_pkg::alert_crashdump_t)-1:0] linearized_alert_dump_t;
-
-  typedef virtual pwrmgr_rstmgr_sva_if #(.CHECK_RSTREQS(0)) parameterized_pwrmgr_rstmgr_sva_vif;
+  typedef logic [$bits(alert_crashdump_t)-1:0] linearized_alert_dump_t;
 
   // functions
 

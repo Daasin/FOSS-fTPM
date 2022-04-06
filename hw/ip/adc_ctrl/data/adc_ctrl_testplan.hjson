@@ -59,7 +59,7 @@
           As filters_polled but with filter parameters fixed during the test.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_filters_polled_fixed"]
     }
     {
       name: filters_interrupt
@@ -81,7 +81,7 @@
           - Check interrupt signal operates as expected.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_filters_interrupt"]
     }
     {
       name: filters_interrupt_fixed
@@ -89,7 +89,7 @@
           As filters_interrupt but with filter parameters fixed during the test.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_filters_interrupt_fixed"]
     }
     {
       name: filters_wakeup
@@ -109,7 +109,7 @@
           - Check wakeup signal operates as expected.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_filters_wakeup"]
     }
     {
       name: filters_wakeup_fixed
@@ -117,7 +117,7 @@
           As filters_wakeup but with filter parameters fixed during the test.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_filters_wakeup_fixed"]
     }
     {
       name: filters_both
@@ -139,7 +139,7 @@
           - Check interrupt signal operates as expected.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_filters_both"]
     }
     {
       name: clock_gating
@@ -164,7 +164,7 @@
           - Check interrupt signal operates as expected.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_clock_gating"]
     }
     {
       name: poweron_counter
@@ -183,7 +183,7 @@
           - Confirm timing of power down and channel select signals to ADC.
           '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_poweron_counter"]
     }
     {
       name: lowpower_counter
@@ -202,7 +202,7 @@
           - Confirm return to fast sampling happens as expected.
         '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_lowpower_counter"]
     }
     {
       name: fsm_reset
@@ -222,7 +222,7 @@
           - Ensure ADC controller FSM and counters are reset.
         '''
       milestone: V2
-      tests: []
+      tests: ["adc_ctrl_fsm_reset"]
     }
 
     {

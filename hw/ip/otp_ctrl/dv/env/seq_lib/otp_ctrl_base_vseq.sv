@@ -21,6 +21,9 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
   static bit used_dai_addrs[bit [OTP_ADDR_WIDTH - 1 : 0]];
 
   rand bit [NumOtpCtrlIntr-1:0] en_intr;
+
+  rand int apply_reset_during_pwr_init_cycles;
+
   bit is_valid_dai_op = 1;
 
   // According to spec, the period between digest calculation and reset should not issue any write.
@@ -39,6 +42,10 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
   lc_ctrl_state_pkg::lc_cnt_e   lc_cnt;
 
   otp_ctrl_callback_vseq callback_vseq;
+
+  constraint apply_reset_during_pwr_init_cycles_c {
+    apply_reset_during_pwr_init_cycles == 0;
+  }
 
   virtual task pre_start();
     `uvm_create_on(callback_vseq, p_sequencer);
@@ -64,19 +71,16 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
   // Cfg errors are cleared after reset
   virtual task apply_reset(string kind = "HARD");
     super.apply_reset(kind);
-  endtask
-
-  virtual task dut_shutdown();
-    // check for pending otp_ctrl operations and wait for them to complete
-    // TODO
+    cfg.otp_ctrl_vif.release_part_access_mubi();
   endtask
 
   virtual task otp_ctrl_vif_init();
-    cfg.otp_ctrl_vif.drive_lc_creator_seed_sw_rw_en(On);
-    cfg.otp_ctrl_vif.drive_lc_seed_hw_rd_en(randomize_lc_tx_t_val());
-    cfg.otp_ctrl_vif.drive_lc_dft_en(Off);
-    cfg.otp_ctrl_vif.drive_lc_escalate_en(Off);
+    cfg.otp_ctrl_vif.drive_lc_creator_seed_sw_rw_en(lc_ctrl_pkg::On);
+    cfg.otp_ctrl_vif.drive_lc_seed_hw_rd_en(get_rand_lc_tx_val());
+    cfg.otp_ctrl_vif.drive_lc_dft_en(get_rand_lc_tx_val(.t_weight(0)));
+    cfg.otp_ctrl_vif.drive_lc_escalate_en(lc_ctrl_pkg::Off);
     cfg.otp_ctrl_vif.drive_pwr_otp_init(0);
+    cfg.otp_ctrl_vif.drive_ext_voltage_h_io(1'bz);
 
     // Unused signals in open sourced OTP memory
     `DV_CHECK_RANDOMIZE_FATAL(cfg.dut_cfg)
@@ -90,7 +94,17 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
   // drive otp_pwr req pin to initialize OTP, and wait until init is done
   virtual task otp_pwr_init();
     cfg.otp_ctrl_vif.drive_pwr_otp_init(1);
-    wait(cfg.otp_ctrl_vif.pwr_otp_done_o == 1);
+    if (apply_reset_during_pwr_init_cycles > 0) begin
+      `DV_SPINWAIT_EXIT(
+          cfg.clk_rst_vif.wait_clks(apply_reset_during_pwr_init_cycles);,
+          wait (cfg.otp_ctrl_vif.pwr_otp_done_o == 1);)
+      if (cfg.otp_ctrl_vif.pwr_otp_done_o == 0) begin
+        cfg.otp_ctrl_vif.drive_pwr_otp_init(0);
+        apply_reset();
+        cfg.otp_ctrl_vif.drive_pwr_otp_init(1);
+      end
+    end
+    wait (cfg.otp_ctrl_vif.pwr_otp_done_o == 1);
     cfg.otp_ctrl_vif.drive_pwr_otp_init(0);
     digest_calculated = 0;
   endtask
@@ -146,7 +160,7 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
     // - zero delays in TLUL interface, otherwise dai operation might be finished before reading
     //   these two CSRs
     if (cfg.zero_delays && is_valid_dai_op &&
-        cfg.otp_ctrl_vif.lc_escalate_en_i != lc_ctrl_pkg::On) begin
+        cfg.otp_ctrl_vif.lc_escalate_en_i == lc_ctrl_pkg::Off) begin
       csr_rd_check(ral.status.dai_idle, .compare_value(0), .backdoor(1));
       if ($urandom_range(0, 1)) csr_rd(.ptr(ral.direct_access_regwen), .value(val));
     end
@@ -165,7 +179,7 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
     csr_wr(ral.direct_access_cmd, int'(otp_ctrl_pkg::DaiRead));
 
     if (cfg.zero_delays && is_valid_dai_op &&
-        cfg.otp_ctrl_vif.lc_escalate_en_i != lc_ctrl_pkg::On) begin
+        cfg.otp_ctrl_vif.lc_escalate_en_i == lc_ctrl_pkg::Off) begin
       csr_rd_check(ral.status.dai_idle, .compare_value(0), .backdoor(1));
       if ($urandom_range(0, 1)) csr_rd(.ptr(ral.direct_access_regwen), .value(val));
     end
@@ -181,9 +195,11 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
                             bit [TL_DW-1:0] exp_data1 = 0);
     bit [TL_DW-1:0] rdata0, rdata1;
     dai_rd(addr, rdata0, rdata1);
-    `DV_CHECK_EQ(rdata0, exp_data0, $sformatf("dai addr %0h rdata0 readout mismatch", addr))
-    if (is_secret(addr) || is_digest(addr)) begin
-      `DV_CHECK_EQ(rdata1, exp_data1, $sformatf("dai addr %0h rdata1 readout mismatch", addr))
+    if (!cfg.under_reset) begin
+      `DV_CHECK_EQ(rdata0, exp_data0, $sformatf("dai addr %0h rdata0 readout mismatch", addr))
+      if (is_secret(addr) || is_digest(addr)) begin
+        `DV_CHECK_EQ(rdata1, exp_data1, $sformatf("dai addr %0h rdata1 readout mismatch", addr))
+      end
     end
   endtask: dai_rd_check
 
@@ -194,7 +210,7 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
     csr_wr(ral.direct_access_cmd, otp_ctrl_pkg::DaiDigest);
 
     if (cfg.zero_delays && is_valid_dai_op &&
-        cfg.otp_ctrl_vif.lc_escalate_en_i != lc_ctrl_pkg::On) begin
+        cfg.otp_ctrl_vif.lc_escalate_en_i == lc_ctrl_pkg::Off) begin
       csr_rd_check(ral.status.dai_idle, .compare_value(0), .backdoor(1));
       if ($urandom_range(0, 1)) csr_rd(.ptr(ral.direct_access_regwen), .value(val));
     end
@@ -215,13 +231,17 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
 
   // SW digest data are calculated in sw and won't be checked in OTP.
   // Here to simplify testbench, write random data to sw digest.
-  virtual task write_sw_digests(bit [1:0] wr_digest = $urandom());
+  virtual task write_sw_digests(bit [NUM_UNBUFF_PARTS-1:0] wr_digest = $urandom());
     bit [TL_DW*2-1:0] wdata;
-    if (wr_digest[0]) begin
+    if (wr_digest[VendorTestIdx]) begin
       `DV_CHECK_STD_RANDOMIZE_FATAL(wdata);
       dai_wr(CreatorSwCfgDigestOffset, wdata[TL_DW-1:0], wdata[TL_DW*2-1:TL_DW]);
     end
-    if (wr_digest[1]) begin
+    if (wr_digest[CreatorSwCfgIdx]) begin
+      `DV_CHECK_STD_RANDOMIZE_FATAL(wdata);
+      dai_wr(CreatorSwCfgDigestOffset, wdata[TL_DW-1:0], wdata[TL_DW*2-1:TL_DW]);
+    end
+    if (wr_digest[OwnerSwCfgIdx]) begin
       `DV_CHECK_STD_RANDOMIZE_FATAL(wdata);
       dai_wr(OwnerSwCfgDigestOffset, wdata[TL_DW-1:0], wdata[TL_DW*2-1:TL_DW]);
     end
@@ -250,6 +270,63 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
     csr_rd(.ptr(ral.secret1_digest[1]),        .value(val));
     csr_rd(.ptr(ral.secret2_digest[0]),        .value(val));
     csr_rd(.ptr(ral.secret2_digest[1]),        .value(val));
+  endtask
+
+  // If the partition is read/write locked, there is 20% chance we will force the internal mubi
+  // access signal to the values other than mubi::true or mubi::false.
+  virtual task force_mubi_part_access();
+    if (cfg.otp_ctrl_vif.alert_reqs == 0) begin
+      otp_part_access_lock_t forced_mubi_part_access[NumPart-1];
+
+      if (`gmv(ral.vendor_test_digest[0]) || `gmv(ral.vendor_test_digest[1])) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[VendorTestIdx].write_lock = 1;
+      end
+      if (`gmv(ral.vendor_test_read_lock) == 0) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[VendorTestIdx].read_lock = 1;
+      end
+
+      if (`gmv(ral.creator_sw_cfg_digest[0]) || `gmv(ral.creator_sw_cfg_digest[1])) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[CreatorSwCfgIdx].write_lock = 1;
+      end
+      if (`gmv(ral.creator_sw_cfg_read_lock) == 0) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[CreatorSwCfgIdx].read_lock = 1;
+      end
+
+      if (`gmv(ral.owner_sw_cfg_digest[0]) || `gmv(ral.owner_sw_cfg_digest[1])) begin
+        if ($urandom_range(0, 4) == 0) forced_mubi_part_access[OwnerSwCfgIdx].write_lock = 1;
+      end
+      if (`gmv(ral.owner_sw_cfg_read_lock) == 0) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[OwnerSwCfgIdx].read_lock = 1;
+      end
+
+      if (`gmv(ral.hw_cfg_digest[0]) || `gmv(ral.hw_cfg_digest[1])) begin
+        // TODO: hw_cfg part cannot be read locked.
+        // if (!$urandom_range(0, 4)) cfg.forced_mubi_part_access[HwCfgIdx].read_lock = 1;
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[HwCfgIdx].write_lock = 1;
+      end
+
+      if (`gmv(ral.secret0_digest[0]) || `gmv(ral.secret0_digest[1])) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[Secret0Idx].read_lock = 1;
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[Secret0Idx].write_lock = 1;
+      end
+
+      if (`gmv(ral.secret1_digest[0]) || `gmv(ral.secret1_digest[1])) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[Secret1Idx].read_lock = 1;
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[Secret1Idx].write_lock = 1;
+      end
+
+      if (`gmv(ral.secret2_digest[0]) || `gmv(ral.secret2_digest[1])) begin
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[Secret2Idx].read_lock = 1;
+        if (!$urandom_range(0, 4)) forced_mubi_part_access[Secret2Idx].write_lock = 1;
+      end
+
+      foreach (forced_mubi_part_access[i]) begin
+        `uvm_info(`gfn, $sformatf("partition %0d inject mubi value: read=%0b, write=%0b", i,
+            forced_mubi_part_access[i].read_lock, forced_mubi_part_access[i].write_lock), UVM_HIGH)
+      end
+
+      cfg.otp_ctrl_vif.force_part_access_mubi(forced_mubi_part_access);
+    end
   endtask
 
   // This function backdoor inject error according to ecc_err.
@@ -503,11 +580,13 @@ class otp_ctrl_base_vseq extends cip_base_vseq #(
       repeat (10) begin
         bit [TL_DW-1:0] wr_data, rd_data;
         bit [TL_AW-1:0] rand_addr = $urandom_range(0, PRIM_ADDR_SIZE + 3);
+        bit test_access_en = cfg.otp_ctrl_vif.lc_dft_en_i == lc_ctrl_pkg::On;
         `DV_CHECK_STD_RANDOMIZE_FATAL(wr_data)
-        tl_access(.addr(rand_addr), .write(1), .data(wr_data),
+        tl_access(.addr(rand_addr), .write(1), .data(wr_data), .exp_err_rsp(~test_access_en),
                   .tl_sequencer_h(p_sequencer.prim_tl_sequencer_h));
         tl_access(.addr(rand_addr), .write(0), .data(rd_data), .exp_data(wr_data),
-                  .check_exp_data(1), .tl_sequencer_h(p_sequencer.prim_tl_sequencer_h));
+                  .exp_err_rsp(~test_access_en), .check_exp_data(test_access_en),
+                  .tl_sequencer_h(p_sequencer.prim_tl_sequencer_h));
       end
     end
   endtask

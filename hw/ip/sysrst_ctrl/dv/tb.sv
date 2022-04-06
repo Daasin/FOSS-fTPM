@@ -18,6 +18,7 @@ module tb;
 
   wire devmode;
   wire [NUM_MAX_INTERRUPTS-1:0] interrupts;
+  wire intr_sysrst_ctrl;
 
   // interfaces
   clk_rst_if clk_rst_if (
@@ -53,6 +54,7 @@ module tb;
     .alert_tx_o       (alert_tx),
     .cio_ac_present_i (sysrst_ctrl_if.ac_present),
     .cio_ec_rst_l_i   (sysrst_ctrl_if.ec_rst_l_in),
+    .cio_flash_wp_l_i (sysrst_ctrl_if.flash_wp_l_in),
     .cio_key0_in_i    (sysrst_ctrl_if.key0_in),
     .cio_key1_in_i    (sysrst_ctrl_if.key1_in),
     .cio_key2_in_i    (sysrst_ctrl_if.key2_in),
@@ -65,8 +67,12 @@ module tb;
     .cio_key1_out_o   (sysrst_ctrl_if.key1_out),
     .cio_key2_out_o   (sysrst_ctrl_if.key2_out),
     .cio_pwrb_out_o   (sysrst_ctrl_if.pwrb_out),
-    .cio_z3_wakeup_o  (sysrst_ctrl_if.z3_wakeup)
+    .cio_z3_wakeup_o  (sysrst_ctrl_if.z3_wakeup),
+    .intr_sysrst_ctrl_o (intr_sysrst_ctrl),
+    .aon_sysrst_ctrl_rst_req_o (sysrst_ctrl_if.sysrst_ctrl_rst_req)
   );
+
+  assign interrupts[IntrSysrstCtrl]      = intr_sysrst_ctrl;
 
   initial begin
     // drive clk and rst_n from clk_if
@@ -81,5 +87,8 @@ module tb;
     $timeformat(-12, 0, " ps", 12);
     run_test();
   end
+
+  `ASSERT(CheckFlashWrProtRst, !rst_aon_n -> sysrst_ctrl_if.flash_wp_l == 0, clk_aon, 0)
+  `ASSERT(CheckEcPwrOnRst, !rst_aon_n -> sysrst_ctrl_if.ec_rst_l_out == 0, clk_aon, 0)
 
 endmodule

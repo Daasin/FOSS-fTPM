@@ -56,6 +56,10 @@ prefixed with "0x" if they are hexadecimal.
     edn_flush            Flush EDN data from model because of reset signal in
                          EDN clock domain
 
+    otp_key_cdc_done     Lowers the request flag for any external secure wipe
+                         operation. Gets called when we acknowledge incoming
+                         scrambling key in RTL.
+
     invalidate_imem      Mark all of IMEM as having invalid ECC checksums
 
     invalidate_dmem      Mark all of DMEM as having invalid ECC checksums
@@ -66,7 +70,7 @@ prefixed with "0x" if they are hexadecimal.
                          change of state (this is pure, but handled in Python
                          to simplify verification).
 
-    send_lc_escalation   React to lc_escalate_en_i going high
+    send_err_escalation  React to an injected error
 
 '''
 
@@ -124,6 +128,22 @@ def on_start(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
     return None
 
 
+def on_dmem_wipe(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
+    '''Sets Status register as SecWipeDmem '''
+    check_arg_count('dmem_wipe', 0, args)
+
+    sim.on_dmem_wipe()
+    return None
+
+
+def on_imem_wipe(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
+    '''Sets Status register as SecWipeImem'''
+    check_arg_count('imem_wipe', 0, args)
+
+    sim.on_imem_wipe()
+    return None
+
+
 def on_configure(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
     check_arg_count('configure', 1, args)
 
@@ -149,7 +169,7 @@ def on_step(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
         # The trailing space is a bit naff but matches the behaviour in the RTL
         # tracer, where it's rather difficult to change.
         hdr = 'U ' if sim.state.wiping() else 'V '
-    elif (sim.state.running() or
+    elif (sim.state.executing() or
           (changes and not sim.state.secure_wipe_enabled)):
         hdr = 'STALL'
     else:
@@ -161,9 +181,16 @@ def on_step(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
         if rt is not None:
             rtl_changes.append(rt)
 
-    if hdr is None:
-        assert not rtl_changes
-    else:
+    # This is a bit of a hack. Very occasionally, we'll see traced changes when
+    # there's not actually an instruction in flight. For example, this happens
+    # if there's a RND request still pending when an operation stops. In this
+    # case, we might see a change where we drop the REQ signal after the secure
+    # wipe has finished. Rather than define a special "do-nothing" trace entry
+    # format for this situation, we cheat and use STALL.
+    if hdr is None and rtl_changes:
+        hdr = 'STALL'
+
+    if hdr is not None:
         print(hdr)
         for rt in rtl_changes:
             print(rt)
@@ -378,14 +405,25 @@ def on_step_crc(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
     return None
 
 
-def on_send_lc_escalation(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
-    check_arg_count('send_lc_escalation', 0, args)
-    sim.on_lc_escalation()
+def on_send_err_escalation(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
+    check_arg_count('send_err_escalation', 1, args)
+    err_val = read_word('err_val', args[0], 32)
+    sim.send_err_escalation(err_val)
+    return None
+
+
+def on_otp_cdc_done(sim: OTBNSim, args: List[str]) -> Optional[OTBNSim]:
+    check_arg_count('otp_key_cdc_done', 0, args)
+
+    sim.on_otp_cdc_done()
     return None
 
 
 _HANDLERS = {
     'start': on_start,
+    'dmem_wipe': on_dmem_wipe,
+    'imem_wipe': on_imem_wipe,
+    'otp_key_cdc_done': on_otp_cdc_done,
     'configure': on_configure,
     'step': on_step,
     'load_elf': on_load_elf,
@@ -406,7 +444,7 @@ _HANDLERS = {
     'invalidate_dmem': on_invalidate_dmem,
     'set_keymgr_value': on_set_keymgr_value,
     'step_crc': on_step_crc,
-    'send_lc_escalation': on_send_lc_escalation
+    'send_err_escalation': on_send_err_escalation
 }
 
 

@@ -8,6 +8,8 @@
                      "hw/dv/tools/dvsim/testplans/intr_test_testplan.hjson",
                      "hw/dv/tools/dvsim/testplans/tl_device_access_types_testplan.hjson",
                      "hw/dv/tools/dvsim/testplans/stress_all_with_reset_testplan.hjson",
+                     "hw/dv/tools/dvsim/testplans/sec_cm_count_testplan.hjson",
+                     "hw/dv/tools/dvsim/testplans/sec_cm_fsm_testplan.hjson",
                      // TODO: Top-level specific Hjson imported here. This will likely be resolved
                      // once we move to IPgen flow.
                      "hw/top_earlgrey/ip/pwrmgr/data/autogen/pwrmgr_sec_cm_testplan.hjson"]
@@ -222,10 +224,19 @@
       tests: ["pwrmgr_lowpower_wakeup_race"]
     }
     {
-      name: stress
-      desc: '''The standard stress test.'''
-      milestone: V3
-      tests: []
+      name: stress_all
+      desc: '''This runs random sequences in succession.
+
+            Randomly chooses from the following sequences:
+            - pwrmgr_aborted_low_power_vseq
+            - pwrmgr_lowpower_wakeup_race_vseq
+            - pwrmgr_reset_vseq
+            - pwrmgr_smoke_vseq
+            - pwrmgr_wakeup_reset_vseq
+            - pwrmgr_wakeup_vseq
+	    '''
+      milestone: V2
+      tests: ["pwrmgr_stress_all"]
     }
   ]
 

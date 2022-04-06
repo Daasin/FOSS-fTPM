@@ -281,7 +281,7 @@ module spi_readcmd
   logic addr_latched;
   logic addr_shift_en;
   logic addr_latch_en;
-  logic addr_inc; // increase address by 1 word
+  logic addr_inc; // increase address by 1 byte. Used to track the current addr
   // Address size is latched when the state machine moves to the MainAddress
   // state based on the cmd_info.addr_mode and addr_4b_en_i
   logic [4:0] addr_cnt_d, addr_cnt_q;
@@ -387,10 +387,28 @@ module spi_readcmd
     end
   end
 
+  // BEGIN: Address Count =====================================================
+  // addr_cnt is to track the current shifted bit position in the address field
   assign addr_ready_in_word     = (addr_cnt_d == 5'd 2);
   assign addr_ready_in_halfword = (addr_cnt_d == 5'd 1);
 
-  assign addr_latched = (addr_cnt_d == 5'd 0);
+  // addr_latched should be a pulse to be used in spid_readsram
+  logic  addr_latched_d;
+  assign addr_latched_d = (addr_cnt_d == 5'd 0);
+
+  prim_edge_detector #(
+    .Width      (1),
+    .ResetValue (1'b 0),
+    .EnSync     (1'b 0)
+  ) u_addr_latch_pulse (
+    .clk_i,
+    .rst_ni,
+
+    .d_i               (addr_latched_d),
+    .q_sync_o          (              ),
+    .q_posedge_pulse_o (addr_latched  ),
+    .q_negedge_pulse_o (              )
+  );
 
   assign cmdinfo_addr_mode = get_addr_mode(cmd_info_i, addr_4b_en_i);
 
@@ -411,7 +429,7 @@ module spi_readcmd
       // FSM moves from Reset to Address. At that time of the transition, the
       // datapath should latch the Address[31] or Address[23] too. So, it
       // already counts one beat.
-      addr_cnt_d = (cmdinfo_addr_mode == Addr4B) ? 5'd 30 : 5'd 22;
+      addr_cnt_d = (cmdinfo_addr_mode == Addr4B) ? 5'd 31 : 5'd 23;
 
       // TODO: Dual IO/ Quad IO case
     end else if (addr_cnt_q == '0) begin
@@ -421,6 +439,7 @@ module spi_readcmd
       addr_cnt_d = addr_cnt_q - 1'b 1;
     end
   end
+  // END:   Address Count -----------------------------------------------------
 
   // Dummy Counter
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -652,6 +671,9 @@ module spi_readcmd
         endcase
 
         if (bitcnt == 3'h 0) begin
+          // Increase addr by 1 byte
+          addr_inc = 1'b 1;
+
           // sent all words
           bitcnt_update = 1'b 1;
           // TODO: FIFO pop here?

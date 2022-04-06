@@ -1,5 +1,5 @@
 diff --git a/sw/device/lib/pinmux.c b/sw/device/lib/pinmux.c
-index 3561ef52f..879c4502c 100644
+index 643e44b49..a07e286e1 100644
 --- a/sw/device/lib/pinmux.c
 +++ b/sw/device/lib/pinmux.c
 @@ -61,26 +61,6 @@ void pinmux_init(void) {
@@ -30,22 +30,22 @@ index 3561ef52f..879c4502c 100644
    reg32 =
        mmio_region_from_addr(PINMUX0_BASE_ADDR + PINMUX_MIO_OUTSEL_0_REG_OFFSET);
 diff --git a/sw/device/lib/testing/test_rom/test_rom_start.S b/sw/device/lib/testing/test_rom/test_rom_start.S
-index ab2fb7bd4..b15fde33a 100644
+index 960cd0c62..f7b4c100b 100644
 --- a/sw/device/lib/testing/test_rom/test_rom_start.S
 +++ b/sw/device/lib/testing/test_rom/test_rom_start.S
-@@ -138,47 +138,6 @@ _reset_start:
- _start:
-   .globl _start
+@@ -147,47 +147,6 @@ _start:
+   li   t0, CLKMGR_CLK_HINTS_REG_RESVAL
+   sw   t0, CLKMGR_CLK_HINTS_REG_OFFSET(a0)
 
 -  // Check if AST initialization should be skipped.
--  li   t0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
--            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
--            OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET)
+-  li   a0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
+-            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET)
+-  lw   t0, OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET(a0)
 -  li   t1, MULTIBIT_ASM_BOOL4_TRUE
 -  bne  t0, t1, .L_ast_init_skip
 -
 -  // Copy the AST configuration from OTP.
--  li   a0, (TOP_EARLGREY_AST_BASE_ADDR + AST_REGA_0_REG_OFFSET)
+-  li   a0, (TOP_EARLGREY_AST_BASE_ADDR)
 -  li   a1, (TOP_EARLGREY_AST_BASE_ADDR + AST_REGAL_REG_OFFSET + 4)
 -  li   a2, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
 -            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
@@ -63,7 +63,7 @@ index ab2fb7bd4..b15fde33a 100644
 -.L_ast_init_skip:
 -  // Enable entropy complex - this is not the full enable
 -  li   a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
--  li   t0, 0x55505a
+-  li   t0, 0x555055
 -  sw   t0, ENTROPY_SRC_CONF_REG_OFFSET(a0)
 -
 -  li   a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
@@ -78,11 +78,11 @@ index ab2fb7bd4..b15fde33a 100644
 -  li   t0, 0x55aa
 -  sw   t0, EDN_CTRL_REG_OFFSET(a0)
 -
-   // Zero out the `.bss` segment.
-   la   a0, _bss_start
-   la   a1, _bss_end
+   // Scramble and initialize main memory (main SRAM).
+   // Memory accesses will stall until initialization is complete.
+   // Skip SRAM initialization for DV sim device type, as the testbench handles
 diff --git a/sw/device/sca/aes_serial.c b/sw/device/sca/aes_serial.c
-index a4d57e1c7..d12c776b7 100644
+index e8f59855b..25cb412f2 100644
 --- a/sw/device/sca/aes_serial.c
 +++ b/sw/device/sca/aes_serial.c
 @@ -199,18 +199,13 @@ int main(void) {
@@ -118,7 +118,7 @@ index 3a613b2b8..fa939775a 100644
        sw_lib_mmio,
        sw_lib_pinmux,
 diff --git a/sw/device/sca/lib/sca.c b/sw/device/sca/lib/sca.c
-index 3c0c86f26..7354aa9cb 100644
+index 26110265f..7354aa9cb 100644
 --- a/sw/device/sca/lib/sca.c
 +++ b/sw/device/sca/lib/sca.c
 @@ -7,8 +7,6 @@
@@ -207,7 +207,7 @@ index 3c0c86f26..7354aa9cb 100644
    // Disable HMAC, KMAC, OTBN and USB clocks through CLKMGR DIF.
    dif_clkmgr_t clkmgr;
    IGNORE_RESULT(dif_clkmgr_init(
-@@ -199,17 +156,6 @@ void sca_disable_peripherals(sca_peripherals_t disable) {
+@@ -199,14 +156,6 @@ void sca_disable_peripherals(sca_peripherals_t disable) {
      IGNORE_RESULT(dif_clkmgr_hintable_clock_set_hint(
          &clkmgr, CLKMGR_CLK_HINTS_CLK_MAIN_HMAC_HINT_BIT, kDifToggleDisabled));
    }
@@ -217,15 +217,12 @@ index 3c0c86f26..7354aa9cb 100644
 -  }
 -  if (disable & kScaPeripheralOtbn) {
 -    IGNORE_RESULT(dif_clkmgr_hintable_clock_set_hint(
--        &clkmgr, CLKMGR_CLK_HINTS_CLK_IO_DIV4_OTBN_HINT_BIT,
--        kDifToggleDisabled));
--    IGNORE_RESULT(dif_clkmgr_hintable_clock_set_hint(
 -        &clkmgr, CLKMGR_CLK_HINTS_CLK_MAIN_OTBN_HINT_BIT, kDifToggleDisabled));
 -  }
    if (disable & kScaPeripheralUsb) {
      IGNORE_RESULT(dif_clkmgr_gateable_clock_set_enabled(
          &clkmgr, CLKMGR_CLK_ENABLES_CLK_USB_PERI_EN_BIT, kDifToggleDisabled));
-@@ -221,8 +167,6 @@ void sca_init(sca_trigger_source_t trigger, sca_peripherals_t enable) {
+@@ -218,8 +167,6 @@ void sca_init(sca_trigger_source_t trigger, sca_peripherals_t enable) {
    sca_init_uart();
    sca_init_gpio(trigger);
    sca_init_timer();
@@ -235,19 +232,11 @@ index 3c0c86f26..7354aa9cb 100644
  }
 
 diff --git a/sw/device/tests/aes_smoketest.c b/sw/device/tests/aes_smoketest.c
-index 26c7a270d..8b464a137 100644
+index 0ceef3630..700e91f23 100644
 --- a/sw/device/tests/aes_smoketest.c
 +++ b/sw/device/tests/aes_smoketest.c
-@@ -7,7 +7,6 @@
- #include "sw/device/lib/dif/dif_aes.h"
- #include "sw/device/lib/runtime/log.h"
- #include "sw/device/lib/testing/check.h"
--#include "sw/device/lib/testing/entropy_testutils.h"
- #include "sw/device/lib/testing/test_framework/ottf.h"
-
- #include "hw/top_earlgrey/sw/autogen/top_earlgrey.h"
-@@ -66,9 +65,6 @@ bool test_main(void) {
-
+@@ -58,9 +58,6 @@ bool test_main(void) {
+ 
    LOG_INFO("Running AES test");
 
 -  // First of all, we need to get the entropy complex up and running.
@@ -257,14 +246,14 @@ index 26c7a270d..8b464a137 100644
    CHECK_DIF_OK(
        dif_aes_init(mmio_region_from_addr(TOP_EARLGREY_AES_BASE_ADDR), &aes));
 diff --git a/sw/device/tests/meson.build b/sw/device/tests/meson.build
-index 529f26e38..e638f25e1 100644
+index 084f531e5..58defaffc 100644
 --- a/sw/device/tests/meson.build
 +++ b/sw/device/tests/meson.build
-@@ -254,7 +254,6 @@ aes_smoketest_lib = declare_dependency(
+@@ -277,7 +277,6 @@ aes_smoketest_lib = declare_dependency(
        sw_lib_dif_aes,
        sw_lib_mmio,
        sw_lib_runtime_log,
 -      sw_lib_testing_entropy_testutils,
+       sw_lib_testing_aes_testutils,
        sw_lib_testing_test_status,
      ],
-   ),

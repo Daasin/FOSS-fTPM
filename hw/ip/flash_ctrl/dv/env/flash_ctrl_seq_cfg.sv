@@ -36,6 +36,12 @@ class flash_ctrl_seq_cfg extends uvm_object;
   uint mp_region_he_en_pc;
   uint mp_region_max_pages;
 
+  // mem for scoreboard
+  data_t                 scb_flash_data  [addr_t]  = '{default: 1};
+  data_t                 scb_flash_info  [addr_t]  = '{default: 1};
+  data_t                 scb_flash_info1 [addr_t]  = '{default: 1};
+  data_t                 scb_flash_info2 [addr_t]  = '{default: 1};
+
   // Knob to control bank level erasability.
   uint bank_erase_en_pc;
 
@@ -53,6 +59,8 @@ class flash_ctrl_seq_cfg extends uvm_object;
   uint mp_info_page_read_en_pc[flash_ctrl_pkg::NumBanks][flash_ctrl_pkg::InfoTypes];
   uint mp_info_page_program_en_pc[flash_ctrl_pkg::NumBanks][flash_ctrl_pkg::InfoTypes];
   uint mp_info_page_erase_en_pc[flash_ctrl_pkg::NumBanks][flash_ctrl_pkg::InfoTypes];
+  uint mp_info_page_scramble_en_pc[flash_ctrl_pkg::NumBanks][flash_ctrl_pkg::InfoTypes];
+  uint mp_info_page_ecc_en_pc[flash_ctrl_pkg::NumBanks][flash_ctrl_pkg::InfoTypes];
   uint mp_info_page_he_en_pc[flash_ctrl_pkg::NumBanks][flash_ctrl_pkg::InfoTypes];
 
   // Control the number of flash ops.
@@ -94,6 +102,9 @@ class flash_ctrl_seq_cfg extends uvm_object;
 
   // Timeout for erase transaction
   uint erase_timeout_ns;
+
+  // Timeout for read transaction
+  uint read_timeout_ns;
 
   // Enable/Disable the Secret Seeds and Keys during Initialisation
   bit en_init_keys_seeds;
@@ -159,6 +170,8 @@ class flash_ctrl_seq_cfg extends uvm_object;
       mp_info_page_read_en_pc[i][j] = 50;
       mp_info_page_program_en_pc[i][j] = 50;
       mp_info_page_erase_en_pc[i][j] = 50;
+      mp_info_page_scramble_en_pc[i][j] = 0;
+      mp_info_page_ecc_en_pc[i][j] = 0;
       mp_info_page_he_en_pc[i][j] = 0;
     end
 
@@ -185,6 +198,8 @@ class flash_ctrl_seq_cfg extends uvm_object;
     check_mem_post_tran = 1'b1;
 
     prog_timeout_ns = 10_000_000;  // 10ms
+
+    read_timeout_ns = 10_000_000;  // 10ms
 
     erase_timeout_ns = 120_000_000;  // 120ms
 

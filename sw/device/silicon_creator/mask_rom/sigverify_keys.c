@@ -11,7 +11,7 @@
 #include "sw/device/lib/base/hardened.h"
 #include "sw/device/silicon_creator/lib/drivers/otp.h"
 #include "sw/device/silicon_creator/lib/drivers/rnd.h"
-#include "sw/device/silicon_creator/lib/sigverify.h"
+#include "sw/device/silicon_creator/lib/sigverify/sigverify.h"
 #include "sw/device/silicon_creator/mask_rom/keys/test_key_0_rsa_3072_exp_f4.h"
 #include "sw/device/silicon_creator/mask_rom/sigverify_keys_ptrs.h"
 
@@ -239,6 +239,3 @@ rom_error_t sigverify_rsa_key_get(uint32_t key_id, lifecycle_state_t lc_state,
 
   return kErrorSigverifyBadKey;
 }
-
-extern const sigverify_mask_rom_key_t *sigverify_rsa_keys_ptr_get(void);
-extern size_t sigverify_num_rsa_keys_get(void);

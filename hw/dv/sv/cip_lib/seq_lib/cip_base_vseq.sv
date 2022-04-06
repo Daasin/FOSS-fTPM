@@ -119,12 +119,6 @@ class cip_base_vseq #(type RAL_T               = dv_base_reg_block,
     if (common_seq_type == "") void'($value$plusargs("run_%0s", common_seq_type));
     if (common_seq_type == "alert_test") en_auto_alerts_response = 0;
 
-    // num_trans is constrained to a small number for CSR test in common test, need a bigger number
-    // for stress_all with reset
-    if (common_seq_type == "stress_all_with_rand_reset") begin
-      num_trans_c.constraint_mode(0);
-      num_trans = $urandom_range(5, 10);
-    end
     csr_utils_pkg::max_outstanding_accesses = 1 << BUS_AIW;
     super.pre_start();
     extract_common_csrs();
@@ -417,7 +411,8 @@ class cip_base_vseq #(type RAL_T               = dv_base_reg_block,
       // 10 x num_times integrity errors
       "tl_intg_err":                   run_tl_intg_err_vseq(10 * num_times);
       "passthru_mem_tl_intg_err":      run_passthru_mem_tl_intg_err_vseq(10 * num_times);
-      "stress_all_with_rand_reset":    run_plusarg_vseq_with_rand_reset(num_times);
+      // Each iteration only issues at most one reset. Increase to send at least 5 X num_times.
+      "stress_all_with_rand_reset":    run_plusarg_vseq_with_rand_reset(5 * num_times);
       "same_csr_outstanding":          run_same_csr_outstanding_vseq(num_times);
       "shadow_reg_errors":             run_shadow_reg_errors(num_times);
       "shadow_reg_errors_with_csr_rw": run_shadow_reg_errors(num_times, 1);
@@ -619,6 +614,7 @@ class cip_base_vseq #(type RAL_T               = dv_base_reg_block,
   virtual task run_csr_vseq(string csr_test_type,
                             int    num_test_csrs = 0,
                             bit    do_rand_wr_and_reset = 1,
+                            dv_base_reg_block models[$] = {},
                             string ral_name = "");
 
     if (csr_access_abort_pct.rand_mode()) begin
@@ -633,7 +629,7 @@ class cip_base_vseq #(type RAL_T               = dv_base_reg_block,
     // checking the status.
     if (csr_access_abort_pct > 0) csr_utils_pkg::default_csr_check = UVM_NO_CHECK;
     else                          csr_utils_pkg::default_csr_check = UVM_CHECK;
-    super.run_csr_vseq(csr_test_type, num_test_csrs, do_rand_wr_and_reset, ral_name);
+    super.run_csr_vseq(csr_test_type, num_test_csrs, do_rand_wr_and_reset, models, ral_name);
   endtask
 
 
@@ -692,8 +688,8 @@ class cip_base_vseq #(type RAL_T               = dv_base_reg_block,
               ongoing_reset = 1'b1;
               `uvm_info(`gfn, $sformatf("\nReset is issued for run %0d/%0d", i, num_times), UVM_LOW)
               apply_resets_concurrently();
-              ongoing_reset = 1'b0;
               do_read_and_check_all_csrs = 1'b1;
+              ongoing_reset = 1'b0;
             end
           join_any
           disable fork;

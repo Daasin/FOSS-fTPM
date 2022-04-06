@@ -108,11 +108,29 @@
       desc:    "Width of the hash counter in the entropy"
       local:   "true"
     }
+    { name:      "RndCnstLfsrSeed"
+      desc:      "Compile-time random data for LFSR default seed"
+      type:      "kmac_pkg::lfsr_seed_t"
+      randcount: "64"
+      randtype:  "data"
+    }
     { name:      "RndCnstLfsrPerm",
       desc:      "Compile-time random permutation for LFSR output",
       type:      "kmac_pkg::lfsr_perm_t"
       randcount: "64",
       randtype:  "perm",
+    }
+    { name:      "RndCnstMsgPerm"
+      desc:      "Compile-time random permutation for LFSR Message output"
+      type:      "kmac_pkg::msg_perm_t"
+      randcount: "64"
+      randtype:  "perm"
+    }
+    { name:      "RndCnstStoragePerm"
+      desc:      "Compile-time random permutation for Storage Entropy"
+      type:      "kmac_pkg::storage_perm_t"
+      randcount: "1600"
+      randtype:  "perm"
     }
   ]
   inter_signal_list: [
@@ -139,8 +157,8 @@
     { name:    "idle",
       type:    "uni",
       act:     "req",
-      package: "",
-      struct:  "logic",
+      package: "prim_mubi_pkg",
+      struct:  "mubi4",
       width:   "1"
     }
     { struct:  "logic"
@@ -159,6 +177,41 @@
   countermeasures: [
     { name: "BUS.INTEGRITY",
       desc: "End-to-end bus integrity scheme."
+    }
+    { name: "LC_ESCALATE_EN.INTERSIG.MUBI"
+      desc: "The global escalation input signal from the life cycle is multibit encoded"
+    }
+    { name: "SW_KEY.KEY.MASKING"
+      desc: '''Data storage and secret key are two share to guard against 1st
+        order attack.'''
+    }
+    { name: "KEY.SIDELOAD"
+      desc: "Key from KeyMgr is sideloaded."
+    }
+    { name: "CFG_SHADOWED.CONFIG.SHADOW"
+      desc: "Shadowed CFG register."
+    }
+    { name: "FSM.SPARSE"
+      desc: "FSMs in KMAC are sparsely encoded."
+    }
+    { name: "PRNG.LFSR.REDUN"
+      desc: "LFSR in the entropy generator uses prim_double_lfsr"
+    }
+    { name: "CTR.REDUN"
+      desc: '''Round counter, key index counter, sentmsg counter and hash counter
+        use prim_count for redundancy'''
+    }
+    { name: "CFG_SHADOWED.CONFIG.REGWEN"
+      desc: "CFG_SHADOWED is protected by REGWEN"
+    }
+    { name: "FSM.GLOBAL_ESC"
+      desc: "Escalation moves all sparse FSMs into an invalid state."
+    }
+    { name: "FSM.LOCAL_ESC"
+      desc: "Local fatal faults move all sparse FSMs into an invalid state."
+    }
+    { name: "LOGIC.INTEGRITY"
+      desc: "The reset net for the internal state register and critical nets around the output register are buried."
     }
   ]
   regwidth: "32"
@@ -355,6 +408,14 @@
           '''
           tags: ["shadowed_reg_path:u_cfg_reg_shadowed.u_cfg_reg_shadowed_entropy_fast_process"]
         } // f: entropy_fast_process
+        { bits: "20"
+          name: msg_mask
+          desc: '''Message Masking with PRNG.
+
+            If 1, KMAC applies PRNG to the input messages to the Keccak module
+            when KMAC mode is on.
+            '''
+        } // f: msg_mask
         { bits: "24"
           name: entropy_ready
           desc: '''Entropy Ready status.
@@ -372,15 +433,24 @@
                  Error handling state, SW may process the error based on
                  ERR_CODE, then let FSM back to the reset state
                 '''
-          tags: [// Randomly write mem will cause this reg updated by design
-                 "excl:CsrNonInitTests:CsrExclCheck",
-                 "shadowed_reg_path:u_cfg_reg_shadowed.u_cfg_reg_shadowed_err_processed"]
+          tags: ["shadowed_reg_path:u_cfg_reg_shadowed.u_cfg_reg_shadowed_err_processed"]
         } // f: err_processed
+        { bits: "26"
+          name: en_unsupported_modestrength
+          desc: '''Enable Unsupported Mode and Strength configs.
+
+            SW may set this field for KMAC to move forward with unsupported
+            Keccak Mode and Strength configurations, such as cSHAKE512.
+
+            If not set, KMAC won't propagate the SW command (CmdStart) to the
+            rest of the blocks (AppIntf, KMAC Core, SHA3).
+            '''
+          tags: [// Randomly write mem will cause this reg updated by design
+                 "excl:CsrAllTests:CsrExclWrite",
+                 "shadowed_reg_path:u_cfg_reg_shadowed.u_cfg_reg_shadowed_en_unsupported_modestrength"]
+        } // f: en_unsupported_modestrength
       ]
-      tags: [
-        "excl:CsrNonInitTests:CsrExclWriteCheck",
-        "shadowed_reg_path:u_cfg_reg_shadowed"
-      ]
+      tags: ["shadowed_reg_path:u_cfg_reg_shadowed"]
     } // R: CFG
     { name: "CMD"
       desc: '''KMAC/ SHA3 command register.
@@ -548,12 +618,36 @@
       ]
     } // R: ENTROPY_PERIOD
     {
-      name: "ENTROPY_REFRESH"
-      desc: '''Entropy Refresh Threshold and Counter
+      name: "ENTROPY_REFRESH_HASH_CNT"
+      desc: '''Entropy Refresh Counter
 
       KMAC entropy can be refreshed after the given threshold KMAC operations
-      run. If the KMAC hash counter hits (GTE) the configured threshold, the
-      entropy module in the KMAC IP requests new seed to EDN and reset the KMAC
+      run. If the KMAC hash counter !!ENTROPY_REFRESH_HASH_CNT hits (GTE) the
+      configured threshold !!ENTROPY_REFRESH_THRESHOLD_SHADOWED, the entropy
+      module in the KMAC IP requests new seed to EDN and reset the KMAC
+      hash counter.
+
+      If the threshold is 0, the refresh by the counter does not work. And the
+      counter is only reset by the CMD.hash_cnt_clr CSR bit.
+      '''
+      swaccess: "ro"
+      hwaccess: "hwo"
+      regwen: "CFG_REGWEN"
+      fields: [
+        { bits: "HashCntW-1:0"
+          name: "hash_cnt"
+          desc: "Hash (KMAC) counter"
+        }
+      ]
+    } // R: ENTROPY_REFRESH_HASH_CNT
+    {
+      name: "ENTROPY_REFRESH_THRESHOLD_SHADOWED"
+      desc: '''Entropy Refresh Threshold
+
+      KMAC entropy can be refreshed after the given threshold KMAC operations
+      run. If the KMAC hash counter !!ENTROPY_REFRESH_HASH_CNT hits (GTE) the
+      configured threshold !!ENTROPY_REFRESH_THRESHOLD_SHADOWED, the entropy
+      module in the KMAC IP requests new seed to EDN and reset the KMAC
       hash counter.
 
       If the threshold is 0, the refresh by the counter does not work. And the
@@ -562,19 +656,16 @@
       swaccess: "rw"
       hwaccess: "hro"
       regwen: "CFG_REGWEN"
+      shadowed: "true"
+      update_err_alert:  "recov_operation_err"
+      storage_err_alert: "fatal_fault_err"
       fields: [
         { bits: "HashCntW-1:0"
           name: "threshold"
           desc: "Hash Threshold"
         }
-        { bits: "HashCntW+15:16"
-          name: "hash_cnt"
-          desc: "Hash (KMAC) counter"
-          swaccess: "ro"
-          hwaccess: "hwo"
-        }
       ]
-    } // R: ENTROPY_REFRESH
+    } // R: ENTROPY_REFRESH_THRESHOLD_SHADOWED
     { name: "ENTROPY_SEED_LOWER"
       desc: '''Entropy Seed [31:0].
 
@@ -754,7 +845,7 @@
                 Please take a look at `hw/ip/kmac/rtl/kmac_pkg.sv:err_code_e enum type.
                 '''
           tags: [// Randomly write mem will cause this reg updated by design
-                 "excl:CsrNonInitTests:CsrExclCheck"]
+                 "excl:CsrNonInitTests:CsrExclWriteCheck"]
         }
       ]
     } // R: ERR_CODE

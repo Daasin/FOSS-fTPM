@@ -70,7 +70,12 @@ module pwrmgr_fsm import pwrmgr_pkg::*; import pwrmgr_reg_pkg::*;(
   output lc_ctrl_pkg::lc_tx_t fetch_en_o
 );
 
+  import prim_mubi_pkg::mubi4_t;
   import prim_mubi_pkg::mubi4_test_true_strict;
+  import prim_mubi_pkg::mubi4_or_hi;
+  import prim_mubi_pkg::mubi4_and_hi;
+  import lc_ctrl_pkg::lc_tx_and_hi;
+  import lc_ctrl_pkg::lc_tx_test_true_strict;
 
   // The code below always assumes the always on domain is index 0
   `ASSERT_INIT(AlwaysOnIndex_A, ALWAYS_ON_DOMAIN == 0)
@@ -150,19 +155,8 @@ module pwrmgr_fsm import pwrmgr_pkg::*; import pwrmgr_reg_pkg::*;(
     end
   end
 
-  logic [FastPwrStateWidth-1:0] state_raw_q;
-  assign state_q = fast_pwr_state_e'(state_raw_q);
   // SEC_CM: FSM.SPARSE
-  prim_sparse_fsm_flop #(
-    .StateEnumT(fast_pwr_state_e),
-    .Width(FastPwrStateWidth),
-    .ResetValue(FastPwrStateWidth'(FastPwrStateLowPower))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( state_d     ),
-    .state_o ( state_raw_q )
-  );
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q, fast_pwr_state_e, FastPwrStateLowPower)
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -231,16 +225,16 @@ module pwrmgr_fsm import pwrmgr_pkg::*; import pwrmgr_reg_pkg::*;(
   // During TEST / RMA states, both dft_en and hw_debug_en are On.
   // During DEV / PROD states, either both signals are Off, or only
   // hw_debug_en is On
-  logic rom_intg_chk_dis;
-  assign rom_intg_chk_dis = (lc_dft_en_i == lc_ctrl_pkg::On) &
-                            (lc_hw_debug_en_i == lc_ctrl_pkg::On);
 
-  logic rom_intg_chk_done;
-  assign rom_intg_chk_done = mubi4_test_true_strict(rom_ctrl_done_i);
+  mubi4_t rom_intg_chk_dis;
+  assign rom_intg_chk_dis = lc_tx_test_true_strict(lc_tx_and_hi(lc_dft_en_i, lc_hw_debug_en_i)) ?
+                            prim_mubi_pkg::MuBi4True :
+                            prim_mubi_pkg::MuBi4False;
 
-  logic rom_intg_chk_ok;
-  assign rom_intg_chk_ok = rom_intg_chk_dis ? rom_intg_chk_done :
-                           rom_intg_chk_done & mubi4_test_true_strict(rom_ctrl_good_i);
+  mubi4_t rom_intg_chk_ok;
+  assign rom_intg_chk_ok = mubi4_or_hi(
+                               mubi4_and_hi(rom_intg_chk_dis, rom_ctrl_done_i),
+                               mubi4_and_hi(rom_ctrl_done_i, rom_ctrl_good_i));
 
   always_comb begin
     otp_init = 1'b0;
@@ -328,7 +322,7 @@ module pwrmgr_fsm import pwrmgr_pkg::*; import pwrmgr_reg_pkg::*;(
         rst_sys_req_d = '0;
         reset_cause_d = ResetNone;
 
-        if (rom_intg_chk_ok) begin
+        if (mubi4_test_true_strict(rom_intg_chk_ok)) begin
           state_d = FastPwrStateStrap;
         end
       end

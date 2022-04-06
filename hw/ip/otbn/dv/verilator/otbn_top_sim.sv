@@ -26,6 +26,7 @@ module otbn_top_sim (
   localparam logic [63:0]  TestScrambleNonce = 64'hf88c2578fa4cd123;
 
   logic      otbn_done, otbn_done_r, otbn_done_rr;
+  core_err_bits_t core_err_bits;
   err_bits_t otbn_err_bits, otbn_err_bits_r, otbn_err_bits_rr;
   logic      otbn_start;
 
@@ -71,53 +72,53 @@ module otbn_top_sim (
     .DmemSizeByte ( DmemSizeByte ),
     .SecWipeEn    ( SecWipeEn    )
   ) u_otbn_core (
-    .clk_i                       ( IO_CLK              ),
-    .rst_ni                      ( IO_RST_N            ),
+    .clk_i                       ( IO_CLK                     ),
+    .rst_ni                      ( IO_RST_N                   ),
 
-    .start_i                     ( otbn_start          ),
-    .done_o                      ( otbn_done           ),
-    .locked_o                    (                     ),
+    .start_i                     ( otbn_start                 ),
+    .done_o                      ( otbn_done                  ),
+    .locked_o                    (                            ),
 
-    .err_bits_o                  ( otbn_err_bits       ),
-    .recoverable_err_o           (                     ),
-    .reg_intg_violation_o        (                     ),
+    .err_bits_o                  ( core_err_bits              ),
+    .recoverable_err_o           (                            ),
 
-    .imem_req_o                  ( imem_req            ),
-    .imem_addr_o                 ( imem_addr           ),
-    .imem_rdata_i                ( imem_rdata          ),
-    .imem_rvalid_i               ( imem_rvalid         ),
+    .imem_req_o                  ( imem_req                   ),
+    .imem_addr_o                 ( imem_addr                  ),
+    .imem_rdata_i                ( imem_rdata                 ),
+    .imem_rvalid_i               ( imem_rvalid                ),
 
-    .insn_fetch_err_o            (                     ),
-
-    .dmem_req_o                  ( dmem_req            ),
-    .dmem_write_o                ( dmem_write          ),
-    .dmem_addr_o                 ( dmem_addr           ),
-    .dmem_wdata_o                ( dmem_wdata          ),
-    .dmem_wmask_o                ( dmem_wmask          ),
+    .dmem_req_o                  ( dmem_req                   ),
+    .dmem_write_o                ( dmem_write                 ),
+    .dmem_addr_o                 ( dmem_addr                  ),
+    .dmem_wdata_o                ( dmem_wdata                 ),
+    .dmem_wmask_o                ( dmem_wmask                 ),
     .dmem_rmask_o                ( ),
-    .dmem_rdata_i                ( dmem_rdata          ),
-    .dmem_rvalid_i               ( dmem_rvalid         ),
-    .dmem_rerror_i               ( dmem_rerror         ),
+    .dmem_rdata_i                ( dmem_rdata                 ),
+    .dmem_rvalid_i               ( dmem_rvalid                ),
+    .dmem_rerror_i               ( dmem_rerror                ),
 
-    .edn_rnd_req_o               ( edn_rnd_req         ),
-    .edn_rnd_ack_i               ( edn_rnd_ack         ),
-    .edn_rnd_data_i              ( edn_rnd_data        ),
+    .edn_rnd_req_o               ( edn_rnd_req                ),
+    .edn_rnd_ack_i               ( edn_rnd_ack                ),
+    .edn_rnd_data_i              ( edn_rnd_data               ),
 
-    .edn_urnd_req_o              ( edn_urnd_req        ),
-    .edn_urnd_ack_i              ( edn_urnd_ack        ),
-    .edn_urnd_data_i             ( edn_urnd_data       ),
+    .edn_urnd_req_o              ( edn_urnd_req               ),
+    .edn_urnd_ack_i              ( edn_urnd_ack               ),
+    .edn_urnd_data_i             ( edn_urnd_data              ),
 
-    .insn_cnt_o                  ( insn_cnt            ),
-    .insn_cnt_clear_i            ( 1'b0                ),
+    .insn_cnt_o                  ( insn_cnt                   ),
+    .insn_cnt_clear_i            ( 1'b0                       ),
 
-    .bus_intg_violation_i        ( 1'b0                ),
-    .illegal_bus_access_i        ( 1'b0                ),
-    .lifecycle_escalation_i      ( 1'b0                ),
-    .software_errs_fatal_i       ( 1'b0                ),
-    .otbn_scramble_state_error_i ( 1'b0                ),
+    .mems_sec_wipe_o             (                            ),
+    .dmem_sec_wipe_urnd_key_o    (                            ),
+    .imem_sec_wipe_urnd_key_o    (                            ),
+    .req_sec_wipe_urnd_keys_i    ( 1'b0                       ),
 
-    .sideload_key_shares_i       ( sideload_key_shares ),
-    .sideload_key_shares_valid_i ( 2'b11               )
+    .escalate_en_i               ( prim_mubi_pkg::MuBi4False  ),
+
+    .software_errs_fatal_i       ( 1'b0                       ),
+
+    .sideload_key_shares_i       ( sideload_key_shares        ),
+    .sideload_key_shares_valid_i ( 2'b11                      )
   );
 
   localparam logic [WLEN-1:0] FixedEdnVal = {{(WLEN / 4){4'h9}}};
@@ -166,6 +167,24 @@ module otbn_top_sim (
 
   bind otbn_core otbn_trace_if #(.ImemAddrWidth, .DmemAddrWidth) i_otbn_trace_if (.*);
   bind otbn_core otbn_tracer #(.SecWipeEn) u_otbn_tracer(.*, .otbn_trace(i_otbn_trace_if));
+
+  // Convert from core_err_bits_t to err_bits_t
+  assign otbn_err_bits = '{
+    fatal_software:       core_err_bits.fatal_software,
+    lifecycle_escalation: 0,
+    illegal_bus_access:   0,
+    bad_internal_state:   core_err_bits.bad_internal_state,
+    bus_intg_violation:   0,
+    reg_intg_violation:   core_err_bits.reg_intg_violation,
+    dmem_intg_violation:  core_err_bits.dmem_intg_violation,
+    imem_intg_violation:  core_err_bits.imem_intg_violation,
+    key_invalid:          core_err_bits.key_invalid,
+    loop:                 core_err_bits.loop,
+    illegal_insn:         core_err_bits.illegal_insn,
+    call_stack:           core_err_bits.call_stack,
+    bad_insn_addr:        core_err_bits.bad_insn_addr,
+    bad_data_addr:        core_err_bits.bad_data_addr
+  };
 
   // Pulse otbn_start for 1 cycle immediately out of reset.
   // Flop `done_o` from otbn_core to match up with model done signal.
@@ -312,7 +331,8 @@ module otbn_top_sim (
     .rst_ni                ( IO_RST_N ),
     .rst_edn_ni            ( IO_RST_N ),
 
-    .start_i               ( otbn_start ),
+    .cmd_i                 ( otbn_pkg::CmdExecute ),
+    .cmd_en_i              ( otbn_start ),
 
     .lc_escalate_en_i      ( 1'b0 ),
 
@@ -325,6 +345,8 @@ module otbn_top_sim (
     .edn_urnd_i            ( urnd_rsp ),
     .edn_urnd_o            ( ),
     .edn_urnd_cdc_done_i   ( edn_urnd_data_valid ),
+
+    .otp_key_cdc_done_i    ( 1'b0 ),
 
     .status_o              ( ),
     .insn_cnt_o            ( otbn_model_insn_cnt ),
@@ -416,7 +438,7 @@ module otbn_top_sim (
     end
   end
   always_ff @(negedge IO_CLK or negedge IO_RST_N) begin
-    if (IO_RST_N && u_otbn_core_model.check_due && u_otbn_core_model.running) begin
+    if (IO_RST_N && u_otbn_core_model.check_due) begin
       OtbnTopDumpState();
     end
   end

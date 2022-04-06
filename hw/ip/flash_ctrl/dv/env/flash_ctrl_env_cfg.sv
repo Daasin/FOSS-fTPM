@@ -24,6 +24,28 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
   // Knob for blocking host reads
   bit block_host_rd = 1;
 
+  // Knob for scoreboard write and check on reads
+  bit scb_check = 0;
+
+  // Knob for scoreboard set expected alert
+  bit scb_set_exp_alert = 0;
+
+  // Knob for scoreboard delete memory
+  bit scb_empty_mem = 0;
+
+  // Knob for Bank Erase
+  bit bank_erase_enable = 1;
+
+  // Parameters for set backdoor scb memory
+  bit                         scb_set_mem = 0;
+  int                         bkd_num_words;
+  flash_dv_part_e             bkd_partition;
+  bit             [TL_AW-1:0] write_bkd_addr;
+  bit             [TL_DW-1:0] set_bkd_val;
+
+  // Max delay for alerts in clocks
+  uint alert_max_delay;
+
   // read data by host if
   data_q_t flash_rd_data;
 
@@ -49,7 +71,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
     super.initialize(csr_base_addr);
 
     shadow_update_err_status_fields[ral.err_code.update_err] = 1;
-    shadow_storage_err_status_fields[ral.fault_status.storage_err] = 1;
+    shadow_storage_err_status_fields[ral.std_fault_status.storage_err] = 1;
 
     // create the seq_cfg and call configure
     seq_cfg = flash_ctrl_seq_cfg::type_id::create("seq_cfg");
@@ -63,6 +85,7 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
       end
     end
 
+    alert_max_delay = 20000;
     `uvm_info(`gfn, $sformatf("ral_model_names: %0p", ral_model_names), UVM_LOW)
   endfunction : initialize
 
@@ -94,17 +117,55 @@ class flash_ctrl_env_cfg extends cip_base_env_cfg #(
   // The addr arg need not be word aligned - its the same addr programmed into the `control` CSR.
   // TODO: add support for partition.
   virtual function void flash_mem_bkdr_read(flash_op_t flash_op, ref data_q_t data);
-    flash_mem_addr_attrs addr_attrs = new(flash_op.addr);
+    flash_mem_addr_attrs             addr_attrs = new(flash_op.addr);
+    bit                  [TL_AW-1:0] read_addr;
+
+    if (flash_op.op == flash_ctrl_pkg::FlashOpErase) begin
+      case (flash_op.erase_type)
+        flash_ctrl_pkg::FlashErasePage: begin
+          read_addr = addr_attrs.page_start_addr;
+          flash_op.num_words = FlashNumBusWordsPerPage;
+        end
+        flash_ctrl_pkg::FlashEraseBank: begin
+          read_addr = 0;
+          case (flash_op.partition)
+            FlashPartData: begin
+              flash_op.num_words = FlashNumBusWordsPerBank;
+            end
+            FlashPartInfo: begin
+              flash_op.num_words = InfoTypeBusWords[0];
+            end
+            default: begin
+              `uvm_fatal(`gfn, $sformatf(
+                         {
+                           "Invalid partition for bank_erase: %0s. ",
+                           "Bank erase is only valid in the data partition ",
+                           "(FlashPartData) and the first info partition ",
+                           "(FlashPartInfo)."
+                         },
+                         flash_op.partition.name()
+                         ))
+            end
+          endcase
+        end
+        default: begin
+          `uvm_fatal(`gfn, $sformatf("Invalid erase_type: %0s", flash_op.erase_type.name()))
+        end
+      endcase
+    end else begin  // FlashOpProgram, FlashOpRead
+      read_addr = addr_attrs.bank_addr;
+    end
+
     data.delete();
     for (int i = 0; i < flash_op.num_words; i++) begin
-      data[i] = mem_bkdr_util_h[flash_op.partition][addr_attrs.bank].read32(addr_attrs.bank_addr);
+      data[i] = mem_bkdr_util_h[flash_op.partition][addr_attrs.bank].read32(read_addr);
       `uvm_info(`gfn, $sformatf(
                 "flash_mem_bkdr_read: partition = %s , {%s} = 0x%0h",
                 flash_op.partition.name(),
                 addr_attrs.sprint(),
                 data[i]
                 ), UVM_MEDIUM)
-      addr_attrs.incr(TL_DBW);
+      read_addr += TL_DBW;
     end
   endfunction : flash_mem_bkdr_read
 

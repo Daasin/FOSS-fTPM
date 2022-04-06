@@ -5,21 +5,17 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_BASE_MOCK_SEC_MMIO_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_BASE_MOCK_SEC_MMIO_H_
 
+#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/lib/base/testing/mock_mmio_test_utils.h"
 #include "sw/device/silicon_creator/lib/base/sec_mmio.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
-
-extern "C" {
-// Required by `SEC_MMIO_WRITE_INCREMENT()`.
-volatile sec_mmio_ctx_t sec_mmio_ctx;
-}
 
 namespace mask_rom_test {
 namespace internal {
 /**
  * Mock class for abs_mmio.c.
  */
-class MockSecMmio : public GlobalMock<MockSecMmio> {
+class MockSecMmio : public global_mock::GlobalMock<MockSecMmio> {
  public:
   MOCK_METHOD(void, Init, ());
   MOCK_METHOD(uint32_t, Read32, (uint32_t addr));
@@ -66,7 +62,10 @@ using MockSecMmio = testing::StrictMock<internal::MockSecMmio>;
   EXPECT_CALL(::mask_rom_test::MockSecMmio::Instance(), \
               Write32Shadowed(addr, mock_mmio::ToInt<uint32_t>(__VA_ARGS__)));
 
+#ifdef IS_MESON_FOR_MIGRATIONS_ONLY
 extern "C" {
+// Required by `SEC_MMIO_WRITE_INCREMENT()`.
+volatile sec_mmio_ctx_t sec_mmio_ctx;
 
 void sec_mmio_init(void) { MockSecMmio::Instance().Init(); }
 
@@ -89,8 +88,8 @@ void sec_mmio_check_values(uint32_t rnd_offset) {
 void sec_mmio_check_counters(uint32_t expected_check_count) {
   MockSecMmio::Instance().CheckCounters(expected_check_count);
 }
-
 }  // extern "C"
+#endif
 }  // namespace mask_rom_test
 
 #endif  // OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_BASE_MOCK_SEC_MMIO_H_

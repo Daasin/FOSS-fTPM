@@ -123,13 +123,15 @@ typedef struct dif_usbdev_buffer {
  */
 typedef struct dif_usbdev_config {
   /**
-   * Use the differential rx signal instead of the single-ended signals.
+   * Activate the single-ended D signal for detecting K and J symbols, for use
+   * with a differential receiver.
    */
-  dif_toggle_t differential_rx;
+  dif_toggle_t have_differential_receiver;
   /**
-   * Use the differential tx signal instead of the single-ended signals.
+   * Use the TX interface with D and SE0 signals instead of Dp/Dn, for use with
+   * certain transceivers.
    */
-  dif_toggle_t differential_tx;
+  dif_toggle_t use_tx_d_se0;
   /*
    * Recognize a single SE0 bit as end of packet instead of requiring
    * two bits.
@@ -208,6 +210,24 @@ OT_WARN_UNUSED_RESULT
 dif_result_t dif_usbdev_endpoint_out_enable(const dif_usbdev_t *usbdev,
                                             uint8_t endpoint,
                                             dif_toggle_t new_state);
+
+/**
+ * Enable or disable clearing the out_enable bit after completion of an OUT
+ * transaction to an endpoint.
+ *
+ * If set_nak_out is enabled, an OUT endpoint will disable reception of OUT
+ * packets after each successful OUT transaction to that endpoint, requiring a
+ * call to `dif_usbdev_endpoint_out_enable()` to enable reception again.
+ *
+ * @param usbdev A USB device.
+ * @param endpoint An OUT endpoint number.
+ * @param new_state New set_nak_on_out state.
+ * @return The result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+dif_result_t dif_usbdev_endpoint_set_nak_out_enable(const dif_usbdev_t *usbdev,
+                                                    uint8_t endpoint,
+                                                    dif_toggle_t new_state);
 
 /**
  * Enable or disable STALL for an endpoint.

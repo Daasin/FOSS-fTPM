@@ -27,9 +27,7 @@ module chip_earlgrey_verilator (
   // communication with USB
   input cio_usbdev_sense_p2d_i,
   output logic cio_usbdev_dp_pullup_d2p_o,
-  output logic cio_usbdev_dp_pullup_en_d2p_o,
   output logic cio_usbdev_dn_pullup_d2p_o,
-  output logic cio_usbdev_dn_pullup_en_d2p_o,
   input cio_usbdev_dp_p2d_i,
   output logic cio_usbdev_dp_d2p_o,
   output logic cio_usbdev_dp_en_d2p_o,
@@ -40,9 +38,9 @@ module chip_earlgrey_verilator (
   output logic cio_usbdev_d_d2p_o,
   output logic cio_usbdev_d_en_d2p_o,
   output logic cio_usbdev_se0_d2p_o,
-  output logic cio_usbdev_se0_en_d2p_o,
-  output logic cio_usbdev_tx_mode_se_d2p_o,
-  output logic cio_usbdev_tx_mode_se_en_d2p_o
+  output logic cio_usbdev_rx_enable_d2p_o,
+  output logic cio_usbdev_tx_use_d_se0_d2p_o,
+  output logic cio_usbdev_suspend_d2p_o
 );
 
   import top_earlgrey_pkg::*;
@@ -51,43 +49,50 @@ module chip_earlgrey_verilator (
   logic IO_JTCK, IO_JTMS, IO_JTRST_N, IO_JTDI, IO_JTDO;
 
   // TODO: instantiate padring and route these signals through that module
-  logic [pinmux_pkg::NDioPads-1:0] dio_in;
-  logic [pinmux_pkg::NDioPads-1:0] dio_out;
-  logic [pinmux_pkg::NDioPads-1:0] dio_oe;
+  logic [pinmux_reg_pkg::NDioPads-1:0] dio_in;
+  logic [pinmux_reg_pkg::NDioPads-1:0] dio_out;
+  logic [pinmux_reg_pkg::NDioPads-1:0] dio_oe;
 
   always_comb begin : assign_dio_in
     dio_in = '0;
     dio_in[DioSpiDeviceSck] = cio_spi_device_sck_p2d_i;
     dio_in[DioSpiDeviceCsb] = cio_spi_device_csb_p2d_i;
     dio_in[DioSpiDeviceSd0] = cio_spi_device_sdi_p2d_i;
-    dio_in[DioUsbdevD] = cio_usbdev_d_p2d_i;
-    dio_in[DioUsbdevDp] = cio_usbdev_dp_p2d_i;
-    dio_in[DioUsbdevDn] = cio_usbdev_dn_p2d_i;
+    dio_in[DioUsbdevUsbDp] = cio_usbdev_dp_p2d_i;
+    dio_in[DioUsbdevUsbDn] = cio_usbdev_dn_p2d_i;
   end
 
-  assign cio_usbdev_dn_d2p_o = dio_out[DioUsbdevDn];
-  assign cio_usbdev_dp_d2p_o = dio_out[DioUsbdevDp];
-  assign cio_usbdev_d_d2p_o  = dio_out[DioUsbdevD];
-  assign cio_usbdev_suspend_d2p_o = dio_out[DioUsbdevSuspend];
-  assign cio_usbdev_tx_mode_se_d2p_o = dio_out[DioUsbdevTxModeSe];
-  assign cio_usbdev_dn_pullup_d2p_o = dio_out[DioUsbdevDnPullup];
-  assign cio_usbdev_dp_pullup_d2p_o = dio_out[DioUsbdevDpPullup];
-  assign cio_usbdev_se0_d2p_o = dio_out[DioUsbdevSe0];
-  assign cio_spi_device_sdo_d2p_o = dio_out[DioSpiDeviceSd1];
+  // USB
+  logic usb_dp_pullup;
+  logic usb_dn_pullup;
+  logic usb_rx_d;
+  logic usb_tx_d;
+  logic usb_tx_se0;
+  logic usb_tx_use_d_se0;
+  logic usb_suspend;
+  logic usb_rx_enable;
 
-  assign cio_usbdev_dn_en_d2p_o = dio_oe[DioUsbdevDn];
-  assign cio_usbdev_dp_en_d2p_o = dio_oe[DioUsbdevDp];
-  assign cio_usbdev_d_en_d2p_o  = dio_oe[DioUsbdevD];
-  assign cio_usbdev_suspend_en_d2p_o = dio_oe[DioUsbdevSuspend];
-  assign cio_usbdev_tx_mode_se_en_d2p_o = dio_oe[DioUsbdevTxModeSe];
-  assign cio_usbdev_dn_pullup_en_d2p_o = dio_oe[DioUsbdevDnPullup];
-  assign cio_usbdev_dp_pullup_en_d2p_o = dio_oe[DioUsbdevDpPullup];
-  assign cio_usbdev_se0_en_d2p_o = dio_oe[DioUsbdevSe0];
+  assign usb_rx_d = cio_usbdev_d_p2d_i;
+  assign cio_usbdev_d_d2p_o  = usb_tx_d;
+  assign cio_usbdev_d_en_d2p_o = dio_oe[DioUsbdevUsbDp];
+  assign cio_usbdev_suspend_d2p_o = usb_suspend;
+  assign cio_usbdev_dn_pullup_d2p_o = usb_dn_pullup;
+  assign cio_usbdev_dp_pullup_d2p_o = usb_dp_pullup;
+  assign cio_usbdev_se0_d2p_o = usb_tx_se0;
+  assign cio_usbdev_rx_enable_d2p_o = usb_rx_enable;
+  assign cio_usbdev_tx_use_d_se0_d2p_o = usb_tx_use_d_se0;
+
+  assign cio_usbdev_dp_d2p_o = dio_out[DioUsbdevUsbDp];
+  assign cio_usbdev_dp_en_d2p_o = dio_oe[DioUsbdevUsbDp];
+  assign cio_usbdev_dn_d2p_o = dio_out[DioUsbdevUsbDn];
+  assign cio_usbdev_dn_en_d2p_o = dio_oe[DioUsbdevUsbDn];
+
+  assign cio_spi_device_sdo_d2p_o = dio_out[DioSpiDeviceSd1];
   assign cio_spi_device_sdo_en_d2p_o = dio_oe[DioSpiDeviceSd1];
 
-  logic [pinmux_pkg::NMioPads-1:0] mio_in;
-  logic [pinmux_pkg::NMioPads-1:0] mio_out;
-  logic [pinmux_pkg::NMioPads-1:0] mio_oe;
+  logic [pinmux_reg_pkg::NMioPads-1:0] mio_in;
+  logic [pinmux_reg_pkg::NMioPads-1:0] mio_out;
+  logic [pinmux_reg_pkg::NMioPads-1:0] mio_oe;
 
   always_comb begin : assign_mio_in
     mio_in = '0;
@@ -216,8 +221,8 @@ module chip_earlgrey_verilator (
   prim_mubi_pkg::mubi4_t all_clk_byp_ack;
   prim_mubi_pkg::mubi4_t io_clk_byp_req;
   prim_mubi_pkg::mubi4_t io_clk_byp_ack;
+  prim_mubi_pkg::mubi4_t div_step_down_req;
   logic hi_speed_sel;
-
 
   // DFT connections
   logic scan_en;
@@ -329,6 +334,7 @@ module chip_earlgrey_verilator (
     .clk_src_io_en_i       ( base_ast_pwr.io_clk_en ),
     .clk_src_io_o          ( ast_base_clks.clk_io ),
     .clk_src_io_val_o      ( ast_base_pwr.io_clk_val ),
+    .clk_src_io_48m_o      ( div_step_down_req ),
     // usb source clock
     .usb_ref_pulse_i       ( usb_ref_pulse ),
     .usb_ref_val_i         ( usb_ref_val ),
@@ -359,6 +365,7 @@ module chip_earlgrey_verilator (
     .fla_obs_i             ( '0 ),
     .otp_obs_i             ( '0 ),
     .otm_obs_i             ( '0 ),
+    .usb_obs_i             ( '0 ),
     .obs_ctrl_o            (  ),
     // pinmux related
     .padmux2ast_i          ( pad2ast    ),
@@ -395,10 +402,8 @@ module chip_earlgrey_verilator (
     dft_strap0_idx: 21, // MIO 21
     dft_strap1_idx: 22, // MIO 22
     // TODO: check whether there is a better way to pass these USB-specific params
-    usb_dp_idx:        DioUsbdevDp,
-    usb_dn_idx:        DioUsbdevDn,
-    usb_dp_pullup_idx: DioUsbdevDpPullup,
-    usb_dn_pullup_idx: DioUsbdevDnPullup,
+    usb_dp_idx:        DioUsbdevUsbDp,
+    usb_dn_idx:        DioUsbdevUsbDn,
     usb_sense_idx:     MioInUsbdevSense,
     // TODO: connect these once the verilator chip-level has been merged with the chiplevel.sv.tpl
     dio_pad_type: {pinmux_reg_pkg::NDioPads{prim_pad_wrapper_pkg::BidirStd}},
@@ -457,8 +462,19 @@ module chip_earlgrey_verilator (
     .io_clk_byp_req_o             ( io_clk_byp_req             ),
     .io_clk_byp_ack_i             ( io_clk_byp_ack             ),
     .hi_speed_sel_o               ( hi_speed_sel               ),
+    .div_step_down_req_i          ( div_step_down_req          ),
     .ast2pinmux_i                 ( ast2pinmux                 ),
     .ast_init_done_i              ( ast_init_done              ),
+
+    // USB signals
+    .usb_dp_pullup_en_o           (usb_dp_pullup),
+    .usb_dn_pullup_en_o           (usb_dn_pullup),
+    .usbdev_usb_rx_d_i            (usb_rx_d),
+    .usbdev_usb_tx_d_o            (usb_tx_d),
+    .usbdev_usb_tx_se0_o          (usb_tx_se0),
+    .usbdev_usb_tx_use_d_se0_o    (usb_tx_use_d_se0),
+    .usbdev_usb_suspend_o         (usb_suspend),
+    .usbdev_usb_rx_enable_o       (usb_rx_enable),
 
     // Flash test mode voltages
     .flash_test_mode_a_io         ( ),

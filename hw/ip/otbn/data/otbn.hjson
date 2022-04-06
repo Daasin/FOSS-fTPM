@@ -89,19 +89,13 @@
       package: "edn_pkg"
     },
 
-    // OTBN is not performing any operation and can be clock/power-gated. One
-    // idle for each clock domain (see assignments in "clocking" dictionary above).
+    // OTBN is not performing any operation and can be clock/power-gated. 
     { name:    "idle",
       type:    "uni",
-      struct:  "logic",
+      struct:  "mubi4", 
       width:   "1",
       act:     "req",
-    },
-    { name:    "idle_otp",
-      type:    "uni",
-      struct:  "logic",
-      width:   "1",
-      act:     "req",
+      package: "prim_mubi_pkg"
     },
 
     // ram configuration
@@ -133,8 +127,38 @@
     { name: "BUS.INTEGRITY",
       desc: "End-to-end bus integrity scheme."
     }
+    { name: "CONTROLLER.FSM.GLOBAL_ESC",
+      desc: "The controller FSM moves to a terminal error state upon global escalation."
+    }
+    { name: "CONTROLLER.FSM.LOCAL_ESC",
+      desc: '''
+        The controller FSM moves to a terminal error state upon local escalation.
+        Can be triggered by CONTROLLER.FSM.SPARSE, SCRAMBLE_CTRL.FSM.SPARSE, and START_STOP_CTRL.FSM.SPARSE.
+      '''
+    }
+    { name: "CONTROLLER.FSM.SPARSE",
+      desc: "The controller FSM uses a sparse state encoding."
+    }
     { name: "SCRAMBLE.KEY.SIDELOAD",
       desc: "The scrambling key is sideloaded from OTP and thus unreadable by SW."
+    }
+    { name: "SCRAMBLE_CTRL.FSM.LOCAL_ESC",
+      desc: '''
+        The scramble control FSM moves to a terminal error state upon local escalation.
+        Can be triggered by SCRAMBLE_CTRL.FSM.SPARSE.
+      '''
+    }
+    { name: "SCRAMBLE_CTRL.FSM.SPARSE",
+      desc: "The scramble control FSM uses a sparse state encoding."
+    }
+    { name: "START_STOP_CTRL.FSM.LOCAL_ESC",
+      desc: '''
+        The start-stop control FSM moves to a terminal error state upon local escalation.
+        Can be triggered by START_STOP_CTRL.FSM.SPARSE.
+      '''
+    }
+    { name: "START_STOP_CTRL.FSM.SPARSE",
+      desc: "The start-stop control FSM uses a sparse state encoding."
     }
   ]
 
@@ -204,8 +228,8 @@
             </table>
           '''
           tags: [
-            // Don't write this field in the automated CSR tests; the commands
-            // are tested in more controlled form.
+            // Don't write this field in the automated CSR tests: it would
+            // start an operation!
             "excl:CsrAllTests:CsrExclWrite"
           ]
         }
@@ -235,7 +259,7 @@
     { name: "STATUS",
       desc: "Status Register",
       swaccess: "ro",
-      hwaccess: "hwo",
+      hwaccess: "hrw",
       fields: [
         { bits: "7:0",
           name: "status",
@@ -318,8 +342,9 @@
       hwext: "true",
       hwqe:  "true",
       tags: [
-            // Don't write this register in the automated CSR tests;
-            "excl:CsrAllTests:CsrExclWrite"
+        // Don't use this register in the automated CSR tests. Its behaviour is
+        // "write any value to clear", which we don't model in those tests.
+        "excl:CsrAllTests:CsrExclWrite"
       ],
       fields: [
         // Software errors
@@ -483,7 +508,9 @@
             The number of executed instructions.
           '''
           tags: [
-            // Don't write this field in the automated CSR tests;
+            // Don't write this field in the automated CSR tests. Like
+            // ERR_BITS, its behaviour is "write any value to clear", which we
+            // don't model in those tests.
             "excl:CsrAllTests:CsrExclWrite"
           ]
         }
@@ -499,22 +526,18 @@
       hwqe:  "true",
       swaccess: "rw",
       hwaccess: "hrw",
-      tags: [
-            // Don't write this register in the automated CSR tests;
-            "excl:CsrAllTests:CsrExclWrite"
-      ],
       fields: [
         { bits: "31:0",
           name: "checksum",
           resval: 0,
           desc: "Checksum accumulator"
-          tags: [
-            // Don't read this field in any of the automated CSR tests (they
-            // will predict the value wrongly because they don't know that it
-            // updates on memory writes)
-            "excl:CsrAllTests:CsrExclAll"
-          ]
         }
+      ]
+      tags: [
+        // Don't read this field in any of the automated CSR tests (they
+        // will predict the value wrongly because they don't know that it
+        // updates on memory writes).
+        "excl:CsrAllTests:CsrExclAll"
       ]
     }
 

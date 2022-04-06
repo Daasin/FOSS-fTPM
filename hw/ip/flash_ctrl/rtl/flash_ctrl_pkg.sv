@@ -11,11 +11,12 @@ package flash_ctrl_pkg;
   parameter int unsigned NumBanks        = flash_ctrl_reg_pkg::RegNumBanks;
   parameter int unsigned PagesPerBank    = flash_ctrl_reg_pkg::RegPagesPerBank;
   parameter int unsigned BusPgmResBytes  = flash_ctrl_reg_pkg::RegBusPgmResBytes;
+  // How many types of info per bank
+  parameter int InfoTypes                = flash_ctrl_reg_pkg::NumInfoTypes;
 
   // fixed parameters of flash derived from topgen parameters
   parameter int DataWidth       = 64;
   parameter int MetaDataWidth   = 12;
-  parameter int InfoTypes       = 3; // How many types of info per bank
 
 // The following hard-wired values are there to work-around verilator.
 // For some reason if the values are assigned through parameters verilator thinks
@@ -32,6 +33,8 @@ package flash_ctrl_pkg;
   });
   parameter int WordsPerPage    = 256; // Number of flash words per page
   parameter int BusWidth        = top_pkg::TL_DW;
+  parameter int BusIntgWidth    = tlul_pkg::DataIntgWidth;
+  parameter int BusFullWidth    = BusWidth + BusIntgWidth;
   parameter int MpRegions       = 8;  // flash controller protection regions
   parameter int FifoDepth       = 16; // rd / prog fifos
   parameter int InfoTypesWidth  = prim_util_pkg::vbits(InfoTypes);
@@ -61,7 +64,6 @@ package flash_ctrl_pkg;
   parameter int BusBankAddrW    = PageW + BusWordW;
   parameter int PhyAddrStart    = BusWordW - WordW;
 
-
   // fifo parameters
   parameter int FifoDepthW      = prim_util_pkg::vbits(FifoDepth+1);
 
@@ -77,6 +79,17 @@ package flash_ctrl_pkg;
     PageW'(InfoTypeSize[1] - 1),
     PageW'(InfoTypeSize[2] - 1)
   };
+
+  // Flash Disable usage
+  typedef enum logic [2:0] {
+    PhyDisableIdx,
+    ArbFsmDisableIdx,
+    LcMgrDisableIdx,
+    MpDisableIdx,
+    HostDisableIdx,
+    IFetchDisableIdx,
+    FlashDisableLast
+  } flash_disable_pos_e;
 
   ////////////////////////////
   // All memory protection, seed related parameters
@@ -373,7 +386,7 @@ package flash_ctrl_pkg;
     flash_part_e          part;
     logic [InfoTypesWidth-1:0] info_sel;
     logic [BusAddrW-1:0]  addr;
-    logic [BusWidth-1:0]  prog_data;
+    logic [BusFullWidth-1:0] prog_data;
     logic                 prog_last;
     flash_prog_e          prog_type;
     mp_region_cfg_t [MpRegions:0] region_cfgs;
@@ -384,7 +397,6 @@ package flash_ctrl_pkg;
     logic                 alert_trig;
     logic                 alert_ack;
     jtag_pkg::jtag_req_t  jtag_req;
-    logic                 intg_err;
     prim_mubi_pkg::mubi4_t flash_disable;
   } flash_req_t;
 
@@ -414,24 +426,26 @@ package flash_ctrl_pkg;
     alert_trig:    1'b0,
     alert_ack:     1'b0,
     jtag_req:      '0,
-    intg_err:      '0,
     flash_disable: prim_mubi_pkg::MuBi4False
   };
 
   // memory to flash controller
   typedef struct packed {
-    logic [ProgTypes-1:0] prog_type_avail;
-    logic                rd_done;
-    logic                prog_done;
-    logic                erase_done;
-    logic                rd_err;
-    logic [BusWidth-1:0] rd_data;
-    logic                init_busy;
-    logic                flash_err;
-    logic [NumBanks-1:0] ecc_single_err;
+    logic [ProgTypes-1:0]    prog_type_avail;
+    logic                    rd_done;
+    logic                    prog_done;
+    logic                    erase_done;
+    logic                    rd_err;
+    logic [BusFullWidth-1:0] rd_data;
+    logic                    init_busy;
+    logic                    macro_err;
+    logic [NumBanks-1:0]     ecc_single_err;
     logic [NumBanks-1:0][BusAddrW-1:0] ecc_addr;
-    jtag_pkg::jtag_rsp_t jtag_rsp;
-    logic                intg_err;
+    jtag_pkg::jtag_rsp_t     jtag_rsp;
+    logic                    prog_intg_err;
+    logic                    storage_relbl_err;
+    logic                    storage_intg_err;
+    logic                    fsm_err;
   } flash_rsp_t;
 
   // default value of flash_rsp_t (for dangling ports)
@@ -443,11 +457,14 @@ package flash_ctrl_pkg;
     rd_err:             '0,
     rd_data:            '0,
     init_busy:          1'b0,
-    flash_err:          1'b0,
+    macro_err:          1'b0,
     ecc_single_err:     '0,
     ecc_addr:           '0,
     jtag_rsp:           '0,
-    intg_err:           '0
+    prog_intg_err:      '0,
+    storage_relbl_err:  '0,
+    storage_intg_err:   '0,
+    fsm_err:            '0
   };
 
   // RMA entries
@@ -531,9 +548,10 @@ package flash_ctrl_pkg;
     logic oob_err;
     logic mp_err;
     logic rd_err;
+    logic prog_err;
     logic prog_win_err;
     logic prog_type_err;
-    logic phy_err;
+    logic macro_err;
   } flash_ctrl_err_t;
 
   // interrupt bit positioning

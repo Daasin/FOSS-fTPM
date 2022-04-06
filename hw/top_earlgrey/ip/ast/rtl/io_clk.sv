@@ -7,17 +7,17 @@
 //############################################################################
 
 module io_clk (
-  input vcore_pok_h_i,                     // VCORE POK @3.3V (for OSC)
-  input clk_io_pd_ni,                      // IO Clock Power-down
-  input rst_io_clk_ni,                     // IO Clock Logic reset
-  input clk_src_io_en_i,                   // IO Source Clock Enable
-  input scan_mode_i,                       // Scan Mode
-  input scan_reset_ni,                     // Scan Reset
+  input vcore_pok_h_i,               // VCORE POK @3.3V (for OSC)
+  input clk_io_pd_ni,                // IO Clock Power-down
+  input rst_io_clk_ni,               // IO Clock Logic reset
+  input clk_src_io_en_i,             // IO Source Clock Enable
+  input scan_mode_i,                 // Scan Mode
+  input io_osc_cal_i,                // IO Oscillator Calibrated
 `ifdef AST_BYPASS_CLK
-  input clk_io_ext_i,                      // FPGA/VERILATOR Clock input
+  input clk_io_ext_i,                // FPGA/VERILATOR Clock input
 `endif
-  output logic clk_src_io_o,               // IO Source Clock
-  output logic clk_src_io_val_o            // IO Source Clock Valid
+  output logic clk_src_io_o,         // IO Source Clock
+  output logic clk_src_io_val_o      // IO Source Clock Valid
 );
 
 logic clk, osc_en, io_clk_en;
@@ -30,6 +30,7 @@ assign io_clk_en = scan_mode_i || osc_en;
 io_osc u_io_osc (
   .vcore_pok_h_i ( vcore_pok_h_i ),
   .io_en_i ( io_clk_en ),
+  .io_osc_cal_i ( io_osc_cal_i ),
 `ifdef AST_BYPASS_CLK
   .clk_io_ext_i ( clk_io_ext_i ),
 `endif
@@ -47,12 +48,12 @@ prim_clock_buf #(
 
 // 2-stage de-assertion
 logic rst_val_n;
-assign rst_val_n = scan_mode_i ? scan_reset_ni : io_clk_en;
+assign rst_val_n = io_clk_en;
 
 prim_flop_2sync #(
   .Width ( 1 ),
   .ResetValue ( 1'b0 )
-) u_val_sync (
+) u_no_scan_val_sync (
   .clk_i ( clk_src_io_o ),
   .rst_ni ( rst_val_n ),
   .d_i ( 1'b1 ),

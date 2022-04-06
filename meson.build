@@ -106,6 +106,8 @@ c_cpp_args = [
   # We use absolute include paths as much as possible.
   '-I' + meson.project_source_root(),
   '-I' + meson.project_build_root(),
+  # Allow detection of Meson for migration purposes.
+  '-DIS_MESON_FOR_MIGRATIONS_ONLY',
 ]
 add_project_arguments(c_cpp_args, language: ['c', 'cpp'], native: false)
 add_project_arguments(c_cpp_args, language: ['c', 'cpp'], native: true)
@@ -242,6 +244,7 @@ hw_ip_uart_reg_h = gen_hw_hdr.process('hw/ip/uart/data/uart.hjson')
 hw_ip_usbdev_reg_h = gen_hw_hdr.process('hw/ip/usbdev/data/usbdev.hjson')
 hw_ip_sysrst_ctrl_reg_h = gen_hw_hdr.process('hw/ip/sysrst_ctrl/data/sysrst_ctrl.hjson')
 hw_ip_pattgen_reg_h = gen_hw_hdr.process('hw/ip/pattgen/data/pattgen.hjson')
+hw_ip_pwm_reg_h = gen_hw_hdr.process('hw/ip/pwm/data/pwm.hjson')
 hw_ip_pwrmgr_reg_h = gen_hw_hdr.process('hw/' + TOPNAME + '/ip/pwrmgr/data/autogen/pwrmgr.hjson')
 hw_ip_rstmgr_reg_h = gen_hw_hdr.process('hw/' + TOPNAME + '/ip/rstmgr/data/autogen/rstmgr.hjson')
 hw_ip_ibex_reg_h = gen_hw_hdr.process('hw//ip/rv_core_ibex/data/rv_core_ibex.hjson')

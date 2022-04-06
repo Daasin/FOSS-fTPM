@@ -57,7 +57,7 @@ bool test_main(void) {
     low_power_exit = true;
     LOG_INFO("USB wakeup detected");
   } else {
-    LOG_ERROR("Unexpected wakeup reason (types: %2x, sources: %8x)",
+    LOG_ERROR("Unexpected wakeup reason (types: %02x, sources: %08x)",
               wakeup_reason.types, wakeup_reason.request_sources);
     return false;
   }
@@ -71,7 +71,7 @@ bool test_main(void) {
     usbdev_force_dx_pullup(kDnSel, false);
 
     // give the hardware a chance to recognize the wakeup values are the same
-    usleep(20);  // 20us
+    busy_spin_micros(20);  // 20us
 
     // Enable low power on the next WFI with default settings.
     pwrmgr_testutils_enable_low_power(

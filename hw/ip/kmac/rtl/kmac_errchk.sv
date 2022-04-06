@@ -58,6 +58,10 @@ module kmac_errchk
   input        kmac_en_i,
   input [47:0] cfg_prefix_6B_i, // first 6B of PREFIX
 
+  // If the signal below is set, errchk propagates the command to the rest of
+  // the blocks even with err_modestrength.
+  input        cfg_en_unsupported_modestrength_i,
+
   // SW commands: Only valid command is sent out to the rest of the modules
   input  kmac_cmd_e sw_cmd_i,
   output kmac_cmd_e sw_cmd_o,
@@ -142,6 +146,8 @@ module kmac_errchk
 
   // `err_modestrength` occcurs when Mode & Strength combinations are not
   // allowed. This error does not block the hashing operation.
+  // UnexpectedModeStrength may stop the processing based on CFG
+  // The error raises when SW issues CmdStart.
   logic err_modestrength;
 
   // `err_prefix` occurs when the first 6B of !!PREFIX is not
@@ -149,12 +155,16 @@ module kmac_errchk
   // KMAC operation.
   logic err_prefix;
 
+  // Signal to block the SW command propagation
+  logic block_swcmd;
+
   ///////////////////
   // Error Checker //
   ///////////////////
 
   // SW sequence Error
   // info field: Current state, Received command
+  // SEC_CM: FSM.SPARSE
   always_comb begin
     err_swsequence = 1'b 0;
     sparse_fsm_error_o = 1'b 0;
@@ -205,11 +215,15 @@ module kmac_errchk
     endcase
   end
 
+  assign block_swcmd =  (err_swsequence)
+                     || (err_modestrength
+                         && !cfg_en_unsupported_modestrength_i);
+
   // sw_cmd_o latch
   // To reduce the command path delay, sw_cmd is latched here
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)              sw_cmd_o <= CmdNone;
-    else if (!err_swsequence) sw_cmd_o <= sw_cmd_i;
+    if (!rst_ni)           sw_cmd_o <= CmdNone;
+    else if (!block_swcmd) sw_cmd_o <= sw_cmd_i;
   end
 
   // Mode & Strength
@@ -308,20 +322,7 @@ module kmac_errchk
   ///////////////////
   // State Machine //
   ///////////////////
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateWidth-1:0] state_raw_q;
-  assign st = st_e'(state_raw_q);
-  prim_sparse_fsm_flop #(
-    .StateEnumT(st_e),
-    .Width(StateWidth),
-    .ResetValue(StateWidth'(StIdle))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( st_d        ),
-    .state_o ( state_raw_q )
-  );
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, st_d, st, st_e, StIdle)
 
   always_comb begin : next_state
     st_d = st;
@@ -372,6 +373,7 @@ module kmac_errchk
       end
     endcase
 
+    // SEC_CM: FSM.GLOBAL_ESC, FSM.LOCAL_ESC
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
     if (lc_escalate_en_i != lc_ctrl_pkg::Off) begin

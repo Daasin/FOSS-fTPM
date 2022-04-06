@@ -224,8 +224,6 @@ static void read_ext_reg(const std::string &reg_name,
   std::regex re("! otbn\\." + reg_name + ": 0x([0-9a-f]{8})");
   std::smatch match;
 
-  uint32_t val = 0;
-
   for (const auto &line : lines) {
     if (std::regex_match(line, match, re)) {
       // Ahah! We have a match. We have captured exactly 8 hex digits, so know
@@ -383,6 +381,14 @@ void ISSWrapper::start() {
   run_command(oss.str(), nullptr);
 }
 
+void ISSWrapper::dmem_wipe() { run_command("dmem_wipe\n", nullptr); }
+
+void ISSWrapper::imem_wipe() { run_command("imem_wipe\n", nullptr); }
+
+void ISSWrapper::otp_key_cdc_done() {
+  run_command("otp_key_cdc_done\n", nullptr);
+}
+
 void ISSWrapper::edn_rnd_cdc_done() {
   run_command("edn_rnd_cdc_done\n", nullptr);
 }
@@ -425,7 +431,6 @@ void ISSWrapper::set_keymgr_value(const std::array<uint32_t, 12> &key0_arr,
 
 int ISSWrapper::step(bool gen_trace) {
   std::vector<std::string> lines;
-  bool error = false;
 
   run_command("step\n", &lines);
   if (gen_trace && lines.size()) {
@@ -471,7 +476,7 @@ uint32_t ISSWrapper::step_crc(const std::array<uint8_t, 6> &item,
 
   std::ostringstream oss;
   oss << std::hex << "step_crc 0x" << std::setfill('0');
-  for (int i = 0; i < item.size(); ++i) {
+  for (size_t i = 0; i < item.size(); ++i) {
     oss << std::setw(2) << (int)item[5 - i];
   }
   oss << " 0x" << std::setw(8) << state << "\n";
@@ -499,8 +504,10 @@ void ISSWrapper::reset(bool gen_trace) {
   mirrored_.status = 0;
 }
 
-void ISSWrapper::send_lc_escalation() {
-  run_command("send_lc_escalation\n", nullptr);
+void ISSWrapper::send_err_escalation(uint32_t err_val) {
+  std::ostringstream oss;
+  oss << "send_err_escalation " << std::hex << "0x" << err_val << "\n";
+  run_command(oss.str(), nullptr);
 }
 
 void ISSWrapper::get_regs(std::array<uint32_t, 32> *gprs,

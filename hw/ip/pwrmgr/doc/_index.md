@@ -49,6 +49,9 @@ Blocks outlined with a solid magenta line are always on; while blocks outlined w
 
 ![Power Manager Connectivity Diagram](pwrmgr_connectivity.svg)
 
+## Hardware Interfaces
+
+{{< incGenFromIpDesc "/hw/top_earlgrey/ip/pwrmgr/data/autogen/pwrmgr.hjson" "hwcfg" >}}
 
 ## Overall Sequencing
 
@@ -81,7 +84,7 @@ The `por_rst_n` signal is released when the reset controller detects the root po
 Please see the [ast]({{< relref "hw/top_earlgrey/ip/ast/doc" >}}) for more details.
 
 The slow FSM requests the AST to power up the main domain and high speed clocks.
-Once those steps are done, it requests the fast FSM to begin operation.
+Once those steps are done, it requests the [fast FSM](#fast-clock-domain-fsm) to begin operation.
 The slow FSM also handles power isolation controls as part of this process.
 
 Once the fast FSM acknowledges the power-up completion, the slow FSM transitions to `Idle` and waits for a power down request.
@@ -89,6 +92,13 @@ When a power down request is received, the slow FSM turns off AST clocks and pow
 This means the clocks and power are not always turned off, but are rather controlled by software configurations in {{< regref "CONTROL" >}} prior to low power entry .
 Once these steps are complete, the slow FSM transitions to a low power state and awaits a wake request, which can come either as an actual wakeup, or a reset event (for example always on watchdog expiration).
 
+#### Sparse FSM
+
+Since the slow FSM is sparsely encoded, it is possible for the FSM to end up in an undefined state if attacked.
+When this occurs, the slow FSM sends an `invalid` indication to the fast FSM and forcibly powers off and clamps everything.
+
+The clocks are kept on however to allow the fast FSM to operate if it is able to receive the `invalid` indication.
+The slow FSM does not recover from this state until the system is reset by POR.
 
 ## Fast Clock Domain FSM
 
@@ -102,7 +112,7 @@ The initialization of the life cycle controller puts the device into its allowed
 Once life cycle initialization is done, the fast FSM enables all second level clock gating (see [clock controller]({{< relref "hw/ip/clkmgr/doc" >}}) for more details) and initiates strap sampling.
 For more details on what exactly the strap samples, please see [here](https://docs.google.com/spreadsheets/d/1pH8T1MhQ7TXtP_bFNT85T9jSVIHlxHAfbMnPbsMdjc0/edit?usp=sharing).
 
-Once strap sampling is complete, the system is ready to begin normal operations (note flash initialization is explicitly not done here, please see [sections below](#flash-handling) for more details).
+Once strap sampling is complete, the system is ready to begin normal operations (note `flash_ctrl` initialization is explicitly not done here, please see [sections below](#flash-handling) for more details).
 The fast FSM acknowledges the slow FSM (which made the original power up request) and releases the system reset stage - this enables the processor to begin operation.
 Afterwards, the fast FSM transitions to `Active` state and waits for a software low power entry request.
 
@@ -119,6 +129,14 @@ If none of these exception cases are matched for low power entry, the fast FSM t
 
 For reset requests, fall through and aborts are not checked and the system simply resets directly.
 Note in this scenario the slow FSM is not requested to take over.
+
+#### Sparse FSM
+
+Since the fast FSM is sparsely encoded, it is possible for the FSM to end up in an undefined state if attacked.
+When this occurs, the fast FSM forcibly disables all clocks and holds the system in reset.
+
+The fast FSM does not recover from this state until the system is reset by POR.
+
 
 ### ROM Integrity Checks
 
@@ -177,6 +195,7 @@ In additional to external requests, the power manager maintains 2 internal reset
 * Main power domain unstable reset request
 
 #### Escalation Reset Request
+
 Alert escalation resets in general behave similarly to peripehral requested resets.
 However, peripheral resets are always handled gracefully and follow the normal FSM transition.
 
@@ -185,6 +204,18 @@ As a result, upon alert escalation, the power manager makes a best case effort t
 
 This may not always be possible if the escalation happens while the FSM is in an invalid state.
 In this scenario, the pwrmgr keeps everything powered off and silenced and requests escalation handling if the system ever wakes up.
+
+#### Escalation Clock Timeout
+
+Under normal behavior, the power manager can receive escalation requests from the system and handle them [appropriately](#escalation-reset-request).
+However, if the escalation clock or reset are non-functional for any reason, the escalation request would not be serviced.
+
+To mitigate this, the power manager actively checks for escalation interface clock/reset timeout.
+This is done by a continuous request / acknowledge interface between the power manager's local clock/reset and the escalate network's clock/reset.
+
+If the request / acknowledge interface does not respond within 128 power manager clock cycles, the escalate domain is assumed to be off.
+When this happens, the power manager creates a local escalation request that behaves identically to the global escalation request.
+
 
 #### Main Power Unstable Reset Requests
 If the main power ever becomes unstable (the power okay indication is low even though it is powered on), the power manager requests an internal reset.
@@ -242,31 +273,32 @@ The software is also able to enable recording during `Active` state if it choose
 
 
 ## Flash Handling
-For the section below, flash storage refers to the proprietary flash storage supplied by a vendor.
-Flash refers to the `flash_ctrl`, which is the open source controller that manages accesses to the flash storage.
+For the section below, flash macro refers to the proprietary flash storage supplied by a vendor.
+`flash_ctrl`, on the other hand, refers to the open source controller that manages access to the flash macro.
 
 ### Power-Up Handling
 
-The AST automatically takes the flash storage out of power down state as part of the power manager's power up request.
-Once flash storage is powered up and ready, an indication is sent to the [flash_ctrl]({{< relref "hw/top_earlgrey/ip/ast/doc" >}}).
+The [AST]({{< relref "hw/top_earlgrey/ip/ast/doc" >}}) automatically takes the flash macro out of power down state as part of the power manager's power up request.
 
-Once the boot ROM is allowed to execute, it is expected to further initialize the `flash_ctrl` and flash storage prior to using it.
+Once flash macro is powered up and ready, an indication is sent to the `flash_ctrl`.
+
+Once the boot ROM is allowed to execute, it is expected to further initialize the `flash_ctrl` and flash macro prior to using it.
 This involves the following steps:
 
-*   Poll `flash_ctrl` register to ensure flash storage has powered up and completed internal initialization.
+*   Poll `flash_ctrl` register to ensure flash macro has powered up and completed internal initialization.
 *   Initialize `flash_ctrl` seed reading and scrambling.
 
 ### Power-Down Handling
 
-Before the device enters low power, the pwrmgr first checks to ensure there are no ongoing transactions to the flash storage.
-When the device enters deep sleep, the flash storage is automatically put into power down mode by the AST.
-The AST places the flash storage into power down through direct signaling between AST and flash storage, the pwrmgr is not directly involved.
+Before the device enters low power, the pwrmgr first checks to ensure there are no ongoing transactions to the flash macro.
+When the device enters deep sleep, the flash macro is automatically put into power down mode by the AST.
+The AST places the flash macro into power down through direct signaling between AST and flash macro, the pwrmgr is not directly involved.
 
-When the device exits low power state, it is the responsibility of the boot ROM to poll for flash power-up complete similar to the above section.
+When the device exits low power state, it is the responsibility of the boot ROM to poll for flash macro and `flash_ctrl` power-up complete similar to the above section.
 
 ### Flash Brownout Handling
 
-When the supply of the device dips below a certain point during a stateful flash storage operation (program or erase) the flash storage requires the operation to terminate in a pre-defined manner.
+When the external supply of the device dips below a certain threshold during a non-volatile flash macro operation (program or erase), the flash macro requires the operation to terminate in a pre-defined manner.
 This sequence will be exclusively handled by the AST.
 
 The power manager is unaware of the difference between POR and flash brownout.
@@ -280,10 +312,10 @@ This section details the various low power modes supported by OpenTitan.
 
 ### Deep Sleep or Standby
 
-This represents the lowest power mode of the device (outside of full power down or device held in reset).
+This is the lowest power mode of the device (outside of full power down or device held in reset).
 During this state:
 
-*   All clocks other than the KHz slow clock are turned off at the source.
+*   All clocks other than the always-on slow clock are turned off at the source.
 *   All non-always-on digital domains are powered off.
 *   I/O power domains may or may not be off.
     *   The state of the IO power domain has no impact on the digital core’s power budget, e.g. the IO power being off does not cause the accompanying digital logic in pads or elsewhere to leak more.
@@ -291,7 +323,7 @@ During this state:
 
 ### Normal Sleep
 
-This represents a fast low power mode of the device that compromises power consumed and resume latency.
+This is a fast low power mode of the device that trades-off power consumption for resume latency.
 During this state:
 
 *   All clocks other than the KHz slow clock are turned off at the source.
@@ -327,11 +359,14 @@ Assume first the system has the power states described [above](#supported-low-po
 
 ### Possible Exits
 
-Once low power is entered, the system may exit due to several reasons.
+Once low power is initiated, the system may exit due to several reasons.
 1. Graceful low power exit - This exit occurs when some source in the system gracefully wakes up the power manager.
 2. System reset request - This exit occurs when either software or a peripheral requests the pwrmgr to reset the system.
-2. [Fall through exit](#fall-through-handling) - This exit occurs when an interrupt manages to break the wait-for-interrupt loop.
-3. [Aborted entry](#abort-handling) - This exit occurs when low power entry is attempted with an ongoing non-volatile transaction.
+3. [Fall through exit](#fall-through-handling) - This exit occurs when an interrupt manages to break the wait-for-interrupt loop.
+4. [Aborted entry](#abort-handling) - This exit occurs when low power entry is attempted with an ongoing non-volatile transaction.
+
+In both fall through exit and aborted entry, the power manager does not actually enter low power.
+Instead the low power entry is interrupted and the system restored to active state.
 
 ## Programmer Sequence for Exiting Low Power
 

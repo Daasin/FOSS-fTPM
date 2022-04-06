@@ -5,7 +5,7 @@
 // trans test vseq
 // This is a more randomized version of the corresponding test in the smoke sequence.
 // Starts with random units busy, set the hints at random. The idle units whose hint bit is off
-// will be disabled, but the others will remain enabled. Then all units are made idle to check 
+// will be disabled, but the others will remain enabled. Then all units are made idle to check
 // that status matches hints. Prior to the next round this raises all hints to avoid units whose
 // clock is off but are not idle.
 //
@@ -28,9 +28,18 @@ class clkmgr_trans_vseq extends clkmgr_base_vseq;
     for (int i = 0; i < num_trans; ++i) begin
       logic bit_value;
       hintables_t value;
+      hintables_t bool_idle;
 
       `DV_CHECK_RANDOMIZE_FATAL(this)
+
+      csr_rd(.ptr(ral.clk_hints_status), .value(value));
+
+      `uvm_info(`gfn, $sformatf("Initial clk_hints_status: %b",value),UVM_MEDIUM)
       cfg.clkmgr_vif.init(.idle(idle), .scanmode(scanmode));
+
+      // add random value if mubi idle test
+      if (mubi_mode == ClkmgrMubiIdle) drive_idle(idle);
+      print_mubi_hintable(idle);
       control_ip_clocks();
       cfg.clk_rst_vif.wait_clks(10);
       `uvm_info(`gfn, $sformatf("Updating hints to 0x%0x", initial_hints), UVM_MEDIUM)
@@ -40,11 +49,13 @@ class clkmgr_trans_vseq extends clkmgr_base_vseq;
       cfg.io_clk_rst_vif.wait_clks(IO_DIV4_SYNC_CYCLES);
       // We expect the status to be determined by hints and idle.
       csr_rd(.ptr(ral.clk_hints_status), .value(value));
-      `DV_CHECK_EQ(value, initial_hints | ~idle, $sformatf(
-                   "Busy units have status high: hints=0x%x, idle=0x%x", initial_hints, idle))
 
-      // Clearing idle should make hint_status match hints.
-      cfg.clkmgr_vif.update_idle('1);
+      bool_idle = mubi_hintables_to_hintables(idle);
+      `DV_CHECK_EQ(value, initial_hints | ~bool_idle, $sformatf(
+                   "Busy units have status high: hints=0x%x, idle=0x%x", initial_hints, bool_idle))
+
+      // Setting all idle should make hint_status match hints.
+      cfg.clkmgr_vif.update_idle({NUM_TRANS{MuBi4True}});
       cfg.io_clk_rst_vif.wait_clks(IO_DIV4_SYNC_CYCLES);
       csr_rd(.ptr(ral.clk_hints_status), .value(value));
       `DV_CHECK_EQ(value, initial_hints, "All idle: units status matches hints")
@@ -60,4 +71,16 @@ class clkmgr_trans_vseq extends clkmgr_base_vseq;
     end
   endtask : body
 
+  task drive_idle(ref mubi_hintables_t tbl);
+    int period;
+    mubi_hintables_t rand_idle;
+    foreach (rand_idle[i]) rand_idle[i] = get_rand_mubi4_val(.t_weight(0),
+                                                             .f_weight(0),
+                                                             .other_weight(1));
+
+    @cfg.clkmgr_vif.trans_cb;
+    cfg.clkmgr_vif.idle_i = rand_idle;
+
+    tbl = rand_idle;
+  endtask // drive_idle
 endclass : clkmgr_trans_vseq

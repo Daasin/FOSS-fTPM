@@ -9,14 +9,14 @@
 `include "prim_assert.sv"
 
 module flash_ctrl
-  import flash_ctrl_pkg::*;
-  import flash_ctrl_reg_pkg::*;
+  import flash_ctrl_pkg::*;  import flash_ctrl_reg_pkg::*;
 #(
   parameter logic [NumAlerts-1:0] AlertAsyncOn    = {NumAlerts{1'b1}},
   parameter flash_key_t           RndCnstAddrKey  = RndCnstAddrKeyDefault,
   parameter flash_key_t           RndCnstDataKey  = RndCnstDataKeyDefault,
   parameter lfsr_seed_t           RndCnstLfsrSeed = RndCnstLfsrSeedDefault,
-  parameter lfsr_perm_t           RndCnstLfsrPerm = RndCnstLfsrPermDefault
+  parameter lfsr_perm_t           RndCnstLfsrPerm = RndCnstLfsrPermDefault,
+  parameter bit                   SecScrambleEn   = 1'b1
 ) (
   input        clk_i,
   input        rst_ni,
@@ -71,6 +71,10 @@ module flash_ctrl
   // Alerts
   input  prim_alert_pkg::alert_rx_t [flash_ctrl_reg_pkg::NumAlerts-1:0] alert_rx_i,
   output prim_alert_pkg::alert_tx_t [flash_ctrl_reg_pkg::NumAlerts-1:0] alert_tx_o,
+
+  // Observability
+  input ast_pkg::ast_obs_ctrl_t obs_ctrl_i,
+  output logic [7:0] fla_obs_o,
 
   // Flash test interface
   input scan_en_i,
@@ -149,22 +153,22 @@ module flash_ctrl
   );
 
   // FIFO Connections
-  logic                 prog_fifo_wvalid;
-  logic                 prog_fifo_wready;
-  logic                 prog_fifo_rvalid;
-  logic                 prog_fifo_ren;
-  logic [BusWidth-1:0]  prog_fifo_wdata;
-  logic [BusWidth-1:0]  prog_fifo_rdata;
-  logic [FifoDepthW-1:0] prog_fifo_depth;
-  logic                 rd_fifo_wready;
-  logic                 rd_fifo_rvalid;
-  logic                 rd_fifo_rready;
-  logic                 rd_fifo_wen;
-  logic                 rd_fifo_ren;
-  logic [BusWidth-1:0]  rd_fifo_wdata;
-  logic [BusWidth-1:0]  rd_fifo_rdata;
-  logic [FifoDepthW-1:0] rd_fifo_depth;
-  logic                 rd_fifo_full;
+  logic                    prog_fifo_wvalid;
+  logic                    prog_fifo_wready;
+  logic                    prog_fifo_rvalid;
+  logic                    prog_fifo_ren;
+  logic [BusFullWidth-1:0] prog_fifo_wdata;
+  logic [BusFullWidth-1:0] prog_fifo_rdata;
+  logic [FifoDepthW-1:0]   prog_fifo_depth;
+  logic                    rd_fifo_wready;
+  logic                    rd_fifo_rvalid;
+  logic                    rd_fifo_rready;
+  logic                    rd_fifo_wen;
+  logic                    rd_fifo_ren;
+  logic [BusFullWidth-1:0] rd_fifo_wdata;
+  logic [BusFullWidth-1:0] rd_fifo_rdata;
+  logic [FifoDepthW-1:0]   rd_fifo_depth;
+  logic                    rd_fifo_full;
 
   // Program Control Connections
   logic prog_flash_req;
@@ -194,10 +198,10 @@ module flash_ctrl
   logic flash_req;
   logic flash_rd_done, flash_prog_done, flash_erase_done;
   logic flash_mp_err;
-  logic [BusWidth-1:0] flash_prog_data;
+  logic [BusFullWidth-1:0] flash_prog_data;
   logic flash_prog_last;
   flash_prog_e flash_prog_type;
-  logic [BusWidth-1:0] flash_rd_data;
+  logic [BusFullWidth-1:0] flash_rd_data;
   logic flash_rd_err;
   logic flash_phy_busy;
   logic rd_op;
@@ -218,12 +222,13 @@ module flash_ctrl
   logic hw_rvalid;
   logic hw_rready;
   logic hw_wvalid;
-  logic [BusWidth-1:0] hw_wdata;
+  logic [BusFullWidth-1:0] hw_wdata;
   logic hw_wready;
   flash_sel_e if_sel;
   logic sw_sel;
   flash_lcmgr_phase_e hw_phase;
   logic lcmgr_err;
+  logic lcmgr_intg_err;
   logic arb_fsm_err;
   logic seed_err;
 
@@ -251,7 +256,7 @@ module flash_ctrl
   logic sw_rvalid;
   logic adapter_rvalid;
   logic sw_wvalid;
-  logic [BusWidth-1:0] sw_wdata;
+  logic [BusFullWidth-1:0] sw_wdata;
   logic sw_wready;
 
   // lfsr for local entropy usage
@@ -262,6 +267,9 @@ module flash_ctrl
   // interface to flash phy
   flash_rsp_t flash_phy_rsp;
   flash_req_t flash_phy_req;
+
+  // import commonly used routines
+  import lc_ctrl_pkg::lc_tx_test_true_strict;
 
   // life cycle connections
   lc_ctrl_pkg::lc_tx_t lc_seed_hw_rd_en;
@@ -294,10 +302,16 @@ module flash_ctrl
     .state_o(rand_val)
   );
 
+  // flash disable declaration
+  mubi4_t [FlashDisableLast-1:0] flash_disable;
+
   // flash control arbitration between softawre / harware interfaces
   flash_ctrl_arb u_ctrl_arb (
     .clk_i,
     .rst_ni,
+
+    // combined disable
+    .disable_i(flash_disable[ArbFsmDisableIdx]),
 
     // error output shared by both interfaces
     .ctrl_err_addr_o(ctrl_err_addr),
@@ -400,7 +414,10 @@ module flash_ctrl
     .rst_otp_ni,
 
     .init_i(reg2hw.init),
-    .provision_en_i(lc_seed_hw_rd_en == lc_ctrl_pkg::On),
+    .provision_en_i(lc_tx_test_true_strict(lc_seed_hw_rd_en)),
+
+    // combined disable
+    .disable_i(flash_disable[LcMgrDisableIdx]),
 
     // interface to ctrl arb control ports
     .ctrl_o(hw_ctrl),
@@ -449,6 +466,7 @@ module flash_ctrl
 
     // error indication
     .fatal_err_o(lcmgr_err),
+    .intg_err_o(lcmgr_intg_err),
 
     // disable access to flash storage after rma process
     .dis_access_o(dis_access),
@@ -464,10 +482,11 @@ module flash_ctrl
   assign prog_op_valid = op_start & prog_op;
 
   tlul_adapter_sram #(
-    .SramAw(1),         //address unused
+    .SramAw(1),          //address unused
     .SramDw(BusWidth),
-    .ByteAccess(0),     //flash may not support byte access
-    .ErrOnRead(1)       //reads not supported
+    .ByteAccess(0),      //flash may not support byte access
+    .ErrOnRead(1),       //reads not supported
+    .EnableDataIntgPt(1) //passthrough data integrity
   ) u_to_prog_fifo (
     .clk_i,
     .rst_ni,
@@ -482,13 +501,13 @@ module flash_ctrl
     .wmask_o     (),
     .intg_error_o(),
     .wdata_o     (sw_wdata),
-    .rdata_i     (BusWidth'(0)),
+    .rdata_i     ('0),
     .rvalid_i    (1'b0),
     .rerror_i    (2'b0)
   );
 
   prim_fifo_sync #(
-    .Width(BusWidth),
+    .Width(BusFullWidth),
     .Depth(FifoDepth)
   ) u_prog_fifo (
     .clk_i,
@@ -510,6 +529,8 @@ module flash_ctrl
                                          reg2hw.prog_type_en.normal.q;
   assign prog_type_en[FlashProgRepair] = flash_phy_rsp.prog_type_avail[FlashProgRepair] &
                                          reg2hw.prog_type_en.repair.q;
+
+  logic prog_cnt_err;
   flash_ctrl_prog u_flash_ctrl_prog (
     .clk_i,
     .rst_ni,
@@ -524,6 +545,7 @@ module flash_ctrl
     .op_type_i      (op_prog_type),
     .type_avail_i   (prog_type_en),
     .op_err_addr_o  (prog_err_addr),
+    .cnt_err_o      (prog_cnt_err),
 
     // FIFO Interface
     .data_i         (prog_fifo_rdata),
@@ -538,7 +560,8 @@ module flash_ctrl
     .flash_last_o   (flash_prog_last),
     .flash_type_o   (flash_prog_type),
     .flash_done_i   (flash_prog_done),
-    .flash_phy_err_i(flash_phy_rsp.flash_err),
+    .flash_prog_intg_err_i (flash_phy_rsp.prog_intg_err),
+    .flash_macro_err_i(flash_phy_rsp.macro_err),
     .flash_mp_err_i (flash_mp_err)
   );
 
@@ -563,10 +586,11 @@ module flash_ctrl
 
   // tlul adapter represents software's access interface to flash
   tlul_adapter_sram #(
-    .SramAw(1),         //address unused
+    .SramAw(1),           //address unused
     .SramDw(BusWidth),
-    .ByteAccess(0),     //flash may not support byte access
-    .ErrOnWrite(1)      //writes not supported
+    .ByteAccess(0),       //flash may not support byte access
+    .ErrOnWrite(1),       //writes not supported
+    .EnableDataIntgPt(1)
   ) u_to_rd_fifo (
     .clk_i,
     .rst_ni,
@@ -589,7 +613,7 @@ module flash_ctrl
   );
 
   prim_fifo_sync #(
-    .Width(BusWidth),
+    .Width(BusFullWidth),
     .Depth(FifoDepth)
   ) u_rd_fifo (
     .clk_i,
@@ -605,6 +629,7 @@ module flash_ctrl
     .rdata_o (rd_fifo_rdata)
   );
 
+  logic rd_cnt_err;
   // Read handler is consumer of rd_fifo
   assign rd_op_valid = op_start & rd_op;
   flash_ctrl_rd  u_flash_ctrl_rd (
@@ -619,6 +644,7 @@ module flash_ctrl
     .op_err_addr_o  (rd_err_addr),
     .op_addr_i      (op_addr),
     .op_addr_oob_i  ('0),
+    .cnt_err_o      (rd_cnt_err),
 
     // FIFO Interface
     .data_rdy_i     (rd_fifo_wready),
@@ -633,7 +659,7 @@ module flash_ctrl
     .flash_done_i   (flash_rd_done),
     .flash_mp_err_i (flash_mp_err),
     .flash_rd_err_i (flash_rd_err),
-    .flash_phy_err_i(flash_phy_rsp.flash_err)
+    .flash_macro_err_i(flash_phy_rsp.macro_err)
   );
 
   // Erase handler does not consume fifo
@@ -654,7 +680,7 @@ module flash_ctrl
     .flash_op_o     (erase_flash_type),
     .flash_done_i   (flash_erase_done),
     .flash_mp_err_i (flash_mp_err),
-    .flash_phy_err_i(flash_phy_rsp.flash_err)
+    .flash_macro_err_i(flash_phy_rsp.macro_err)
   );
 
   // Final muxing to flash macro module
@@ -704,6 +730,9 @@ module flash_ctrl
   flash_mp u_flash_mp (
     .clk_i,
     .rst_ni,
+
+    // disable flash through memory protection
+    .flash_disable_i(flash_disable[MpDisableIdx]),
 
     // arbiter interface selection
     .if_sel_i(if_sel),
@@ -798,7 +827,6 @@ module flash_ctrl
   assign flash_phy_req.jtag_req.tms = cio_tms_i;
   assign flash_phy_req.jtag_req.tdi = cio_tdi_i;
   assign flash_phy_req.jtag_req.trst_n = '0;
-  assign flash_phy_req.intg_err = intg_err;
   assign cio_tdo_o = flash_phy_rsp.jtag_rsp.tdo;
   assign cio_tdo_en_o = flash_phy_rsp.jtag_rsp.tdo_oe;
   assign flash_rd_err = flash_phy_rsp.rd_err;
@@ -838,16 +866,23 @@ module flash_ctrl
   logic fatal_err;
   assign fatal_err = |reg2hw.fault_status;
 
+  logic fatal_std_err;
+  assign fatal_std_err = |reg2hw.std_fault_status;
+
+  lc_ctrl_pkg::lc_tx_t local_esc;
+  assign local_esc = lc_ctrl_pkg::lc_tx_bool_to_lc_tx(fatal_std_err);
 
   assign alert_srcs = { fatal_err,
+                        fatal_std_err,
                         recov_err
                       };
 
   assign alert_tests = { reg2hw.alert_test.fatal_err.q & reg2hw.alert_test.fatal_err.qe,
+                         reg2hw.alert_test.fatal_std_err.q & reg2hw.alert_test.fatal_std_err.qe,
                          reg2hw.alert_test.recov_err.q & reg2hw.alert_test.recov_err.qe
                        };
 
-  localparam logic [NumAlerts-1:0] IsFatal = {1'b1, 1'b0};
+  localparam logic [NumAlerts-1:0] IsFatal = {1'b1, 1'b1, 1'b0};
   for (genvar i = 0; i < NumAlerts; i++) begin : gen_alert_senders
     prim_alert_sender #(
       .AsyncOn(AlertAsyncOn[i]),
@@ -878,10 +913,13 @@ module flash_ctrl
     .lc_en_o(lc_escalate_en)
   );
 
+  lc_ctrl_pkg::lc_tx_t escalate_en;
+  // SEC_CM: MEM.CTRL.LOCAL_ESC
+  assign escalate_en = lc_ctrl_pkg::lc_tx_or_hi(dis_access, local_esc);
+
   // flash functional disable
-  prim_mubi_pkg::mubi4_t flash_disable;
   lc_ctrl_pkg::lc_tx_t lc_disable;
-  assign lc_disable = lc_ctrl_pkg::lc_tx_or(lc_escalate_en, dis_access, lc_ctrl_pkg::On);
+  assign lc_disable = lc_ctrl_pkg::lc_tx_or_hi(lc_escalate_en, escalate_en);
 
   // Normally, faults (those registered in fault_status) should also cause flash access
   // to disable.  However, most errors encountered by hardware during flash access
@@ -891,70 +929,111 @@ module flash_ctrl
   // In other words...cowardice.
   // SEC_CM: MEM.CTRL.GLOBAL_ESC
   // SEC_CM: MEM_DISABLE.CONFIG.MUBI
-  assign flash_disable = lc_ctrl_pkg::lc_tx_test_true_loose(lc_disable) ?
-                         prim_mubi_pkg::MuBi4True :
-                         prim_mubi_pkg::mubi4_t'(reg2hw.dis.q);
+  mubi4_t lc_conv_disable;
+  mubi4_t flash_disable_pre_buf;
+  assign lc_conv_disable = lc_ctrl_pkg::lc_to_mubi4(lc_disable);
+  assign flash_disable_pre_buf = prim_mubi_pkg::mubi4_or_hi(
+      lc_conv_disable,
+      mubi4_t'(reg2hw.dis.q));
 
-  assign flash_phy_req.flash_disable = flash_disable;
+  prim_mubi4_sync #(
+    .NumCopies(int'(FlashDisableLast)),
+    .AsyncOn(0)
+  ) u_disable_buf (
+    .clk_i,
+    .rst_ni,
+    .mubi_i(flash_disable_pre_buf),
+    .mubi_o(flash_disable)
+  );
 
-  prim_mubi_pkg::mubi4_t sw_flash_exec_en;
-  prim_mubi_pkg::mubi4_t flash_exec_en;
+  assign flash_phy_req.flash_disable = flash_disable[PhyDisableIdx];
+
+  logic [prim_mubi_pkg::MuBi4Width-1:0] sw_flash_exec_en;
+  mubi4_t flash_exec_en;
 
   // SEC_CM: MEM_EN.CONFIG.REDUN
-  assign sw_flash_exec_en = (reg2hw.exec.q == unsigned'(ExecEn)) ?
-                            prim_mubi_pkg::MuBi4True :
-                            prim_mubi_pkg::MuBi4False;
+  prim_sec_anchor_buf #(
+    .Width(prim_mubi_pkg::MuBi4Width)
+  ) u_exec_en_buf (
+    .in_i(prim_mubi_pkg::mubi4_bool_to_mubi(reg2hw.exec.q == unsigned'(ExecEn))),
+    .out_o(sw_flash_exec_en)
+  );
 
-  assign flash_exec_en = lc_ctrl_pkg::lc_tx_test_true_loose(lc_escalate_en) ?
-                         prim_mubi_pkg::MuBi4False :
-                         sw_flash_exec_en;
+  mubi4_t disable_exec;
+  assign disable_exec = mubi4_t'(~flash_disable[IFetchDisableIdx]);
+  assign flash_exec_en = prim_mubi_pkg::mubi4_and_hi(
+                           disable_exec,
+                           mubi4_t'(sw_flash_exec_en)
+                         );
 
+  // the above statement only works if mubi true/false are fully complement
+  `ASSERT_INIT(MuBiComplCheck_A, prim_mubi_pkg::MuBi4True == ~prim_mubi_pkg::MuBi4False)
 
   //////////////////////////////////////
   // Errors and Interrupts
   //////////////////////////////////////
 
   // all software interface errors are treated as synchronous errors
-  assign hw2reg.err_code.mp_err.d         = 1'b1;
-  assign hw2reg.err_code.rd_err.d         = 1'b1;
-  assign hw2reg.err_code.prog_win_err.d   = 1'b1;
-  assign hw2reg.err_code.prog_type_err.d  = 1'b1;
-  assign hw2reg.err_code.flash_phy_err.d  = 1'b1;
-  assign hw2reg.err_code.update_err.d     = 1'b1;
-  assign hw2reg.err_code.mp_err.de        = sw_ctrl_err.mp_err;
-  assign hw2reg.err_code.rd_err.de        = sw_ctrl_err.rd_err;
-  assign hw2reg.err_code.prog_win_err.de  = sw_ctrl_err.prog_win_err;
-  assign hw2reg.err_code.prog_type_err.de = sw_ctrl_err.prog_type_err;
-  assign hw2reg.err_code.flash_phy_err.de = sw_ctrl_err.phy_err;
-  assign hw2reg.err_code.update_err.de    = update_err;
-  assign hw2reg.err_addr.d                = {ctrl_err_addr, {BusByteWidth{1'h0}}};
-  assign hw2reg.err_addr.de               = sw_ctrl_err.mp_err |
-                                            sw_ctrl_err.rd_err |
-                                            sw_ctrl_err.phy_err;
+  assign hw2reg.err_code.mp_err.d           = 1'b1;
+  assign hw2reg.err_code.rd_err.d           = 1'b1;
+  assign hw2reg.err_code.prog_err.d         = 1'b1;
+  assign hw2reg.err_code.prog_win_err.d     = 1'b1;
+  assign hw2reg.err_code.prog_type_err.d    = 1'b1;
+  assign hw2reg.err_code.flash_macro_err.d  = 1'b1;
+  assign hw2reg.err_code.update_err.d       = 1'b1;
+  assign hw2reg.err_code.mp_err.de          = sw_ctrl_err.mp_err;
+  assign hw2reg.err_code.rd_err.de          = sw_ctrl_err.rd_err;
+  assign hw2reg.err_code.prog_err.de        = sw_ctrl_err.prog_err;
+  assign hw2reg.err_code.prog_win_err.de    = sw_ctrl_err.prog_win_err;
+  assign hw2reg.err_code.prog_type_err.de   = sw_ctrl_err.prog_type_err;
+  assign hw2reg.err_code.flash_macro_err.de = sw_ctrl_err.macro_err;
+  assign hw2reg.err_code.update_err.de      = update_err;
+  assign hw2reg.err_addr.d                  = {ctrl_err_addr, {BusByteWidth{1'h0}}};
+  assign hw2reg.err_addr.de                 = sw_ctrl_err.mp_err |
+                                              sw_ctrl_err.rd_err |
+                                              sw_ctrl_err.prog_err |
+                                              sw_ctrl_err.macro_err;
 
   // all hardware interface errors are considered faults
-  assign hw2reg.fault_status.mp_err.d         = 1'b1;
-  assign hw2reg.fault_status.rd_err.d         = 1'b1;
-  assign hw2reg.fault_status.prog_win_err.d   = 1'b1;
-  assign hw2reg.fault_status.prog_type_err.d  = 1'b1;
-  assign hw2reg.fault_status.flash_phy_err.d  = 1'b1;
-  assign hw2reg.fault_status.reg_intg_err.d   = 1'b1;
-  assign hw2reg.fault_status.phy_intg_err.d   = 1'b1;
-  assign hw2reg.fault_status.lcmgr_err.d      = 1'b1;
-  assign hw2reg.fault_status.arb_fsm_err.d    = 1'b1;
-  assign hw2reg.fault_status.storage_err.d    = 1'b1;
-  assign hw2reg.fault_status.seed_err.d       = 1'b1;
-  assign hw2reg.fault_status.mp_err.de        = hw_err.mp_err;
-  assign hw2reg.fault_status.rd_err.de        = hw_err.rd_err;
-  assign hw2reg.fault_status.prog_win_err.de  = hw_err.prog_win_err;
-  assign hw2reg.fault_status.prog_type_err.de = hw_err.prog_type_err;
-  assign hw2reg.fault_status.flash_phy_err.de = hw_err.phy_err;
-  assign hw2reg.fault_status.reg_intg_err.de  = intg_err;
-  assign hw2reg.fault_status.phy_intg_err.de  = flash_phy_rsp.intg_err;
-  assign hw2reg.fault_status.lcmgr_err.de     = lcmgr_err;
-  assign hw2reg.fault_status.arb_fsm_err.de   = arb_fsm_err;
-  assign hw2reg.fault_status.storage_err.de   = storage_err;
-  assign hw2reg.fault_status.seed_err.de      = seed_err;
+  // There are two types of faults
+  // standard faults - things like fsm / counter / tlul integrity
+  // custom faults - things like hardware interface not working correctly
+  assign hw2reg.fault_status.mp_err.d           = 1'b1;
+  assign hw2reg.fault_status.rd_err.d           = 1'b1;
+  assign hw2reg.fault_status.prog_err.d         = 1'b1;
+  assign hw2reg.fault_status.prog_win_err.d     = 1'b1;
+  assign hw2reg.fault_status.prog_type_err.d    = 1'b1;
+  assign hw2reg.fault_status.flash_macro_err.d  = 1'b1;
+  assign hw2reg.fault_status.seed_err.d         = 1'b1;
+  assign hw2reg.fault_status.phy_relbl_err.d    = 1'b1;
+  assign hw2reg.fault_status.phy_storage_err.d  = 1'b1;
+  assign hw2reg.fault_status.mp_err.de          = hw_err.mp_err;
+  assign hw2reg.fault_status.rd_err.de          = hw_err.rd_err;
+  assign hw2reg.fault_status.prog_err.de        = hw_err.prog_err;
+  assign hw2reg.fault_status.prog_win_err.de    = hw_err.prog_win_err;
+  assign hw2reg.fault_status.prog_type_err.de   = hw_err.prog_type_err;
+  assign hw2reg.fault_status.flash_macro_err.de = hw_err.macro_err;
+  assign hw2reg.fault_status.seed_err.de        = seed_err;
+  assign hw2reg.fault_status.phy_relbl_err.de   = flash_phy_rsp.storage_relbl_err;
+  assign hw2reg.fault_status.phy_storage_err.de = flash_phy_rsp.storage_intg_err;
+
+  // standard faults
+  assign hw2reg.std_fault_status.reg_intg_err.d    = 1'b1;
+  assign hw2reg.std_fault_status.prog_intg_err.d   = 1'b1;
+  assign hw2reg.std_fault_status.lcmgr_err.d       = 1'b1;
+  assign hw2reg.std_fault_status.lcmgr_intg_err.d  = 1'b1;
+  assign hw2reg.std_fault_status.arb_fsm_err.d     = 1'b1;
+  assign hw2reg.std_fault_status.storage_err.d     = 1'b1;
+  assign hw2reg.std_fault_status.phy_fsm_err.d     = 1'b1;
+  assign hw2reg.std_fault_status.ctrl_cnt_err.d    = 1'b1;
+  assign hw2reg.std_fault_status.reg_intg_err.de   = intg_err;
+  assign hw2reg.std_fault_status.prog_intg_err.de  = flash_phy_rsp.prog_intg_err;
+  assign hw2reg.std_fault_status.lcmgr_err.de      = lcmgr_err;
+  assign hw2reg.std_fault_status.lcmgr_intg_err.de = lcmgr_intg_err;
+  assign hw2reg.std_fault_status.arb_fsm_err.de    = arb_fsm_err;
+  assign hw2reg.std_fault_status.storage_err.de    = storage_err;
+  assign hw2reg.std_fault_status.phy_fsm_err.de    = flash_phy_rsp.fsm_err;
+  assign hw2reg.std_fault_status.ctrl_cnt_err.de   = rd_cnt_err | prog_cnt_err;
 
   // Correctable ECC count / address
   for (genvar i = 0; i < NumBanks; i++) begin : gen_ecc_single_err_reg
@@ -1112,13 +1191,29 @@ module flash_ctrl
   // flash phy module
   //////////////////////////////////////
   logic flash_host_req;
-  mubi4_t flash_host_instr_type;
   logic flash_host_req_rdy;
   logic flash_host_req_done;
   logic flash_host_rderr;
-  logic [flash_ctrl_pkg::BusWidth-1:0] flash_host_rdata;
+  logic [flash_ctrl_pkg::BusFullWidth-1:0] flash_host_rdata;
   logic [flash_ctrl_pkg::BusAddrW-1:0] flash_host_addr;
-  logic flash_host_intg_err;
+
+  lc_ctrl_pkg::lc_tx_t host_enable;
+
+  // if flash disable is activated, error back from the adapter interface immediately
+  assign host_enable = lc_ctrl_pkg::mubi4_to_lc_inv(flash_disable[HostDisableIdx]);
+
+  tlul_pkg::tl_h2d_t gate_tl_h2d;
+  tlul_pkg::tl_d2h_t gate_tl_d2h;
+
+  tlul_lc_gate u_tl_gate (
+    .clk_i,
+    .rst_ni,
+    .tl_h2d_i(mem_tl_i),
+    .tl_d2h_o(mem_tl_o),
+    .tl_h2d_o(gate_tl_h2d),
+    .tl_d2h_i(gate_tl_d2h),
+    .lc_en_i(host_enable)
+  );
 
   tlul_adapter_sram #(
     .SramAw(BusAddrW),
@@ -1128,32 +1223,33 @@ module flash_ctrl
     .ErrOnWrite(1),
     .CmdIntgCheck(1),
     .EnableRspIntgGen(1),
-    .EnableDataIntgGen(1)
+    .EnableDataIntgGen(0),
+    .EnableDataIntgPt(1)
   ) u_tl_adapter_eflash (
     .clk_i,
     .rst_ni,
-    .tl_i        (mem_tl_i),
-    .tl_o        (mem_tl_o),
+    .tl_i        (gate_tl_h2d),
+    .tl_o        (gate_tl_d2h),
     .en_ifetch_i (flash_exec_en),
     .req_o       (flash_host_req),
-    .req_type_o  (flash_host_instr_type),
+    .req_type_o  (),
     .gnt_i       (flash_host_req_rdy),
     .we_o        (),
     .addr_o      (flash_host_addr),
     .wdata_o     (),
     .wmask_o     (),
-    .intg_error_o(flash_host_intg_err),
+    .intg_error_o(),
     .rdata_i     (flash_host_rdata),
     .rvalid_i    (flash_host_req_done),
     .rerror_i    ({flash_host_rderr,1'b0})
   );
 
-  flash_phy u_eflash (
+  flash_phy #(
+    .SecScrambleEn(SecScrambleEn)
+  ) u_eflash (
     .clk_i,
     .rst_ni,
     .host_req_i        (flash_host_req),
-    .host_intg_err_i   (flash_host_intg_err),
-    .host_instr_type_i (flash_host_instr_type),
     .host_addr_i       (flash_host_addr),
     .host_req_rdy_o    (flash_host_req_rdy),
     .host_req_done_o   (flash_host_req_done),
@@ -1163,6 +1259,8 @@ module flash_ctrl
     .flash_ctrl_o      (flash_phy_rsp),
     .tl_i              (prim_tl_i),
     .tl_o              (prim_tl_o),
+    .obs_ctrl_i,
+    .fla_obs_o,
     .lc_nvm_debug_en_i,
     .flash_bist_enable_i,
     .flash_power_down_h_i,
@@ -1200,6 +1298,8 @@ module flash_ctrl
   `ASSERT_KNOWN(IntrRdLvlKnownO_A,      intr_rd_lvl_o    )
   `ASSERT_KNOWN(IntrOpDoneKnownO_A,     intr_op_done_o   )
   `ASSERT_KNOWN(IntrErrO_A,             intr_corr_err_o  )
+  `ASSERT_KNOWN(TdoKnown_A,             cio_tdo_o        )
+  `ASSERT(TdoEnIsOne_A,                 cio_tdo_en_o === 1'b1)
 
   // combined indication that an operation has started
   // This is used only for assertions
@@ -1207,17 +1307,34 @@ module flash_ctrl
   assign unused_op_valid = prog_op_valid | rd_op_valid | erase_op_valid;
 
   // add more assertions
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(SeedCntAlertCheck_A, u_flash_hw_if.u_seed_cnt,
+                                         alert_tx_o[1])
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(AddrCntAlertCheck_A, u_flash_hw_if.u_addr_cnt,
+                                         alert_tx_o[1])
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(PageCntAlertCheck_A, u_flash_hw_if.u_page_cnt,
-                                         alert_tx_o[0])
+                                         alert_tx_o[1])
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(WordCntAlertCheck_A, u_flash_hw_if.u_word_cnt,
-                                         alert_tx_o[0])
+                                         alert_tx_o[1])
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(WipeIdx_A, u_flash_hw_if.u_wipe_idx_cnt,
-                                         alert_tx_o[0])
+                                         alert_tx_o[1])
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(ProgCnt_A, u_flash_ctrl_prog.u_cnt,
+                                         alert_tx_o[1])
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(RdCnt_A, u_flash_ctrl_rd.u_cnt,
+                                         alert_tx_o[1])
 
   `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(LcCtrlFsmCheck_A,
-    u_flash_hw_if.u_state_regs, alert_tx_o[0])
+    u_flash_hw_if.u_state_regs, alert_tx_o[1])
   `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(LcCtrlRmaFsmCheck_A,
-    u_flash_hw_if.u_rma_state_regs, alert_tx_o[0])
+    u_flash_hw_if.u_rma_state_regs, alert_tx_o[1])
   `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(ArbFsmCheck_A,
-    u_ctrl_arb.u_state_regs, alert_tx_o[0])
+    u_ctrl_arb.u_state_regs, alert_tx_o[1])
+
+   for (genvar i=0; i<NumBanks; i++) begin : gen_phy_assertions
+     `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(PhyFsmCheck_A,
+       u_eflash.gen_flash_cores[i].u_core.u_state_regs, alert_tx_o[1])
+
+     `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(PhyProgFsmCheck_A,
+       u_eflash.gen_flash_cores[i].u_core.gen_prog_data.u_prog.u_state_regs, alert_tx_o[1])
+   end
+
 endmodule

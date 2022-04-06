@@ -5,10 +5,12 @@
 #ifndef OPENTITAN_SW_DEVICE_LIB_BASE_CSR_H_
 #define OPENTITAN_SW_DEVICE_LIB_BASE_CSR_H_
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "sw/device/lib/base/csr_registers.h"
+#include "sw/device/lib/base/macros.h"
 #include "sw/device/lib/base/stdasm.h"
 
 #ifdef __cplusplus
@@ -26,23 +28,12 @@ extern "C" {
  */
 
 /**
- * Portable (C and C++) static assertion.
- *
- * TODO: replace with static_assert macro in C (assert.h does this)?
- */
-#ifdef __cplusplus
-#define CSR_STATIC_ASSERT static_assert
-#else  // __cplusplus
-#define CSR_STATIC_ASSERT _Static_assert
-#endif  // __cplusplus
-
-/**
  * Define the implementation macros.
  *
  * The implementation used depends on whether the CSR library is providing a
  * real or a mocked interface.
  */
-#ifdef MOCK_CSR
+#ifndef OT_PLATFORM_RV32
 
 /**
  * Macro to check that an argument is a constant expression at compile time.
@@ -59,75 +50,75 @@ extern "C" {
 
 uint32_t mock_csr_read(uint32_t addr);
 
-#define CSR_READ_IMPL(csr, dest)                               \
-  do {                                                         \
-    CSR_STATIC_ASSERT(sizeof(*dest) == sizeof(uint32_t),       \
-                      "dest must point to a 4-byte variable"); \
-    CSR_FORCE_CONST_EXPR(csr);                                 \
-    *dest = mock_csr_read(csr);                                \
+#define CSR_READ_IMPL(csr, dest)                           \
+  do {                                                     \
+    static_assert(sizeof(*dest) == sizeof(uint32_t),       \
+                  "dest must point to a 4-byte variable"); \
+    CSR_FORCE_CONST_EXPR(csr);                             \
+    *dest = mock_csr_read(csr);                            \
   } while (false)
 
 void mock_csr_write(uint32_t addr, uint32_t value);
 
-#define CSR_WRITE_IMPL(csr, val)                       \
-  do {                                                 \
-    CSR_STATIC_ASSERT(sizeof(val) == sizeof(uint32_t), \
-                      "val must be a 4-byte value");   \
-    CSR_FORCE_CONST_EXPR(csr);                         \
-    mock_csr_write(csr, val);                          \
+#define CSR_WRITE_IMPL(csr, val)                   \
+  do {                                             \
+    static_assert(sizeof(val) == sizeof(uint32_t), \
+                  "val must be a 4-byte value");   \
+    CSR_FORCE_CONST_EXPR(csr);                     \
+    mock_csr_write(csr, val);                      \
   } while (false)
 
 void mock_csr_set_bits(uint32_t addr, uint32_t mask);
 
-#define CSR_SET_BITS_IMPL(csr, mask)                    \
-  do {                                                  \
-    CSR_STATIC_ASSERT(sizeof(mask) == sizeof(uint32_t), \
-                      "mask must be a 4-byte value");   \
-    CSR_FORCE_CONST_EXPR(csr);                          \
-    mock_csr_set_bits(csr, mask);                       \
+#define CSR_SET_BITS_IMPL(csr, mask)                \
+  do {                                              \
+    static_assert(sizeof(mask) == sizeof(uint32_t), \
+                  "mask must be a 4-byte value");   \
+    CSR_FORCE_CONST_EXPR(csr);                      \
+    mock_csr_set_bits(csr, mask);                   \
   } while (false)
 
 void mock_csr_clear_bits(uint32_t addr, uint32_t mask);
 
-#define CSR_CLEAR_BITS_IMPL(csr, mask)                  \
-  do {                                                  \
-    CSR_STATIC_ASSERT(sizeof(mask) == sizeof(uint32_t), \
-                      "mask must be a 4-byte value");   \
-    CSR_FORCE_CONST_EXPR(csr);                          \
-    mock_csr_clear_bits(csr, mask);                     \
+#define CSR_CLEAR_BITS_IMPL(csr, mask)              \
+  do {                                              \
+    static_assert(sizeof(mask) == sizeof(uint32_t), \
+                  "mask must be a 4-byte value");   \
+    CSR_FORCE_CONST_EXPR(csr);                      \
+    mock_csr_clear_bits(csr, mask);                 \
   } while (false)
 
-#else  // MOCK_CSR
+#else  // OT_PLATFORM_RV32
 
-#define CSR_READ_IMPL(csr, dest)                               \
-  do {                                                         \
-    CSR_STATIC_ASSERT(sizeof(*dest) == sizeof(uint32_t),       \
-                      "dest must point to a 4-byte variable"); \
-    asm volatile("csrr %0, %1;" : "=r"(*dest) : "i"(csr));     \
+#define CSR_READ_IMPL(csr, dest)                           \
+  do {                                                     \
+    static_assert(sizeof(*dest) == sizeof(uint32_t),       \
+                  "dest must point to a 4-byte variable"); \
+    asm volatile("csrr %0, %1;" : "=r"(*dest) : "i"(csr)); \
   } while (false)
 
 #define CSR_WRITE_IMPL(csr, val)                       \
   do {                                                 \
-    CSR_STATIC_ASSERT(sizeof(val) == sizeof(uint32_t), \
-                      "val must be a 4-byte value");   \
+    static_assert(sizeof(val) == sizeof(uint32_t),     \
+                  "val must be a 4-byte value");       \
     asm volatile("csrw %0, %1;" ::"i"(csr), "r"(val)); \
   } while (false)
 
 #define CSR_SET_BITS_IMPL(csr, mask)                    \
   do {                                                  \
-    CSR_STATIC_ASSERT(sizeof(mask) == sizeof(uint32_t), \
-                      "mask must be a 4-byte value");   \
+    static_assert(sizeof(mask) == sizeof(uint32_t),     \
+                  "mask must be a 4-byte value");       \
     asm volatile("csrs %0, %1;" ::"i"(csr), "r"(mask)); \
   } while (false)
 
 #define CSR_CLEAR_BITS_IMPL(csr, mask)                  \
   do {                                                  \
-    CSR_STATIC_ASSERT(sizeof(mask) == sizeof(uint32_t), \
-                      "mask must be a 4-byte value");   \
+    static_assert(sizeof(mask) == sizeof(uint32_t),     \
+                  "mask must be a 4-byte value");       \
     asm volatile("csrc %0, %1;" ::"i"(csr), "r"(mask)); \
   } while (false)
 
-#endif  // MOCK_CSR
+#endif  // OT_PLATFORM_RV32
 
 /**
  * Read the value of a CSR and place the result into the location pointed to by

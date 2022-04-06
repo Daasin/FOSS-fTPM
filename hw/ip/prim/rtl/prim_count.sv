@@ -30,6 +30,8 @@
 //    - en_i increments/decrements the up_count/down_count by step_i, if neither of the above is
 //      set.
 
+`include "prim_assert.sv"
+
 module prim_count import prim_count_pkg::*; #(
   parameter int Width = 2,
   parameter bit OutSelDnCnt = 1, // 0 selects up count
@@ -210,8 +212,3 @@ module prim_count import prim_count_pkg::*; #(
   `endif
 endmodule // prim_count
 
-`define ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(NAME_, PRIM_HIER_, ALERT_, MAX_CYCLES_ = 5) \
-  `ASSERT(NAME_, $rose(PRIM_HIER_.err_o) |-> ##[1:MAX_CYCLES_] $rose(ALERT_.alert_p)) \
-  `ifdef INC_ASSERT \
-  assign PRIM_HIER_.unused_assert_connected = 1'b1; \
-  `endif

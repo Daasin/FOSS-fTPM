@@ -13,7 +13,7 @@ package keymgr_pkg;
   parameter int OtbnKeyWidth = 384;
   parameter int DigestWidth = 128;     // uses truncated hash
   parameter int KmacDataIfWidth = 64;  // KMAC interface data width
-  parameter int KeyMgrStages = 3;      // Number of key manager stages (creator, ownerInt, owner)
+  parameter int KeyMgrStages = 3; // Number of key manager stages (creator, ownerInt, owner)
   parameter int SwBindingWidth = 32 * keymgr_reg_pkg::NumSwBindingReg;
   parameter int SaltWidth = 32 * keymgr_reg_pkg::NumSaltReg;
   parameter int Shares = 2; // number of key shares
@@ -50,6 +50,8 @@ package keymgr_pkg;
     256'h0A5CCCD9627BF6169B3A765D3D6D0CD89DBDCB7B6DF8D3C03746D60A0145D3ED;
   parameter seed_t RndCnstOtbnSeedDefault =
     256'h17B0AF865F8ACDDFC7580C2B7BC3FB33FC9BB5A4B292216C123ACF99A7861F96;
+  parameter seed_t RndCnstCdiDefault =
+    256'hC69C544D153A692AEEC4A0887BD5255F5C588C63A8BD94479BCFF7432DC55E3B;
 
   // Default Lfsr configurations
   // These LFSR parameters have been generated with
@@ -77,7 +79,6 @@ package keymgr_pkg;
   // key version + salt + key ID + constant
   parameter int GenDataWidth = 32 + SaltWidth + KeyWidth*2;
   parameter int StageWidth = $clog2(KeyMgrStages);
-
   // Max Payload Width to derivation function
   // see security strength description https://keccak.team/keccak.html
   // The max width here is chosen arbitrarily to ensure we do not get out of hand.
@@ -93,7 +94,7 @@ package keymgr_pkg;
   } keymgr_stage_e;
 
   // Enumeration for sideload sel
-  typedef enum logic [2:0] {
+  typedef enum logic [1:0] {
     None,
     Aes,
     Kmac,
@@ -154,18 +155,22 @@ package keymgr_pkg;
   typedef enum logic [1:0] {
     SyncFaultKmacOp,
     SyncFaultKmacOut,
+    SyncFaultSideSel,
     SyncFaultLastIdx
   } keymgr_sync_fault_e;
 
   typedef enum logic [3:0] {
     AsyncFaultKmacCmd,
     AsyncFaultKmacFsm,
+    AsyncFaultKmacDone,
     AsyncFaultRegIntg,
     AsyncFaultShadow,
     AsyncFaultFsmIntg,
+    AsyncFaultFsmChk,
     AsyncFaultCntErr,
     AsyncFaultRCntErr,
     AsyncFaultSideErr,
+    AsyncFaultKeyEcc,
     AsyncFaultLastIdx
   } keymgr_async_fault_e;
 
@@ -183,14 +188,18 @@ package keymgr_pkg;
   typedef enum logic [3:0] {
     FaultKmacCmd,
     FaultKmacFsm,
+    FaultKmacDone,
     FaultKmacOp,
     FaultKmacOut,
     FaultRegIntg,
     FaultShadow,
     FaultCtrlFsm,
+    FaultCtrlFsmChk,
     FaultCtrlCnt,
     FaultReseedCnt,
     FaultSideFsm,
+    FaultSideSel,
+    FaultKeyEcc,
     FaultLastPos
   } keymgr_fault_pos_e;
 

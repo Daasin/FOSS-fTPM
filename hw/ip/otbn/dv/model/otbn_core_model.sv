@@ -13,16 +13,15 @@
 
 module otbn_core_model
   import otbn_pkg::*;
-  import otbn_model_pkg::*;
   import edn_pkg::*;
   import keymgr_pkg::otbn_key_req_t;
 #(
   // The scope that contains the instruction and data memory (for DPI)
   parameter string MemScope = "",
 
-  // Scope of an RTL OTBN implementation (for DPI). If empty, this is a "standalone" model, which
-  // should update DMEM on completion. If not empty, we assume it's the scope for the top-level of a
-  // real implementation running alongside and we check DMEM contents on completion.
+  // Scope of an RTL OTBN implementation (for DPI). This should be give the scope for the top-level
+  // of a real implementation running alongside. We will use it to check DMEM and register file
+  // contents on completion of an operation.
   parameter string DesignScope = "",
 
   // Enable internal secure wipe
@@ -33,7 +32,8 @@ module otbn_core_model
   input  logic               rst_ni,
   input  logic               rst_edn_ni,
 
-  input  logic               start_i, // start the operation
+  input  logic [7:0]         cmd_i,    // CMD register for OTBN commands
+  input  logic               cmd_en_i, // CMD register enable for OTBN commands
 
   input  logic               lc_escalate_en_i,
 
@@ -47,6 +47,8 @@ module otbn_core_model
   output logic               edn_urnd_o, // EDN request interface for URND seed
   input  logic               edn_urnd_cdc_done_i, // URND seed from EDN is valid (DUT perspective)
 
+  input  logic           otp_key_cdc_done_i, // Scrambling key from OTP is valid (DUT perspective)
+
   output bit [7:0]       status_o,   // STATUS register
   output bit [31:0]      insn_cnt_o, // INSN_CNT register
 
@@ -56,6 +58,8 @@ module otbn_core_model
 
   output bit             err_o // something went wrong
 );
+
+`include "otbn_model_dpi.svh"
 
   // Create and destroy an object through which we can talk to the ISS.
   chandle model_handle;
@@ -82,12 +86,16 @@ module otbn_core_model
   bit failed_step, check_due, running;
   assign {failed_step, check_due, running} = model_state[2:0];
 
+  // Process incoming CMD command only when it is allowed to do so.
+  logic [7:0]  cmd;
+
+  assign cmd = cmd_en_i ? cmd_i : 8'h0;
   bit [7:0]  status_d, status_q;
   bit [31:0] insn_cnt_d, insn_cnt_q;
   bit [31:0] raw_err_bits_d, raw_err_bits_q;
   bit [31:0] stop_pc_d, stop_pc_q;
   bit        rnd_req_start_d, rnd_req_start_q;
-  bit        failed_lc_escalate;
+  bit        failed_lc_escalate, failed_keymgr_value;
 
   bit unused_raw_err_bits;
   logic unused_edn_rsp_fips;
@@ -116,9 +124,10 @@ module otbn_core_model
   end
 
   // EDN URND Seed Request Logic
-  logic edn_urnd_req_q, edn_urnd_req_d, start_q;
+  logic edn_urnd_req_q, edn_urnd_req_d, start_q, start_d;
 
-  // URND Reseeding is only done when we are starting OTBN from fresh.
+  // URND Reseeding is only done when OTBN receives EXECUTE command.
+  assign start_d = (cmd == CmdExecute);
   assign edn_urnd_req_d = ~edn_urnd_cdc_done_i & (edn_urnd_req_q | start_q);
 
   assign edn_urnd_o = edn_urnd_req_q;
@@ -129,7 +138,7 @@ module otbn_core_model
       start_q <= 1'b0;
     end else begin
       edn_urnd_req_q <= edn_urnd_req_d;
-      start_q <= start_i;
+      start_q <= start_d;
     end
   end
 
@@ -153,20 +162,16 @@ module otbn_core_model
   // exactly two cycles of delay (this is a synchroniser, not a CDC, so its behaviour is easy to
   // predict). Model that delay in the SystemVerilog here, since it's much easier than handling it
   // in the Python.
-  //
-  // We actually do another hack here, where we only delay by one cycle. This is because the easiest
-  // way to make the escalation signal work is to apply it at the *end* of the Python cycle, which
-  // means we gain an extra cycle of delay on the Python side.
-  logic [1:0] escalate_fifo;
+  logic [2:0] escalate_fifo;
   logic       new_escalation;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       escalate_fifo <= '0;
     end else begin
-      escalate_fifo <= {escalate_fifo[0], lc_escalate_en_i};
+      escalate_fifo <= {escalate_fifo[1:0], lc_escalate_en_i};
     end
   end
-  assign new_escalation = escalate_fifo[0] & ~escalate_fifo[1];
+  assign new_escalation = escalate_fifo[1] & ~escalate_fifo[2];
 
   // A "busy" counter. We'd like to avoid stepping the Python process on every cycle when there's
   // nothing going on (since it's rather expensive). But exactly modelling *when* we can safely
@@ -177,8 +182,15 @@ module otbn_core_model
   // model the timing too precisely on the SV side.
   logic [3:0] busy_counter_q, busy_counter_d;
   logic       reset_busy_counter, step_iss;
+  // This bit can be set by a hierrachical component when ISS model should step for extra time.
+  bit         wakeup_iss;
 
-  assign reset_busy_counter = start_i | running | check_due | new_escalation | edn_rnd_cdc_done_i;
+  initial begin
+    wakeup_iss = 0;
+  end
+
+  assign reset_busy_counter = |{running, cmd_en_i, check_due, new_escalation, edn_rnd_cdc_done_i,
+                                wakeup_iss};
   assign step_iss = reset_busy_counter || (busy_counter_q != 0);
 
   always_comb begin
@@ -199,7 +211,9 @@ module otbn_core_model
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
+  // Note: This can't be an always_ff block because we write to model_state here and also in an
+  // initial block (see declaration of the variable above)
+  always @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       otbn_model_reset(model_handle);
       model_state <= 0;
@@ -210,11 +224,15 @@ module otbn_core_model
       stop_pc_q <= 0;
     end else begin
       if (new_escalation) begin
-        failed_lc_escalate <= (otbn_model_send_lc_escalation(model_handle) != 0);
+        // Setting LIFECYCLE_ESCALATION bit
+        bit[31:0] err_val = 32'd1 << 22;
+        failed_lc_escalate <= (otbn_model_send_err_escalation(model_handle, err_val) != 0);
       end
       if (!$stable(keymgr_key_i) || $rose(rst_ni)) begin
-        otbn_model_set_keymgr_value(model_handle, keymgr_key_i.key[0], keymgr_key_i.key[1],
-                                    keymgr_key_i.valid);
+        failed_keymgr_value <= (otbn_model_set_keymgr_value(model_handle,
+                                                            keymgr_key_i.key[0],
+                                                            keymgr_key_i.key[1],
+                                                            keymgr_key_i.valid) != 0);
       end
       if (edn_urnd_cdc_done_i) begin
         edn_model_urnd_cdc_done(model_handle);
@@ -222,10 +240,13 @@ module otbn_core_model
       if (edn_rnd_cdc_done_i) begin
         edn_model_rnd_cdc_done(model_handle);
       end
+      if (otp_key_cdc_done_i) begin
+        otp_key_cdc_done(model_handle);
+      end
       if (step_iss) begin
         model_state <= otbn_model_step(model_handle,
-                                       start_i,
                                        model_state,
+                                       cmd,
                                        status_d,
                                        insn_cnt_d,
                                        rnd_req_start_d,
@@ -267,36 +288,33 @@ module otbn_core_model
   assign status_o = status_q;
   assign insn_cnt_o = insn_cnt_q;
 
-  // If DesignScope is not empty, we have a design to check. Bind a copy of otbn_rf_snooper_if into
-  // each register file. The otbn_model_check() function will use these to extract memory contents.
-  if (DesignScope != "") begin: g_check_design
-    // TODO: This bind is by module, rather than by instance, because I couldn't get the by-instance
-    // syntax plus upwards name referencing to work with Verilator. Obviously, this won't work with
-    // multiple OTBN instances, so it would be nice to get it right.
-    bind otbn_rf_base_ff otbn_rf_snooper_if #(
-      .Width           (BaseIntgWidth),
-      .Depth           (NGpr),
-      .IntegrityEnabled(1)
-    ) u_snooper (
-      .rf (rf_reg)
+  // TODO: This bind is by module, rather than by instance, because I couldn't get the by-instance
+  // syntax plus upwards name referencing to work with Verilator. Obviously, this won't work with
+  // multiple OTBN instances, so it would be nice to get it right.
+  bind otbn_rf_base_ff otbn_rf_snooper_if #(
+    .Width           (BaseIntgWidth),
+    .Depth           (NGpr),
+    .IntegrityEnabled(1)
+  ) u_snooper (
+    .rf (rf_reg)
+  );
+
+  bind otbn_rf_bignum_ff otbn_rf_snooper_if #(
+    .Width           (ExtWLEN),
+    .Depth           (NWdr),
+    .IntegrityEnabled(1)
+  ) u_snooper (
+    .rf (rf)
+  );
+
+  bind otbn_rf_base otbn_stack_snooper_if #(.StackIntgWidth(39), .StackWidth(32), .StackDepth(8))
+    u_call_stack_snooper (
+      .stack_storage(u_call_stack.stack_storage),
+      .stack_wr_ptr_q(u_call_stack.stack_wr_ptr_q)
     );
 
-    bind otbn_rf_bignum_ff otbn_rf_snooper_if #(
-      .Width           (ExtWLEN),
-      .Depth           (NWdr),
-      .IntegrityEnabled(1)
-    ) u_snooper (
-      .rf (rf)
-    );
-
-    bind otbn_rf_base otbn_stack_snooper_if #(.StackIntgWidth(39), .StackWidth(32), .StackDepth(8))
-      u_call_stack_snooper (
-        .stack_storage(u_call_stack.stack_storage),
-        .stack_wr_ptr_q(u_call_stack.stack_wr_ptr_q)
-      );
-  end
-
-  assign err_o = failed_step | failed_check | check_mismatch_q | failed_lc_escalate;
+  assign err_o = |{failed_step, failed_check, check_mismatch_q,
+                   failed_lc_escalate, failed_keymgr_value};
 
   // Derive a "done" signal. This should trigger for a single cycle when OTBN finishes its work.
   // It's analogous to the done_o signal on otbn_core, but this signal is delayed by a single cycle

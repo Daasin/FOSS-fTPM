@@ -12,6 +12,7 @@ class rom_ctrl_corrupt_sig_fatal_chk_vseq extends rom_ctrl_base_vseq;
 
   typedef enum bit [2:0] {
       CheckerCtrConsistency,
+      CheckerCtrlFlowConsistency,
       CompareCtrlFlowConsistency,
       CompareCtrConsistency,
       MuxMubi,
@@ -45,6 +46,26 @@ class rom_ctrl_corrupt_sig_fatal_chk_vseq extends rom_ctrl_base_vseq;
           chk_fsm_state();
         end
         // The main checker FSM steps on internal 'done' signals, coming from its address counter,
+        // the KMAC response and its comparison counter. If any of these are asserted at times we
+        // don't expect, the FSM jumps to an invalid state. This triggers an alert and will not set
+        // the external 'done' signal for pwrmgr to continue boot.
+        CheckerCtrlFlowConsistency: begin
+          wait_with_bound(100);
+          force_sig("tb.dut.kmac_data_i.done", 1);
+          check_for_alert();
+          chk_fsm_state();
+          dut_init();
+          wait_with_bound(100);
+          force_sig("tb.dut.gen_fsm_scramble_enabled.u_checker_fsm.checker_done", 1);
+          check_for_alert();
+          chk_fsm_state();
+          dut_init();
+          wait_with_bound(100);
+          force_sig("tb.dut.gen_fsm_scramble_enabled.u_checker_fsm.counter_done", 1);
+          check_for_alert();
+          chk_fsm_state();
+        end
+        // The main checker FSM steps on internal 'done' signals, coming from its address counter,
         // the KMAC response and its comparison counter. If any of these are asserted at times
         // we don't expect, the FSM jumps to an invalid state. This triggers an alert and will not
         // set the external 'done' signal for pwrmgr to continue boot. To test this start_checker_q
@@ -63,12 +84,12 @@ class rom_ctrl_corrupt_sig_fatal_chk_vseq extends rom_ctrl_base_vseq;
         end
         // The hash comparison module has an internal count. If this glitches to a nonzero value
         // before the comparison starts or to a value other than the last index after the
-        // comparison ends then an fatal alert is generated.
+        // comparison ends then a fatal alert is generated.
         CompareCtrConsistency: begin
           bit [2:0] invalid_addr;
+          $assertoff(0, "tb.dut.KeymgrValidChk_A");
           wait_with_bound(10000);
           `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(invalid_addr, invalid_addr > 0;);
-          $assertoff(0, "tb.dut.KeymgrValidChk_A");
           force_sig("tb.dut.gen_fsm_scramble_enabled.u_checker_fsm.u_compare.addr_q",
                     invalid_addr);
           check_for_alert();
@@ -122,7 +143,6 @@ class rom_ctrl_corrupt_sig_fatal_chk_vseq extends rom_ctrl_base_vseq;
           bit [TL_AW-1:0]      tgt_addr;
           cip_tl_seq_item tl_access_rsp;
           bit             completed, saw_err;
-          bit             data_intg_ok;
 
           wait (cfg.rom_ctrl_vif.pwrmgr_data.done == MuBi4True);
           wait_with_bound(10);
@@ -157,12 +177,6 @@ class rom_ctrl_corrupt_sig_fatal_chk_vseq extends rom_ctrl_base_vseq;
                            );
               `DV_CHECK_EQ(completed, 1)
               `DV_CHECK_EQ(saw_err, 0)
-              // data integrity should be wrong
-              data_intg_ok = tl_access_rsp.is_d_chan_intg_ok(.en_rsp_intg_chk(0),
-                                                             .en_data_intg_chk(1),
-                                                             .throw_error(0)
-                                                            );
-              `DV_CHECK_EQ(data_intg_ok, 0)
               if ((corr_data == rdata) || (corr_data == rdata_tgt)) begin
                 `uvm_error(`gfn, "corr_data matching data in rom")
               end

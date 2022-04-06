@@ -1,87 +1,56 @@
 # Copyright lowRISC contributors.
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
+
 load("//rules:opentitan.bzl", "OPENTITAN_CPU")
+load("//rules:cross_platform.bzl", "dual_cc_device_library_of", "dual_cc_library", "dual_inputs")
+load("//rules:linker.bzl", "ld_library")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["static_critical.ld"])
+exports_files([
+    "mock_csr.h",
+    "mock_csr.cc",
+    "mock_csr_test.cc",
+])
 
-cc_library(
-    name = "mock_csr",
-    testonly = True,
-    srcs = ["mock_csr.cc"],
-    hdrs = ["mock_csr.h"],
-    defines = ["MOCK_CSR"],
-    deps = [
-        "//sw/device/lib/base",
-        "//sw/device/silicon_creator/testing:mask_rom_test",
-        "@googletest//:gtest",
-    ],
-)
-
-cc_test(
-    name = "mock_csr_test",
-    srcs = ["mock_csr_test.cc"],
-    deps = [
-        ":mock_csr",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "mock_abs_mmio",
-    testonly = True,
-    hdrs = [
-        "mock_abs_mmio.h",
-        "//sw/device/lib/base:abs_mmio_h",
-    ],
-    defines = ["MOCK_ABS_MMIO"],
-    deps = [
-        "//sw/device/lib/base/testing",
-        "//sw/device/silicon_creator/testing:mask_rom_test",
-        "@googletest//:gtest",
-    ],
-)
-
-cc_library(
+dual_cc_library(
     name = "sec_mmio",
-    srcs = ["sec_mmio.c"],
-    hdrs = ["sec_mmio.h"],
-    target_compatible_with = [OPENTITAN_CPU],
-    deps = [
-        "//sw/device/lib/base",
-        "//sw/device/lib/base:abs_mmio",
-        "//sw/device/silicon_creator/lib:error",
-    ],
-)
-
-cc_library(
-    name = "mock_sec_mmio",
-    testonly = True,
-    hdrs = [
-        "mock_sec_mmio.h",
-        "sec_mmio.h",
-    ],
-    deps = [
-        "//sw/device/lib/base/testing",
-        "//sw/device/silicon_creator/testing:mask_rom_test",
-        "@googletest//:gtest",
-    ],
+    srcs = dual_inputs(
+        device = ["sec_mmio.c"],
+        host = ["mock_sec_mmio.cc"],
+    ),
+    hdrs = dual_inputs(
+        host = ["mock_sec_mmio.h"],
+        shared = ["sec_mmio.h"],
+    ),
+    deps = dual_inputs(
+        host = [
+            "//sw/device/lib/base/testing:global_mock",
+            "//sw/device/silicon_creator/testing:mask_rom_test",
+            "@googletest//:gtest",
+        ],
+        shared = [
+            "//sw/device/lib/base:mmio",
+            "//sw/device/lib/base:abs_mmio",
+            "//sw/device/lib/base:hardened",
+            "//sw/device/lib/base:macros",
+            "//sw/device/silicon_creator/lib:error",
+        ],
+    ),
 )
 
 cc_test(
     name = "sec_mmio_unittest",
-    srcs = [
-        "sec_mmio.c",
-        "sec_mmio.h",
-        "sec_mmio_unittest.cc",
-    ],
-    defines = ["OT_OFF_TARGET_TEST"],
+    srcs = ["sec_mmio_unittest.cc"],
     deps = [
-        ":mock_abs_mmio",
-        "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib:error",
+        dual_cc_device_library_of(":sec_mmio"),
+        "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],
+)
+
+ld_library(
+    name = "static_critical_sections",
+    fragments = ["static_critical.ld"],
 )

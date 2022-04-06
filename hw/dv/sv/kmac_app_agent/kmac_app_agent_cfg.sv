@@ -8,11 +8,11 @@ class kmac_app_agent_cfg extends dv_base_agent_cfg;
   virtual kmac_app_intf vif;
 
   int unsigned req_delay_min = 0;
-  int unsigned req_delay_max = 1000;
+  int unsigned req_delay_max = 100;
 
   // delay between last for req data and done for digest data
   int unsigned rsp_delay_min = 0;
-  int unsigned rsp_delay_max = 1000;
+  int unsigned rsp_delay_max = 100;
 
   // Enables/disable all protocol delays.
   rand bit zero_delays;
@@ -23,8 +23,11 @@ class kmac_app_agent_cfg extends dv_base_agent_cfg;
   // Knob to enable percentage of error response in auto-response sequence.
   int unsigned error_rsp_pct = 0;
 
+  // Knob to allow injecting zeros in strb.
+  bit inject_zero_in_host_strb = 0;
+
   rand push_pull_agent_cfg#(`CONNECT_DATA_WIDTH) m_data_push_agent_cfg;
-  
+
   // KMAC digest share0/1 that can be set from test env.
   kmac_pkg::rsp_digest_t rsp_digest_hs[$];
 

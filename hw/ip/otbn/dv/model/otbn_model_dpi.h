@@ -4,8 +4,8 @@
 #ifndef OPENTITAN_HW_IP_OTBN_DV_MODEL_OTBN_MODEL_DPI_H_
 #define OPENTITAN_HW_IP_OTBN_DV_MODEL_OTBN_MODEL_DPI_H_
 
-// The DPI exports for OtbnModel. See also otbn_model_pkg.sv, where they are
-// declared for the SystemVerilog side.
+// The DPI exports for OtbnModel. See also otbn_model_dpi.svh, where
+// they are declared for the SystemVerilog side.
 //
 // These are defined in a separate file from otbn_model.h because otherwise
 // something like otbn_top_sim.cc will see both these defines and the
@@ -36,12 +36,15 @@ void edn_model_urnd_step(OtbnModel *model,
 // Signal RTL is finished processing RND data to Model
 void edn_model_rnd_cdc_done(OtbnModel *model);
 
+// Signal RTL is finished processing OTP key to the Model
+void otp_key_cdc_done(OtbnModel *model);
+
 // Signal RTL is finished processing EDN data for URND to Model
 void edn_model_urnd_cdc_done(OtbnModel *model);
 
-// Pass keymgr data to model
-void otbn_model_set_keymgr_value(OtbnModel *model, svLogicVecVal *key0,
-                                 svLogicVecVal *key1, unsigned char valid);
+// Pass keymgr data to model. Returns 0 on success; -1 on error.
+int otbn_model_set_keymgr_value(OtbnModel *model, svLogicVecVal *key0,
+                                svLogicVecVal *key1, unsigned char valid);
 
 // The main entry point to the OTBN model, exported from here and used in
 // otbn_core_model.sv.
@@ -67,8 +70,8 @@ void otbn_model_set_keymgr_value(OtbnModel *model, svLogicVecVal *key0,
 // write out err_bits and stop_pc and set check_due to ensure otbn_model_check
 // runs on the next negedge of the clock.
 //
-// If start is true, we start the model and then step once (as above).
-unsigned otbn_model_step(OtbnModel *model, svLogic start, unsigned model_state,
+unsigned otbn_model_step(OtbnModel *model, unsigned model_state,
+                         svBitVecVal *cmd /* bit [7:0] */,
                          svBitVecVal *status /* bit [7:0] */,
                          svBitVecVal *insn_cnt /* bit [31:0] */,
                          svBitVecVal *rnd_req /* bit [0:0] */,
@@ -108,9 +111,9 @@ void otbn_model_reset(OtbnModel *model);
 // Take loop warps from an OtbnMemUtil
 void otbn_take_loop_warps(OtbnModel *model, OtbnMemUtil *memutil);
 
-// React to a lifecycle controller escalation signal. Returns 0 on success or
-// -1 on failure.
-int otbn_model_send_lc_escalation(OtbnModel *model);
+// React to an error escalation. Returns 0 on success or -1 on failure.
+int otbn_model_send_err_escalation(OtbnModel *model,
+                                   svBitVecVal *err_val /* bit [31:0] */);
 }
 
 #endif  // OPENTITAN_HW_IP_OTBN_DV_MODEL_OTBN_MODEL_DPI_H_

@@ -17,7 +17,8 @@ module rstmgr
   import prim_mubi_pkg::mubi4_t;
 #(
   parameter logic [NumAlerts-1:0] AlertAsyncOn = {NumAlerts{1'b1}},
-  parameter bit SecCheck = 1
+  parameter bit SecCheck = 1,
+  parameter int SecMaxSyncDelay = 2
 ) (
   // Primary module clocks
   input clk_i,
@@ -45,14 +46,13 @@ module rstmgr
   output mubi4_t sw_rst_req_o,
 
   // cpu related inputs
-  input logic rst_cpu_n_i,
   input logic ndmreset_req_i,
 
   // Interface to alert handler
   input alert_pkg::alert_crashdump_t alert_dump_i,
 
   // Interface to cpu crash dump
-  input ibex_pkg::crash_dump_t cpu_dump_i,
+  input rv_core_ibex_pkg::cpu_crash_dump_t cpu_dump_i,
 
   // dft bypass
   input scan_rst_ni,
@@ -192,14 +192,16 @@ module rstmgr
 
   // All of these are fatal alerts
   assign alerts[0] = reg_intg_err ||
-                     |cnsty_chk_errs ||
-                     |shadow_cnsty_chk_errs ||
                      |fsm_errs ||
                      |shadow_fsm_errs;
 
+  assign alerts[1] = |cnsty_chk_errs ||
+                     |shadow_cnsty_chk_errs;
+
+
   assign alert_test = {
-    reg2hw.alert_test.q &
-    reg2hw.alert_test.qe
+    reg2hw.alert_test.fatal_cnsty_fault.q & reg2hw.alert_test.fatal_cnsty_fault.qe,
+    reg2hw.alert_test.fatal_fault.q & reg2hw.alert_test.fatal_fault.qe
   };
 
   for (genvar i = 0; i < NumAlerts; i++) begin : gen_alert_tx
@@ -210,7 +212,7 @@ module rstmgr
       .clk_i,
       .rst_ni,
       .alert_test_i  ( alert_test[i] ),
-      .alert_req_i   ( alerts[0]     ),
+      .alert_req_i   ( alerts[i]     ),
       .alert_ack_o   (               ),
       .alert_state_o (               ),
       .alert_rx_i    ( alert_rx_i[i] ),
@@ -287,45 +289,11 @@ module rstmgr
 
 
   ////////////////////////////////////////////////////
-  // Software reset controls external reg           //
-  ////////////////////////////////////////////////////
-  logic [NumSwResets-1:0] sw_rst_ctrl_n;
-
-  for (genvar i=0; i < NumSwResets; i++) begin : gen_sw_rst_ext_regs
-    prim_subreg #(
-      .DW(1),
-      .SwAccess(prim_subreg_pkg::SwAccessRW),
-      .RESVAL(1)
-    ) u_rst_sw_ctrl_reg (
-      .clk_i,
-      .rst_ni,
-      .we(reg2hw.sw_rst_ctrl_n[i].qe & reg2hw.sw_rst_regwen[i]),
-      .wd(reg2hw.sw_rst_ctrl_n[i].q),
-      .de('0),
-      .d('0),
-      .qe(),
-      .q(sw_rst_ctrl_n[i]),
-      .qs(hw2reg.sw_rst_ctrl_n[i].d)
-    );
-  end
-
-  ////////////////////////////////////////////////////
   // leaf reset in the system                       //
   // These should all be generated                  //
   ////////////////////////////////////////////////////
   // To simplify generation, each reset generates all associated power domain outputs.
   // If a reset does not support a particular power domain, that reset is always hard-wired to 0.
-
-  prim_mubi_pkg::mubi4_t [${len(leaf_rsts)-1}:0] leaf_rst_scanmode;
-  prim_mubi4_sync #(
-    .NumCopies(${len(leaf_rsts)}),
-    .AsyncOn(0)
-    ) u_leaf_rst_scanmode_sync  (
-    .clk_i,
-    .rst_ni,
-    .mubi_i(scanmode_i),
-    .mubi_o(leaf_rst_scanmode)
- );
 
 % for i, rst in enumerate(leaf_rsts):
 <%
@@ -344,19 +312,25 @@ module rstmgr
     % for domain in power_domains:
        % if domain in rst.domains:
   rstmgr_leaf_rst #(
-    .SecCheck(SecCheck)
+    .SecCheck(SecCheck),
+    .SecMaxSyncDelay(SecMaxSyncDelay),
+    % if rst.sw:
+    .SwRstReq(1'b1)
+    % else:
+    .SwRstReq(1'b0)
+    % endif
   ) u_d${domain.lower()}_${name} (
     .clk_i,
     .rst_ni,
     .leaf_clk_i(clk_${rst.clock.name}_i),
     .parent_rst_ni(rst_${rst.parent}_n[Domain${domain}Sel]),
          % if rst.sw:
-    .sw_rst_req_ni(sw_rst_ctrl_n[${rst.name.upper()}]),
+    .sw_rst_req_ni(reg2hw.sw_rst_ctrl_n[${rst.name.upper()}].q),
          % else:
     .sw_rst_req_ni(1'b1),
          % endif
     .scan_rst_ni,
-    .scan_sel(prim_mubi_pkg::mubi4_test_true_strict(leaf_rst_scanmode[${i}])),
+    .scanmode_i,
     .rst_en_o(rst_en_o.${name}[Domain${domain}Sel]),
     .leaf_rst_o(resets_o.rst_${name}_n[Domain${domain}Sel]),
     .err_o(${err_prefix[j]}cnsty_chk_errs[${i}][Domain${domain}Sel]),
@@ -392,20 +366,18 @@ module rstmgr
   logic rst_hw_req;
   logic rst_low_power;
   logic rst_ndm;
-  logic rst_cpu_nq;
-  logic first_reset;
   logic pwrmgr_rst_req;
 
   // there is a valid reset request from pwrmgr
   assign pwrmgr_rst_req = |pwr_i.rst_lc_req || |pwr_i.rst_sys_req;
 
-  // The qualification of first reset below could technically be POR as well.
-  // However, that would enforce software to clear POR upon cold power up.  While that is
-  // the most likely outcome anyways, hardware should not require that.
-  assign rst_hw_req    = ~first_reset & pwrmgr_rst_req &
+  // a reset reason is only valid if the related processing element is also reset.
+  // In the future, if ever there are multiple processing elements, this code here
+  // must be updated to account for each individual core.
+  assign rst_hw_req    = pwrmgr_rst_req &
                          (pwr_i.reset_cause == pwrmgr_pkg::HwReq);
-  assign rst_ndm       = ~first_reset & ndm_req_valid;
-  assign rst_low_power = ~first_reset & pwrmgr_rst_req &
+  assign rst_ndm       = ndm_req_valid;
+  assign rst_low_power = pwrmgr_rst_req &
                          (pwr_i.reset_cause == pwrmgr_pkg::LowPwrEntry);
 
   // software initiated reset request
@@ -415,25 +387,6 @@ module rstmgr
   // request so we are not in an infinite reset loop.
   assign hw2reg.reset_req.de = pwrmgr_rst_req;
   assign hw2reg.reset_req.d  = prim_mubi_pkg::MuBi4False;
-
-  prim_flop_2sync #(
-    .Width(1),
-    .ResetValue('0)
-  ) u_cpu_reset_synced (
-    .clk_i,
-    .rst_ni,
-    .d_i(rst_cpu_n_i),
-    .q_o(rst_cpu_nq)
-  );
-
-  // first reset is a flag that blocks reset recording until first de-assertion
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      first_reset <= 1'b1;
-    end else if (rst_cpu_nq) begin
-      first_reset <= 1'b0;
-    end
-  end
 
   // Only sw is allowed to clear a reset reason, hw is only allowed to set it.
   assign hw2reg.reset_info.low_power_exit.d  = 1'b1;
@@ -478,7 +431,7 @@ module rstmgr
   );
 
   rstmgr_crash_info #(
-    .CrashDumpWidth($bits(ibex_pkg::crash_dump_t))
+    .CrashDumpWidth($bits(rv_core_ibex_pkg::cpu_crash_dump_t))
   ) u_cpu_info (
     .clk_i,
     .rst_ni,

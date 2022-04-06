@@ -5,6 +5,7 @@
 #ifndef OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_SHUTDOWN_H_
 #define OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_SHUTDOWN_H_
 
+#include "sw/device/lib/base/testing/global_mock.h"
 #include "sw/device/silicon_creator/lib/shutdown.h"
 #include "sw/device/silicon_creator/testing/mask_rom_test.h"
 
@@ -14,7 +15,7 @@ namespace internal {
 /**
  * Mock class for shutdown.
  */
-class MockShutdown : public GlobalMock<MockShutdown> {
+class MockShutdown : public global_mock::GlobalMock<MockShutdown> {
  public:
   MOCK_METHOD(shutdown_error_redact_t, RedactPolicy, ());
   MOCK_METHOD(uint32_t, Redact, (rom_error_t, shutdown_error_redact_t));
@@ -25,6 +26,7 @@ class MockShutdown : public GlobalMock<MockShutdown> {
 
 using MockShutdown = testing::StrictMock<internal::MockShutdown>;
 
+#ifdef IS_MESON_FOR_MIGRATIONS_ONLY
 extern "C" {
 
 shutdown_error_redact_t shutdown_redact_policy(void) {
@@ -40,6 +42,7 @@ void shutdown_finalize(rom_error_t reason) {
 }
 
 }  // extern "C"
+#endif
 }  // namespace mask_rom_test
 
 #endif  // OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_MOCK_SHUTDOWN_H_

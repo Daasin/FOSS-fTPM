@@ -47,8 +47,8 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
 
   constraint num_trans_c {
     if (cfg.smoke_test) {
-      num_trans  inside {[1:2]};
-      num_dai_op inside {[5:10]};
+      num_trans == 1;
+      num_dai_op inside {[1:2]};
     } else {
       num_trans  inside {[1:2]};
       num_dai_op inside {[1:50]};
@@ -67,6 +67,13 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
   constraint ecc_otp_err_c {ecc_otp_err == OtpNoEccErr;}
 
   constraint ecc_chk_err_c {ecc_chk_err == OtpNoEccErr;}
+
+  constraint apply_reset_during_pwr_init_cycles_c {
+    apply_reset_during_pwr_init_cycles dist {
+        [1:5]       :/ 4,
+        [6:2000]    :/ 4,
+        [2001:4000] :/ 2};
+  }
 
   virtual task dut_init(string reset_kind = "HARD");
     if (do_apply_reset) begin
@@ -113,10 +120,13 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
       // set consistency and integrity checks
       csr_wr(ral.check_regwen, check_regwen_val);
       csr_wr(ral.check_trigger_regwen, check_trigger_regwen_val);
-      if (check_trigger_val && `gmv(ral.check_trigger_regwen)) begin
-        csr_wr(ral.check_timeout, check_timeout_val);
-      end
+      csr_wr(ral.check_timeout, check_timeout_val);
       trigger_checks(.val(check_trigger_val), .wait_done(1), .ecc_err(ecc_chk_err));
+
+      if ($urandom_range(0, 1) && access_locked_parts) write_sw_rd_locks();
+
+      // Backdoor write mubi to values that are not true or false.
+      force_mubi_part_access();
 
       if (do_req_keys && !cfg.otp_ctrl_vif.alert_reqs) begin
         req_otbn_key();
@@ -129,8 +139,6 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
         req_lc_transition(do_lc_trans, lc_prog_blocking);
         if (cfg.otp_ctrl_vif.lc_prog_req == 0) csr_rd(.ptr(ral.err_code[0]), .value(tlul_val));
       end
-
-      if ($urandom_range(0, 1) && access_locked_parts) write_sw_rd_locks();
 
       for (int i = 0; i < num_dai_op; i++) begin
         bit [TL_DW-1:0] rdata0, rdata1, backdoor_rd_val;
@@ -175,7 +183,7 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
       end
 
       // Read/write test access memory
-      if (cfg.otp_ctrl_vif.lc_dft_en_i == lc_ctrl_pkg::On) otp_test_access();
+      otp_test_access();
 
       // lock digests
       `uvm_info(`gfn, "Trigger HW digest calculation", UVM_HIGH)
@@ -198,7 +206,7 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
         if (cfg.otp_ctrl_vif.lc_prog_req == 0) csr_rd(.ptr(ral.err_code[0]), .value(tlul_val));
       end
 
-      if (do_req_keys && !cfg.otp_ctrl_vif.alert_reqs) begin
+      if (do_req_keys && !cfg.otp_ctrl_vif.alert_reqs && !cfg.smoke_test) begin
         req_otbn_key();
         req_flash_addr_key();
         req_flash_data_key();

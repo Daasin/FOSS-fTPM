@@ -432,7 +432,7 @@ module dm_csrs #(
             sbcs_d = sbcs;
             // R/W1C
             sbcs_d.sbbusyerror = sbcs_q.sbbusyerror & (~sbcs.sbbusyerror);
-            sbcs_d.sberror     = sbcs_q.sberror     & (~sbcs.sberror);
+            sbcs_d.sberror     = sbcs_q.sberror     & {3{~(sbcs.sberror == 3'd1)}};
           end
         end
         dm::SBAddress0: begin
@@ -519,12 +519,11 @@ module dm_csrs #(
     sbcs_d.sbversion            = 3'd1;
     sbcs_d.sbbusy               = sbbusy_i;
     sbcs_d.sbasize              = $bits(sbcs_d.sbasize)'(BusWidth);
-    sbcs_d.sbaccess128          = 1'b0;
-    sbcs_d.sbaccess64           = logic'(BusWidth == 32'd64);
-    sbcs_d.sbaccess32           = logic'(BusWidth == 32'd32);
-    sbcs_d.sbaccess16           = 1'b0;
-    sbcs_d.sbaccess8            = 1'b0;
-    sbcs_d.sbaccess             = (BusWidth == 32'd64) ? 3'd3 : 3'd2;
+    sbcs_d.sbaccess128          = logic'(BusWidth >= 32'd128);
+    sbcs_d.sbaccess64           = logic'(BusWidth >= 32'd64);
+    sbcs_d.sbaccess32           = logic'(BusWidth >= 32'd32);
+    sbcs_d.sbaccess16           = logic'(BusWidth >= 32'd16);
+    sbcs_d.sbaccess8            = logic'(BusWidth >= 32'd8);
   end
 
   // output multiplexer
@@ -580,7 +579,7 @@ module dm_csrs #(
       abstractauto_q <= '0;
       progbuf_q      <= '0;
       data_q         <= '0;
-      sbcs_q         <= '0;
+      sbcs_q         <= '{default: '0,  sbaccess: 3'd2};
       sbaddr_q       <= '0;
       sbdata_q       <= '0;
       havereset_q    <= '1;
@@ -608,7 +607,7 @@ module dm_csrs #(
         abstractauto_q               <= '0;
         progbuf_q                    <= '0;
         data_q                       <= '0;
-        sbcs_q                       <= '0;
+        sbcs_q                       <= '{default: '0,  sbaccess: 3'd2};
         sbaddr_q                     <= '0;
         sbdata_q                     <= '0;
       end else begin

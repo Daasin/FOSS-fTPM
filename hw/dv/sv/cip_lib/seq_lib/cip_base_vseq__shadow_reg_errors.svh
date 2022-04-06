@@ -156,7 +156,11 @@ virtual task poke_and_check_storage_error(dv_base_reg shadowed_csr);
             shadowed_csr.`gfn, kind.name, err_val), UVM_HIGH);
 
   // This non-blocking task checks if the alert is continuously firing until reset is issued.
-  if (cfg.m_alert_agent_cfg.exists(alert_name)) check_fatal_alert_nonblocking(alert_name);
+  if (cfg.m_alert_agent_cfg.exists(alert_name)) begin
+    // add clock cycle delay in case of alert coming out 1 cycle later.
+    cfg.clk_rst_vif.wait_clks(2);
+    check_fatal_alert_nonblocking(alert_name);
+  end
 
   // Wait random clock cycles and ensure the fatal alert is continuously firing.
   cfg.clk_rst_vif.wait_clks($urandom_range(10, 100));
@@ -190,7 +194,6 @@ virtual task glitch_shadowed_reset(ref dv_base_reg shadowed_csr[$],
       alert_name = shadowed_csr[i].get_storage_err_alert_name();
       // Set alert_name manually because alert_handler module does not trigger alerts.
       if (alert_name == "") alert_name = "fatal_err";
-      predict_shadow_reg_status(.predict_storage_err(1));
       `uvm_info(`gfn, $sformatf("Expect reset storage error %0s", shadowed_csr[i].get_name()),
                 UVM_HIGH)
       break;
@@ -209,6 +212,10 @@ virtual task glitch_shadowed_reset(ref dv_base_reg shadowed_csr[$],
     // Wait until dut reset is done then allow csr_rw sequence to issue.
     ready_to_trigger_csr_rw = 1;
   end
+
+  // Update shadow reg status after DUT reset is issued, in case the predicted value is cleared by
+  // reset.
+  if (alert_name != "") predict_shadow_reg_status(.predict_storage_err(1));
 
   // Check if shadow reset will trigger fatal storage error.
   // - First check if alert_name exists in alert_agent_cfg because alert_handler IP won't trigger
@@ -307,6 +314,12 @@ virtual function void predict_shadow_reg_status(bit predict_update_err  = 0,
     foreach (cfg.shadow_storage_err_status_fields[status_field]) begin
       void'(status_field.predict(cfg.shadow_storage_err_status_fields[status_field]));
     end
+  end
+endfunction
+
+virtual function void clear_update_err_status();
+  foreach (cfg.shadow_update_err_status_fields[status_field]) begin
+    void'(status_field.predict(~cfg.shadow_update_err_status_fields[status_field]));
   end
 endfunction
 

@@ -6,6 +6,8 @@
 // The ROM checker FSM module
 //
 
+`include "prim_assert.sv"
+
 module rom_ctrl_fsm
   import prim_mubi_pkg::mubi4_t;
   import prim_util_pkg::vbits;
@@ -70,7 +72,7 @@ module rom_ctrl_fsm
   logic [AW-1:0] counter_read_addr;
   logic          counter_read_req;
   logic [AW-1:0] counter_data_addr;
-  logic          counter_data_rdy, counter_data_vld;
+  logic          counter_data_rdy;
   logic          counter_lnt;
   rom_ctrl_counter #(
     .RomDepth (RomDepth),
@@ -83,7 +85,6 @@ module rom_ctrl_fsm
     .read_req_o         (counter_read_req),
     .data_addr_o        (counter_data_addr),
     .data_rdy_i         (counter_data_rdy),
-    .data_vld_o         (counter_data_vld),
     .data_last_nontop_o (counter_lnt)
   );
 
@@ -131,19 +132,12 @@ module rom_ctrl_fsm
   // SEC_CM: FSM.SPARSE
   // SEC_CM: INTERSIG.MUBI
 
-  logic [9:0]  state_q, state_d;
-  logic        fsm_alert;
+  fsm_state_e state_d, state_q;
+  logic [9:0] logic_state_q;
+  logic       fsm_alert;
 
-  prim_sparse_fsm_flop #(
-    .StateEnumT(fsm_state_e),
-    .Width(10),
-    .ResetValue({ReadingLow})
-  ) u_state_regs (
-    .clk_i   (clk_i),
-    .rst_ni  (rst_ni),
-    .state_i (state_d),
-    .state_o (state_q)
-  );
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q, fsm_state_e, ReadingLow)
+  assign logic_state_q = {state_q};
 
   always_comb begin
     state_d = state_q;
@@ -217,7 +211,7 @@ module rom_ctrl_fsm
   // bottom 4 bits of state_q is equivalent to "mubi4_bool_to_mubi(state_q == Done)" except that it
   // doesn't have a 1-bit signal on the way.
   mubi4_t in_state_done;
-  assign in_state_done = mubi4_t'(state_q[3:0]);
+  assign in_state_done = mubi4_t'(logic_state_q[3:0]);
 
   // Route digest signals coming back from KMAC straight to the CSRs
   assign digest_o     = kmac_digest_i;
@@ -251,13 +245,36 @@ module rom_ctrl_fsm
   assign keymgr_data_o = '{data: digest_i, valid: mubi4_test_true_loose(in_state_done)};
 
   // KMAC rom data interface
-  //
-  // This is almost handled by the counter, but we interpose ourselves once all but the top words
-  // have been sent, squashing the extra data beats that come out as the counter reads through the
-  // top words.
+  logic kmac_rom_vld_d, kmac_rom_vld_q;
+  always_comb begin
+    // There will be valid data to pass to KMAC on each cycle after a counter request has gone out
+    // when we were in state ReadingLow. That data goes out (causing us to drop the valid signal) if
+    // KMAC was ready. Note that this formulation allows kmac_rom_vld_q to be high even if we're not
+    // in the ReadingLow state: if something goes wrong and we get faulted into Invalid then we'll
+    // still correctly send the end of the KMAC transaction.
+    kmac_rom_vld_d = kmac_rom_vld_q;
+    if (kmac_rom_rdy_i) begin
+      kmac_rom_vld_d = 0;
+    end
+    if (counter_read_req && state_q == ReadingLow && !counter_lnt) begin
+      kmac_rom_vld_d = 1;
+    end
+  end
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      kmac_rom_vld_q <= 0;
+    end else begin
+      kmac_rom_vld_q <= kmac_rom_vld_d;
+    end
+  end
+
   assign counter_data_rdy = kmac_rom_rdy_i | (state_q != ReadingLow);
-  assign kmac_rom_vld_o = counter_data_vld & (state_q == ReadingLow);
+  assign kmac_rom_vld_o = kmac_rom_vld_q;
   assign kmac_rom_last_o = counter_lnt;
+
+  // The "last" flag is signalled when we're reading the last word in the first part of the ROM. As
+  // a quick consistency check, this should only happen when the "valid" flag is also high.
+  `ASSERT(LastImpliesValid_A, kmac_rom_last_o |-> kmac_rom_vld_o)
 
   // Start the checker when transitioning into the "Checking" state
   always_ff @(posedge clk_i or negedge rst_ni) begin

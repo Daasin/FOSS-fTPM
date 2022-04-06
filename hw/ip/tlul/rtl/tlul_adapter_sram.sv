@@ -31,12 +31,6 @@ module tlul_adapter_sram
   parameter bit EnableRspIntgGen  = 0,  // 1: Generate response integrity
   parameter bit EnableDataIntgGen = 0,  // 1: Generate response data integrity
   parameter bit EnableDataIntgPt  = 0,  // 1: Passthrough command/response data integrity
-  // Data that is returned upon an a TL-UL error belonging to an instruction fetch.
-  // Note that this data will be returned with the correct bus integrity value.
-  parameter logic [top_pkg::TL_DW-1:0] DataWhenInstrError = '0,
-  // Data that is returned upon an a TL-UL error not belonging to an instruction fetch.
-  // Note that this data will be returned with the correct bus integrity value.
-  parameter logic [top_pkg::TL_DW-1:0] DataWhenError      = {top_pkg::TL_DW{1'b1}},
   localparam int WidthMult        = SramDw / top_pkg::TL_DW,
   localparam int IntgWidth        = tlul_pkg::DataIntgWidth * WidthMult,
   localparam int DataOutW         = EnableDataIntgPt ? SramDw + IntgWidth : SramDw
@@ -112,8 +106,10 @@ module tlul_adapter_sram
                            : 1'b0;
 
   // An instruction type transaction is only valid if en_ifetch is enabled
-  assign instr_error = prim_mubi_pkg::mubi4_test_true_strict(tl_i.a_user.instr_type) &
-                       prim_mubi_pkg::mubi4_test_false_loose(en_ifetch_i);
+  // If the instruction type is completely invalid, also considered an instruction error
+  assign instr_error = prim_mubi_pkg::mubi4_test_invalid(tl_i.a_user.instr_type) |
+                       (prim_mubi_pkg::mubi4_test_true_strict(tl_i.a_user.instr_type) &
+                        prim_mubi_pkg::mubi4_test_false_loose(en_ifetch_i));
 
   if (ErrOnWrite == 1) begin : gen_no_writes
     assign wr_vld_error = tl_i.a_opcode != Get;
@@ -160,7 +156,7 @@ module tlul_adapter_sram
 
   // byte handling for integrity
   tlul_sram_byte #(
-    .EnableIntg(ByteAccess & CmdIntgCheck & !ErrOnWrite),
+    .EnableIntg(ByteAccess & EnableDataIntgPt & !ErrOnWrite),
     .Outstanding(Outstanding)
   ) u_sram_byte (
     .clk_i,

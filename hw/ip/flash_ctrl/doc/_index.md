@@ -55,14 +55,14 @@ The protocol controller currently supports the following features:
 The flash physical controller wraps the actual flash memory and translates both host and controller initiated requests into low level flash transactions.
 
 The physical controller supports the following features
-*  Multiple banks of flash memory
-*  For each flash bank, parameterized support for number of flash pages (default to 256)
-*  For each flash page, parameterized support for number of words and word size (default to 256 words of 8-bytes each)
-*  Data and informational partitions within each bank of flash memory
-*  Arbitration between host requests and controller requests at the bank level
-   *  Host requests are always favored, however the controller priority can escalate if it repeatedly loses arbitration
+*  Multiple banks of flash memory.
+*  For each flash bank, parameterized support for number of flash pages (default to 256).
+*  For each flash page, parameterized support for number of words and word size (default to 256 words of 8-bytes each).
+*  Data and informational partitions within each bank of flash memory.
+*  Arbitration between host requests and controller requests at the bank level.
+   *  Host requests are always favored, however the controller priority can escalate if it repeatedly loses arbitration.
    *  Since banks are arbitrated independently and transactions may take different amounts of times to complete, the physical controller is also responsible for ensuring in-order response to both the controller and host.
-*  Flash read stage
+*  Flash read stage.
    *  Each bank maintains a parameterizable number of read buffers in front of the flash memory (default to 4).
    *  The read buffers behave as miniature read-only-caches to store flash data when flash words are greater than bus words.
    *  When a program or erase collides with an entry already stored in the read buffer, the buffer contents are invalidated.
@@ -70,9 +70,9 @@ The physical controller supports the following features
 *  Flash program stage
    *  Flash data word packing when flash word size is an integer multiple of bus word size.
 *  Flash scrambling
-   * Flash supports XEX scrambling using the prince cipher
+   * Flash supports XEX scrambling using the prince cipher.
    * Scrambling is optional based on page boundaries and is configurable by software.
-*  Two types of Flash ECC support
+*  Two types of Flash ECC support.
    * A pre-scramble ECC used for integrity verification, this is required on every word.
    * A post-scramble ECC used for reliability detection, this is configurable on a page boundary.
 *  Life cycle modulated JTAG connection to the vendor flash module.
@@ -217,11 +217,14 @@ It is recommended that instead of blindly issuing transactions to the flash cont
 Once the seed phase is complete, the flash controller switches to the software interface.
 Software can then read / program / erase the flash as needed.
 
+#### RMA Entry Handling
+
 When an RMA entry request is received from the life cycle manager, the flash controller waits for any pending flash transaction to complete, then switches priority to the hardware interface.
 The flash controller then initiates RMA entry process and notifies the life cycle controller when it is complete.
 The RMA entry process wipes out all data, creator, owner and isolated partitions.
 
-After RMA completes, if the host system is still available, the flash protocol controller registers can still be accessed.
+After RMA completes, the flash controller is [disabled]({{< relref "#flash-access-disable" >}}).
+When disabled the flash protocol controller registers can still be accessed.
 However, flash memory access are not allowed, either directly by the host or indirectly through flash protocol controller initiated transactions.
 It is expected that after an RMA transition, the entire system will be rebooted.
 
@@ -242,6 +245,8 @@ During RMA entry, the flash controller "wipes" the contents of the following:
 - All data partitions
 
 This process ensures that after RMA there is no sensitive information left that can be made use on the tester.
+As stated previously, once RMA entry completes, the flash memory can no longer be accessed, either directly or indirectly.
+The flash controller registers however, remain accessible for status reads and so forth, although new operations cannot be issued.
 
 #### Memory Protection
 
@@ -257,6 +262,17 @@ For information partitions, the protection is done per indvidual page.
 Each page can be configured with access privileges.
 As a result, software does not need to define a start and end page for information partitions.
 See {{< regref "BANK0_INFO_PAGE_CFG0" >}} as an example.
+
+#### Bank Erase Protection
+
+Unlike read, program and page erase operations, the bank erase command is the only one that can be issued at a bank level.
+Because of this, bank erase commands are not guarded by the typical [memory protection mechanisms](#memory-protection).
+
+Instead, whether bank erase is allowed is controlled by {{< regref "MP_BANK_CFG_SHADOWED" >}}, where there is a separate configuration bit per bank.
+When the corresponding bit is set, that particular bank is permitted to have bank level operations.
+
+The specific behavior of what is erased when bank erase is issued is flash memory dependent and thus can vary by vendor and technology.
+[This section](#flash-bank-erase) describes the general behavior and how open source modeling is done.
 
 #### Memory Protection for Key Manager and Life Cycle
 
@@ -315,6 +331,103 @@ If software programs {{< regref "EXEC" >}} to any other value, code fetch from f
 
 The flash protocol controller distinguishes code / data transactions through the [instruction type attribute]({{< relref "hw/ip/lc_ctrl/doc/_index.md#usage-of-user-bits" >}}) of the TL-UL interface.
 
+#### Flash Errors and Faults
+
+The flash protocol controller maintains 3 different categories of observed errors and faults.
+In general, errors are considered recoverable and primarily geared towards problems that could have been caused by software or that occurred during a software initiated operation.
+Errors can be found in {{< regref "ERR_CODE" >}}.
+
+Faults, on the other hand, represent error events that are unlikely to have been caused by software and represent a major malfunction of the system.
+
+Faults are further divided into two categories:
+- Standard faults
+- Custom faults
+
+Standard faults represent errors that occur in the standard structures of the design, for example sparsely encoded FSMs, duplicated counters and the bus transmission integrity scheme.
+
+Custom faults represent custom errors, primarily errors generated by the life cycle management interface, the flash storage integrity interface and the flash macro itself.
+
+See ({{< relref "#flash-escalation" >}}) for further differentiation between standard and custom faults.
+
+#### Transmission Integrity Faults
+
+Since the flash controller has multiple interfaces for access, transmission integrity failures can manifest in different ways.
+
+There are 4 interfaces:
+- host direct access to flash controller [register files](#host-direct-reg).
+- host direct access to [flash macro](#host-direct-macro)
+- host / software initiated flash controller access to [flash macro (read / program / erase)](#host-controller-op)
+- life cycle management interface / hardware initiated flash controller access to [flash macro (read / program / erase)](#hw-controller-op)
+
+The impact of transmission integrity of each interface is described below.
+
+##### Host Direct Access to Flash Controller Register Files {#host-direct-reg}
+This category of transmission integrity behaves identically to other modules.
+A bus transaction, when received, is checked for command and data payload integrity.
+If an integrity error is seen, the issuing bus host receives an in-band error response and a fault is registered in {{< regref "STD_FAULT_STATUS.REG_INTG_ERR" >}}.
+
+##### Host Direct Access to Flash Macro {#host-direct-macro}
+Flash can only be read by the host.
+The transmission integrity scheme used is end-to-end, so integrity generated inside the flash is fed directly to the host.
+It is the host's responsibility to check for integrity correctness and react accordingly.
+
+##### Host / Software Initiated Access to Flash Macro {#host-controller-op}
+Since controller operations are initiated through writes to the register file, the command check is identical to host direct access to [regfiles](#host-direct-reg).
+Controller reads behave similarly to [host direct access to macro](#host-direct-macro), the read data and its associated integrity are returned through the controller read fifo for the initiating host to handle.
+
+For program operations, the write data and its associated integrity are stored and propagated through the flash protocol and physical controllers.
+Prior to packing the data for final flash program, the data is then checked for integrity correctness.
+If the data integrity is incorrect, an in-band error response is returned to the initiating host and an error is registered in {{< regref "ERR_CODE.PROG_INTG_ERR" >}}.
+An error is also registered in {{< regref "STD_FAULT_STATUS.PROG_INTG_ERR" >}} to indicate that a fatal fault has occurred.
+
+The reasons a program error is registered in two locations are two-fold:
+- It is registered in {{< regref "ERR_CODE" >}} so software can discover during operation status that a program has failed.
+- It is registered in {{< regref "STD_FAULT_STATUS" >}} because transmission integrity failures represent a fatal failure in the standard structure of the design, something that should never happen.
+
+##### Life Cycle Management Interface / Hardware Initiated Access to Flash Macro {#hw-controller-op}
+The life cycle management interface issues transactions directly to the flash controller and does not perform a command payload integrity check.
+
+For read operations, the read data and its associated integrity are directly checked by the life cycle management interface.
+If an integrity error is seen, it is registered in {{< regref "FAULT_STATUS.LCMGR_INTG_ERR" >}}.
+
+For program operations, the program data and its associated integrity are propagated into the flash controller.
+If an integrity error is seen, an error is registered in {{< regref "FAULT_STATUS.PROG_INTG_ERR" >}}.
+
+#### ECC Related Read Errors
+
+In addition to transmission integrity errors described above, the flash can also emit read errors based on [ECC checks](#flash-ecc).
+
+Flash reliability ECC errors (multi-bit errors) and integrity ECC errors (storage errors) are both reflected as in-band errors to the entity that issued the transaction.
+That means if a host direct read, controller initiated read or hardware initiated read encounters one of these errors, the error is directly reflected in the operation status.
+
+Further, reliability / integrity ECC errors are also captured in {{< regref "FAULT_STATUS" >}} and can be used to generate fatal alerts.
+The reason ECC errors are captured not captured in {{< regref "STD_FAULT_STATUS" >}} is because it is assumed 2-bit errors can occur in real usage.
+If we assume 2-bit errors can occur, then software must have a mechanism to recover from the error instead of [escalation](#flash-escalation).
+
+#### Flash Escalation
+
+Flash has two sources of escalation - global and local.
+
+Global escalation is triggered by the life cycle controller through `lc_escalate_en`.
+Local escalation is triggered by a standard faults of flash, seen in {{< regref "STD_FAULT_STATUS" >}}.
+Local escalation is not configurable and automatically triggers when this subset of faults are seen.
+
+For the escalation behavior, see [flash access disable]({{< relref "#flash-access-disable" >}})
+
+#### Flash Access Disable
+
+Flash access can be disabled through global escalation trigger, local escalation trigger, rma process completion or software command.
+The escalation triggers are described [here]({{< relref "#flash-escalation" >}}).
+The software command to disable flash can be found in {{< regref "DIS" >}}.
+The description for rma entry can be found [here]({{< relref "#rma-entry-handling" >}}).
+
+When disabled, the flash has a two layered response:
+- The flash protocol controller [memory protection]({{< relref "#memory-protection" >}}) errors back all controller initiated operations.
+- The host-facing tlul adapter errors back all host initiated operations.
+- The flash physical controller completes any existing stateful operations (program or erase) and drops all future flash transactions.
+- The flash protocol controller arbiter completes any existing software issued commands and enters an invalid state where no new transactions can be issued.
+
+
 ### Flash Physical Controller
 
 The Flash Physical Controller is the wrapper module that contains the actual flash memory instantiation.
@@ -324,7 +437,7 @@ The vendor wrapper module is also responsible for any BIST, redundancy handling,
 
 The scramble keys are provided by an external static block such as the OTP.
 
-### Host and Protocol Controller Handling
+#### Host and Protocol Controller Handling
 
 Both the protocol controller and the system host converge on the physical controller.
 The protocol controller has read access to all partitions as well as program and erase privileges.
@@ -336,8 +449,16 @@ Every time the protocol controller looses such an arbitration, it increases an a
 Once this lost count reaches 5, the protocol controller is favored.
 This ensures a stream of host activity cannot deny protocol controller access (for example a tight polling loop).
 
+#### Flash Bank Erase Behavior {#flash-bank-erase}
 
-### Flash Scrambling
+This section describes the open source modeling of flash memory.
+The actual flash memory behavior may differ, and should consult the specific vendor or technology specification.
+
+When a bank erase command is issued and allowed, see [bank erase protection](#bank-erase-protection), the erase behavior is dependent on {{< regref "CONTROL.PARTITION_SEL" >}}.
+- If data partition is selected, all data in the data partition is erased.
+- If info partition is selected, all data in the data partition is erased AND all data in the info partitions (including all info types) is also erased.
+
+#### Flash Scrambling
 
 Flash scrambling is built using the [XEX tweakable block cipher](https://en.wikipedia.org/wiki/Disk_encryption_theory#Xor%E2%80%93encrypt%E2%80%93xor_(XEX)).
 
@@ -345,19 +466,19 @@ When a read transaction is sent to flash, the following steps are taken:
 *  The tweak is calculated using the transaction address and a secret address key through a galois multiplier.
 *  The data content is read out of flash.
 *  If the data content is scrambled, the tweak is XOR'd with the scrambled text and then decrypted through the prince block cipher using a secret data key.
-*  The output of the prince cipher is XOR'd again with the tweak and the final results are presented
+*  The output of the prince cipher is XOR'd again with the tweak and the final results are presented.
 *  If the data content is not scrambled, the prince and XOR steps are skipped and data provided directly back to the requestor.
 
 When a program transaction is sent to flash, the same steps are taken if the address in question has scrambling enabled.
 During a program, the text is scrambled through the prince block cipher.
 
 Scramble enablement is done differently depending on the type of partitions.
-*  For data partitions, the scramble enablement is done on contiugous page boundaries.
+*  For data partitions, the scramble enablement is done on contiguous page boundaries.
    *  Software has the ability to configure these regions and whether scramble is enabled.
-*  For information partitions,the scramble enablement is done on a per page basis.
+*  For information partitions, the scramble enablement is done on a per page basis.
    *  Software can configure for each page whether scramble is enabled.
 
-### Flash ECC
+#### Flash ECC
 
 There are two types of flash ECC supported.
 
@@ -367,7 +488,7 @@ The second type is a reliabilty ECC used for error detection and correction on t
 The first type of ECC is required on every flash word.
 The second type of ECC is configurable based on the various page and memory property configurations.
 
-#### Overall ECC Application
+##### Overall ECC Application
 
 The following diagram shows how the various ECC tags are applied and used through the life of a transactions.
 ![Flash ECC_LIFE](flash_integrity.svg).
@@ -375,7 +496,7 @@ The following diagram shows how the various ECC tags are applied and used throug
 Note that the integrity ECC is calculated over the descrambled data and is only 4-bits.
 While the reliability ECC is calculated over both the scrambled data and the integrity ECC.
 
-#### Integrity ECC
+##### Integrity ECC
 
 The purpose of the integrity ECC is to emulate end-to-end integrity like the other memories.
 This is why the data is calculated over the descrambled data as it can be stored alongside for continuous checks.
@@ -383,7 +504,7 @@ When descrambled data is returned to the host, the integrity ECC is used to vali
 
 The flash may not always have the capacity to store both the integrity and reliability ECC, the integrity ECC is thus truncated since it is not used for error correction.
 
-#### Reliability ECC
+##### Reliability ECC
 
 Similar to scrambling, the reliability ECC is enabled based on an address decode.
 The ECC for flash is chosen such that a fully erased flash word has valid ECC.
@@ -392,21 +513,21 @@ Likewise a flash word that is completely 0 is also valid ECC.
 Unlike the integrity ECC, the reliability ECC is actually used for error correction if an accidental bit-flip is seen, it is thus fully stored and not truncated.
 
 ECC enablement is done differently depending on the type of partitions.
-*  For data partitions, the ECC enablement is done on contiugous page boundaries.
+*  For data partitions, the ECC enablement is done on contiguous page boundaries.
    *  Software has the ability to configure these regions and whether ECC is enabled.
 *  For information partitions,the ECC enablement is done on a per page basis.
    *  Software can configure for each page whether ECC is enabled.
 
-#### Scrambling Consistency
+##### Scrambling Consistency
 
 The flash physical controller does not keep a history of when a particular memory location has scrambling enabled or disabled.
 This means if a memory locaiton was programmed while scrambled, disabling scrambling and then reading it back will result in garbage.
-Similarly, if a location was programmed while non-scrambled, enabling scrambling and then reading it back will also result in gargabe.
+Similarly, if a location was programmed while non-scrambled, enabling scrambling and then reading it back will also result in garbage.
 
 It it thus the programmer's responsibility to maintain a consistent definition of whether a location is scrambled.
 It is also highly recommended in a normal use case to setup up scramble and non-scramble regions and not change it further.
 
-### Flash Read Pipeline
+#### Flash Read Pipeline
 
 Since the system host reads directly from the flash for instructions, it is critical to not add significant latency during read, especially if de-scrambling is required.
 As such, the flash read is actually a two stage pipeline, where each stage can take multiple cycles.
@@ -430,7 +551,7 @@ The following diagram shows how the flash read pipeline timing works.
 In this example, the first two host requests trigger a full sequence.
 The third host requests immediately hits in the local cache and responds in order after the first two.
 
-### Flash Buffer
+#### Flash Buffer
 
 The flash buffer is a small read-only memory that holds multiple entries of recently read flash words.
 This is needed when the flash word is wider than a bus word.
@@ -448,14 +569,14 @@ When an RMA entry sequence is received, the flash buffers are disabled.
 
 As an example, assume a flash word is made up of 2 bus words.
 Assume also the following address to word mapping:
-- Address 0 - flash word 0 , bus word 0 / bus word 1
-- Address 2 - flash word 1 , bus word 2 / bus word 3
+- Address 0 - flash word 0, bus word 0 / bus word 1
+- Address 2 - flash word 1, bus word 2 / bus word 3
 
 When software reads bus word 1, the entire flash word 0 is captured into the flash buffer.
 When software comes back to read bus word 0, instead of accessing the flash again, the data is retrieved directly from the buffer.
 
 
-### Accessing Information Partition
+#### Accessing Information Partition
 
 The information partition uses the same address scheme as the data partition - which is directly accessible by software.
 This means the address of page{N}.word{M} is the same no matter which type of partition is accessed.
@@ -468,7 +589,7 @@ Flash scrambling, if enabled, also applies to information partitions.
 It may be required for manufacturers to directly inject data into specific pages flash information partitions via die contacts.
 For these pages, scramble shall be permanently disabled as the manufacturer should not be aware of scrambling functions.
 
-#### JTAG Connection
+##### JTAG Connection
 
 The flash physical controller provides a JTAG connection to the vendor flash module.
 The vendor flash module can use this interface to build a testing setup or to provide backdoor access for debug.
@@ -641,6 +762,29 @@ However, instead of setting the {{< regref "CONTROL" >}} register for read opera
 Software will then fill the program FIFO and wait for the controller to consume this data.
 Similar to the read case, the controller will automatically stall when there is insufficient data in the FIFO.
 When all desired words have been programmed, the controller will post OP_DONE in the {{< regref "OP_STATUS" >}} register.
+
+## Debugging a Read Error
+Since flash has multiple access modes, debugging read errors can be complicated.
+The following lays out the expected cases.
+
+### Error Encountered by Software Direct Read
+If software reads the flash directly, it may encounter a variety of errors (read data integrity / ECC failures, both reliability and integrity).
+ECC failures create in-band error responses and should be recognized as a bus exception.
+Read data integrity failures also create exceptions directly inside the processor as part of end-to-end transmission integrity.
+
+From these exceptions, software should be able to determine the error address through processor specific means.
+Once the address is discovered, further steps can be taken to triage the issue.
+
+### Error Encountered by Software Initiated Controller Operations
+A controller operation can encounter a much greater variety of errors, see {{< regref "ERR_CODE" >}}.
+When such an error is encountered, as reflected by {{< regref "OP_STATUS" >}} when the operation is complete, software can examine the {{< regref "ERR_ADDR" >}} to determine the error location.
+Once the address is discovered, further steps can be taken to triage the issue.
+
+### Correctable ECC Errors
+Correctable ECC errors are by nature not fatal errors and do not stop operation.
+Instead, if the error is correctable, the flash controller fixes the issue and registers the last address where a single bit error was seen.
+See {{< regref "ECC_SINGLE_ERR_CNT" >}} and {{< regref "ECC_SINGLE_ERR_ADDR" >}}
+
 
 ## Register Table
 

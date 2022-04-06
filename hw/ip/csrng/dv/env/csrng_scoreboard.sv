@@ -124,6 +124,7 @@ class csrng_scoreboard extends cip_base_scoreboard #(
             more_cmd_data -= 1;
             cs_item[SW_APP].cmd_data_q.push_back(item.a_data);
           end
+          cov_vif.cg_cmds_sample(SW_APP, cs_item[SW_APP]);
           if (!more_cmd_data) begin
             for (int i = 0; i < cs_item[SW_APP].cmd_data_q.size(); i++) begin
               cs_data[SW_APP] = (cs_item[SW_APP].cmd_data_q[i] << i * CSRNG_CMD_WIDTH) +
@@ -368,6 +369,12 @@ class csrng_scoreboard extends cip_base_scoreboard #(
     `DV_CHECK_FATAL(uvm_hdl_check_path(cmd_arb_idx_q_path))
     forever begin
       entropy_src_fifo.get(es_item);
+      if (cfg.lc_hw_debug_en == On) begin
+        es_item.d_data = es_item.d_data ^ LC_HW_DEBUG_EN_ON_DATA;
+      end
+      else begin
+        es_item.d_data = es_item.d_data ^ LC_HW_DEBUG_EN_OFF_DATA;
+      end
       // Need to access rtl signal to determine which APP won arbitration
       `DV_CHECK(uvm_hdl_read(cmd_arb_idx_q_path, cmd_arb_idx))
       case (cmd_arb_idx)

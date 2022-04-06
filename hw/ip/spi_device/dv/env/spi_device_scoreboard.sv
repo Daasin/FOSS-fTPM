@@ -10,6 +10,7 @@ class spi_device_scoreboard extends cip_base_scoreboard #(.CFG_T (spi_device_env
   // TLM fifos to pick up the packets
   uvm_tlm_analysis_fifo #(spi_item) host_spi_data_fifo;
   uvm_tlm_analysis_fifo #(spi_item) device_spi_data_fifo;
+  uvm_tlm_analysis_fifo #(spi_item) pass_spi_data_fifo;
 
   // mem model to save expected value
   local mem_model tx_mem;
@@ -30,6 +31,7 @@ class spi_device_scoreboard extends cip_base_scoreboard #(.CFG_T (spi_device_env
     super.build_phase(phase);
     host_spi_data_fifo = new("host_spi_data_fifo", this);
     device_spi_data_fifo = new("device_spi_data_fifo", this);
+    pass_spi_data_fifo = new("pass_spi_data_fifo", this);
     tx_mem = mem_model#()::type_id::create("tx_mem", this);
     rx_mem = mem_model#()::type_id::create("rx_mem", this);
   endfunction
@@ -39,6 +41,7 @@ class spi_device_scoreboard extends cip_base_scoreboard #(.CFG_T (spi_device_env
     fork
       process_host_spi_fifo();
       process_device_spi_fifo();
+      process_pass_spi_fifo();
     join_none
   endtask
 
@@ -59,6 +62,17 @@ class spi_device_scoreboard extends cip_base_scoreboard #(.CFG_T (spi_device_env
       device_spi_data_fifo.get(item);
       sendout_spi_tx_data({item.data[3], item.data[2], item.data[1], item.data[0]});
       `uvm_info(`gfn, $sformatf("received device spi item:\n%0s", item.sprint()), UVM_HIGH)
+    end
+  endtask
+
+  virtual task process_pass_spi_fifo();
+    spi_item item;
+    forever begin
+      pass_spi_data_fifo.get(item);
+      `uvm_info(`gfn, $sformatf("received pass spi item:\n%0s", item.sprint()), UVM_HIGH)
+      if (`gmv(ral.control.mode) == PassthroughMode) begin
+        compare_pass_opcode_addr({item.data[3], item.data[2], item.data[1], item.data[0]});
+      end
     end
   endtask
 
@@ -191,6 +205,45 @@ class spi_device_scoreboard extends cip_base_scoreboard #(.CFG_T (spi_device_env
     else begin
       `uvm_info(`gfn, $sformatf("RX overflow data: 0x%0h ptr: 0x%0h", data, rx_wptr_exp),
                 UVM_MEDIUM)
+    end
+  endfunction
+
+  // Check if opcode is enabled and returns index of enabled opcode
+  // Checks if there are duplicate enabled opcodes - not proper config
+  // HW parses commands this way
+  virtual function check_opcode_enable(bit [7:0] q_opcode, ref bit enable, ref bit [4:0] en_idx);
+    enable = 0;
+    en_idx = 24; // Larger than num of cmd_info if not enabled
+    for (int i = 0; i<24; i++)  begin
+      if (q_opcode == `gmv(ral.cmd_info[i].opcode) && `gmv(ral.cmd_info[i].valid) == 1) begin
+        `DV_CHECK_EQ(enable, 0, "Each CMD_INFO slot should have unique opcode")
+        enable = 1;
+        en_idx = i;
+      end
+    end
+  endfunction
+
+  // Task that compares passthrough opcode and first 3B of address
+  // TODO modify to check opcode, address and payload
+  virtual function void compare_pass_opcode_addr(bit [31:0] data_act);
+    bit enabled;
+    bit [4:0] en_idx;
+    bit [7:0] opcode = data_act[7:0];
+    bit [4:0] cmd_position = opcode / 32;
+    bit [4:0] cmd_offset = opcode % 32;
+    bit [31:0] mask_swap = `gmv(ral.addr_swap_mask.mask);
+    bit [31:0] data_swap = `gmv(ral.addr_swap_data.data);
+    check_opcode_enable(opcode, enabled, en_idx);
+    if (enabled && (`gmv(ral.cmd_filter[cmd_position].filter[cmd_offset]) == 0)) begin
+      bit [31:0] data_exp     = rx_word_q.pop_front();
+      if (`gmv(ral.cmd_info[en_idx].addr_swap_en) == 1) begin // Addr Swap enable
+        for (int i = 0; i < 24; i++) begin // TODO add 4B Address Support
+          if (mask_swap[i] == 1) begin
+            data_exp[i+8] = data_swap[i];
+          end
+        end
+      end
+      `DV_CHECK_EQ(data_act, data_exp, "Compare PASSTHROUGH Data")
     end
   endfunction
 

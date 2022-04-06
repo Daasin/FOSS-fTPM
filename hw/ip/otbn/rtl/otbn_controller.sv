@@ -14,8 +14,6 @@ module otbn_controller
   parameter int ImemSizeByte = 4096,
   // Size of the data memory, in bytes
   parameter int DmemSizeByte = 4096,
-  // Enable internal secure wipe
-  parameter bit SecWipeEn  = 1'b0,
 
   localparam int ImemAddrWidth = prim_util_pkg::vbits(ImemSizeByte),
   localparam int DmemAddrWidth = prim_util_pkg::vbits(DmemSizeByte)
@@ -26,16 +24,14 @@ module otbn_controller
   input  logic start_i,  // start the processing at address zero
   output logic locked_o, // OTBN in locked state and must be reset to perform any further actions
 
-  output err_bits_t err_bits_o,           // valid when done_o is asserted
-  output logic      recoverable_err_o,
-  output logic      reg_intg_violation_o,
+  input prim_mubi_pkg::mubi4_t escalate_en_i,
+  output controller_err_bits_t err_bits_o,
+  output logic                 recoverable_err_o,
 
   // Next instruction selection (to instruction fetch)
   output logic                     insn_fetch_req_valid_o,
   output logic [ImemAddrWidth-1:0] insn_fetch_req_addr_o,
   output logic                     insn_fetch_resp_clear_o,
-  // Error from fetch requested last cycle
-  input  logic                     insn_fetch_err_i,
 
   // Fetched/decoded instruction
   input logic                     insn_valid_i,
@@ -64,7 +60,6 @@ module otbn_controller
   output logic                     rf_base_rd_commit_o,
 
   input logic rf_base_call_stack_err_i,
-  input logic rf_base_rd_data_err_i,
 
   // Bignum register file (WDRs)
   output logic [4:0]         rf_bignum_wr_addr_o,
@@ -112,7 +107,6 @@ module otbn_controller
 
   input  logic [BaseIntgWidth-1:0] lsu_base_rdata_i,
   input  logic [ExtWLEN-1:0]       lsu_bignum_rdata_i,
-  input  logic                     lsu_rdata_err_i,
 
   // Internal Special-Purpose Registers (ISPRs)
   output ispr_e                       ispr_addr_o,
@@ -125,7 +119,6 @@ module otbn_controller
   output logic rnd_req_o,
   output logic rnd_prefetch_req_o,
   input  logic rnd_valid_i,
-  input  logic urnd_state_err_i,
 
   // Secure Wipe
   input  logic secure_wipe_running_i,
@@ -135,12 +128,9 @@ module otbn_controller
   input  logic        state_reset_i,
   output logic [31:0] insn_cnt_o,
   input  logic        insn_cnt_clear_i,
-  input  logic        bus_intg_violation_i,
-  input  logic        illegal_bus_access_i,
-  input  logic        lifecycle_escalation_i,
+  output logic        mems_sec_wipe_o,
+
   input  logic        software_errs_fatal_i,
-  input  logic        start_stop_state_error_i,
-  input  logic        otbn_scramble_state_error_i,
 
   input logic [1:0] sideload_key_shares_valid_i,
 
@@ -151,13 +141,21 @@ module otbn_controller
   output logic [ImemAddrWidth:0]   prefetch_loop_end_addr_o,
   output logic [ImemAddrWidth-1:0] prefetch_loop_jump_addr_o
 );
+  import prim_mubi_pkg::*;
+
   otbn_state_e state_q, state_d;
+
+
+  controller_err_bits_t err_bits_q, err_bits_d;
+
+  // The specific error signals that go into err_bits_d
+  logic fatal_software_err, bad_internal_state_err, reg_intg_violation_err, key_invalid_err;
+  logic illegal_insn_err, bad_data_addr_err, call_stack_err, bad_insn_addr_err;
 
   logic err;
   logic software_err;
   logic non_insn_addr_software_err;
   logic fatal_err;
-  logic recoverable_err;
   logic done_complete;
   logic executing;
   logic state_error;
@@ -200,6 +198,7 @@ module otbn_controller
 
   logic lsu_load_req_raw;
   logic lsu_store_req_raw;
+  logic rnd_req_raw;
 
   // Register read data with integrity stripped off
   logic [31:0]     rf_base_rd_data_a_no_intg;
@@ -240,7 +239,7 @@ module otbn_controller
   logic imem_addr_err, loop_err, ispr_err;
   logic dmem_addr_err, dmem_addr_unaligned_base, dmem_addr_unaligned_bignum, dmem_addr_overflow;
   logic illegal_insn_static;
-  logic key_invalid, key_invalid_err;
+  logic key_invalid;
 
   logic rf_a_indirect_err, rf_b_indirect_err, rf_d_indirect_err, rf_indirect_err;
 
@@ -256,22 +255,19 @@ module otbn_controller
   logic        insn_cnt_clear;
 
   logic [4:0] ld_insn_bignum_wr_addr_q;
-  err_bits_t err_bits;
-  // Only used with SecWipeEn == 1
-  logic      err_bits_en;
 
   // Stall a cycle on loads to allow load data writeback to happen the following cycle. Stall not
   // required on stores as there is no response to deal with.
   assign mem_stall = lsu_load_req_raw;
 
   // Reads to RND must stall until data is available
-  assign ispr_stall = rnd_req_o & ~rnd_valid_i;
+  assign ispr_stall = rnd_req_raw & ~rnd_valid_i;
 
   assign stall = mem_stall | ispr_stall;
 
   // OTBN is done when it was executing something (in state OtbnStateUrndRefresh, OtbnStateRun or
   // OtbnStateStall) and either it executes an ecall or an error occurs. A pulse on the done signal
-  // raises the 'done' interrupt and also tells the top-level to update its err_bits status
+  // raises the 'done' interrupt and also tells the top-level to update its ERR_BITS status
   // register.
   //
   // The calculation that ecall triggered done is factored out as `done_complete` to avoid logic
@@ -281,7 +277,7 @@ module otbn_controller
                      (state_q == OtbnStateRun) ||
                      (state_q == OtbnStateStall);
 
-  assign locked_o = state_q == OtbnStateLocked;
+  assign locked_o = (state_q == OtbnStateLocked) & ~secure_wipe_running_i;
   assign start_secure_wipe_o = executing & (done_complete | err) & ~secure_wipe_running_i;
 
   assign jump_or_branch = (insn_valid_i &
@@ -313,7 +309,6 @@ module otbn_controller
     insn_fetch_req_valid_raw = 1'b0;
     insn_fetch_req_addr_o    = '0;
     insn_fetch_resp_clear_o  = 1'b1;
-    err_bits_en              = 1'b0;
     prefetch_en_o            = 1'b0;
 
     state_error = 1'b0;
@@ -326,9 +321,6 @@ module otbn_controller
           insn_fetch_req_addr_o    = '0;
           insn_fetch_req_valid_raw = 1'b1;
           prefetch_en_o            = 1'b1;
-
-          // Enable error bits to zero them on start
-          err_bits_en = 1'b1;
         end
       end
       OtbnStateRun: begin
@@ -384,6 +376,9 @@ module otbn_controller
         state_d                  = OtbnStateLocked;
       end
       default: begin
+        // We should never get here. If we do (e.g. via a malicious glitch), error out immediately.
+        // SEC_CM: CONTROLLER.FSM.LOCAL_ESC
+        state_d = OtbnStateLocked;
         state_error = 1'b1;
       end
     endcase
@@ -394,12 +389,8 @@ module otbn_controller
       prefetch_en_o           = 1'b0;
       insn_fetch_resp_clear_o = 1'b1;
 
-      if (!secure_wipe_running_i) begin
-        // Capture error bits on error unless a secure wipe is in progress
-        err_bits_en = 1'b1;
-      end
-
       if (fatal_err) begin
+        // SEC_CM: CONTROLLER.FSM.GLOBAL_ESC
         state_d = OtbnStateLocked;
       end else begin
         state_d = OtbnStateHalt;
@@ -439,87 +430,68 @@ module otbn_controller
   // or illegal WSR/CSR referenced).
   assign illegal_insn_static = insn_illegal_i | ispr_err;
 
-  assign err_bits.fatal_software       = software_err & software_errs_fatal_i;
-  assign err_bits.lifecycle_escalation = lifecycle_escalation_i;
-  assign err_bits.illegal_bus_access   = illegal_bus_access_i;
-  assign err_bits.bad_internal_state   = start_stop_state_error_i | state_error |
-                                         otbn_scramble_state_error_i | urnd_state_err_i;
-  assign err_bits.bus_intg_violation   = bus_intg_violation_i;
-  assign err_bits.reg_intg_violation   = rf_base_rd_data_err_i | rf_bignum_rd_data_err;
-  assign err_bits.dmem_intg_violation  = lsu_rdata_err_i;
-  assign err_bits.imem_intg_violation  = insn_fetch_err_i;
-  assign err_bits.key_invalid          = key_invalid_err;
-  assign err_bits.illegal_insn         = illegal_insn_static | rf_indirect_err;
-  assign err_bits.bad_data_addr        = dmem_addr_err;
-  assign err_bits.loop                 = loop_err;
-  assign err_bits.call_stack           = rf_base_call_stack_err_i;
-  assign err_bits.bad_insn_addr        = imem_addr_err & ~non_insn_addr_software_err;
+  assign fatal_software_err       = software_err & software_errs_fatal_i;
+  assign bad_internal_state_err   = state_error;
+  assign reg_intg_violation_err   = rf_bignum_rd_data_err;
+  assign key_invalid_err          = ispr_rd_bignum_insn & insn_valid_i & key_invalid;
+  assign illegal_insn_err         = illegal_insn_static | rf_indirect_err;
+  assign bad_data_addr_err        = dmem_addr_err;
+  assign call_stack_err           = rf_base_call_stack_err_i;
 
   // All software errors that aren't bad_insn_addr. Factored into bad_insn_addr so it is only raised
   // if other software errors haven't ocurred. As bad_insn_addr relates to the next instruction
   // begin fetched it cannot occur if the current instruction has seen an error and failed to
   // execute.
-  assign non_insn_addr_software_err = |{err_bits.key_invalid,
-                                        err_bits.illegal_insn,
-                                        err_bits.bad_data_addr,
-                                        err_bits.loop,
-                                        err_bits.call_stack};
+  assign non_insn_addr_software_err = |{key_invalid_err,
+                                        loop_err,
+                                        illegal_insn_err,
+                                        call_stack_err,
+                                        bad_data_addr_err};
 
-  assign software_err = |{err_bits.key_invalid,
-                          err_bits.illegal_insn,
-                          err_bits.bad_data_addr,
-                          err_bits.loop,
-                          err_bits.call_stack,
-                          err_bits.bad_insn_addr};
+  assign bad_insn_addr_err = imem_addr_err & ~non_insn_addr_software_err;
 
-  assign fatal_err = |{err_bits.fatal_software,
-                       err_bits.lifecycle_escalation,
-                       err_bits.illegal_bus_access,
-                       err_bits.bad_internal_state,
-                       err_bits.bus_intg_violation,
-                       err_bits.reg_intg_violation,
-                       err_bits.dmem_intg_violation,
-                       err_bits.imem_intg_violation};
+  assign err_bits_d = '{
+    fatal_software:     fatal_software_err,
+    bad_internal_state: bad_internal_state_err,
+    reg_intg_violation: reg_intg_violation_err,
+    key_invalid:        key_invalid_err,
+    loop:               loop_err,
+    illegal_insn:       illegal_insn_err,
+    call_stack:         call_stack_err,
+    bad_data_addr:      bad_data_addr_err,
+    bad_insn_addr:      bad_insn_addr_err
+  };
 
-  assign recoverable_err = software_err & ~software_errs_fatal_i;
-
-  assign reg_intg_violation_o = err_bits.reg_intg_violation;
-
-  if (SecWipeEn) begin : gen_sec_wipe
-    err_bits_t err_bits_d, err_bits_q;
-    logic      recoverable_err_d, recoverable_err_q;
-
-    assign err_bits_d = err_bits;
-    assign err_bits_o = err_bits_q;
-    assign recoverable_err_d = recoverable_err;
-    assign recoverable_err_o = recoverable_err_q;
-
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-      if (!rst_ni) begin
-        recoverable_err_q <= 1'b0;
+  always @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      err_bits_q <= '0;
+    end else begin
+      if (start_i && !locked_o) begin
         err_bits_q <= '0;
-      end else if (err_bits_en) begin
-        err_bits_q <= err_bits_d;
-        recoverable_err_q <= recoverable_err_d;
+      end else begin
+        err_bits_q <= err_bits_q | err_bits_d;
       end
     end
-
-    `ASSERT(ErrBitSetOnErr, err |=> |err_bits_o)
-  end else begin : gen_bypass_sec_wipe
-    logic unused_err_bits_en;
-
-    assign unused_err_bits_en = err_bits_en;
-    assign err_bits_o = err_bits;
-    assign recoverable_err_o = recoverable_err;
-
-    `ASSERT(ErrBitSetOnErr, err |-> |err_bits_o)
   end
+  assign err_bits_o = err_bits_q;
+
+  assign software_err = non_insn_addr_software_err | bad_insn_addr_err;
+
+  assign fatal_err = |{fatal_software_err,
+                       bad_internal_state_err,
+                       reg_intg_violation_err,
+                       mubi4_test_true_loose(escalate_en_i)};
+
+  assign recoverable_err_o = software_err & ~software_errs_fatal_i;
+  assign mems_sec_wipe_o   = (state_d == OtbnStateLocked) & (state_q != OtbnStateLocked);
 
   assign err = software_err | fatal_err;
 
   // Instructions must not execute if there is an error
   assign insn_executing = insn_valid_i & ~err;
 
+  `ASSERT(ErrBitSetOnErr,
+      err & mubi4_test_false_strict(escalate_en_i) |=> err_bits_o)
   `ASSERT(ErrSetOnFatalErr, fatal_err |-> err)
   `ASSERT(SoftwareErrIfNonInsnAddrSoftwareErr, non_insn_addr_software_err |-> software_err)
 
@@ -530,20 +502,8 @@ module otbn_controller
   `ASSERT(NoStallOnBranch,
       insn_valid_i & insn_dec_shared_i.branch_insn |-> state_q != OtbnStateStall)
 
-  // This primitive is used to place a size-only constraint on the
-  // flops in order to prevent FSM state encoding optimizations.
-  logic [StateControllerWidth-1:0] state_raw_q;
-  assign state_q = otbn_state_e'(state_raw_q);
-  prim_sparse_fsm_flop #(
-    .StateEnumT(otbn_state_e),
-    .Width(StateControllerWidth),
-    .ResetValue(StateControllerWidth'(OtbnStateHalt))
-  ) u_state_regs (
-    .clk_i,
-    .rst_ni,
-    .state_i ( state_d     ),
-    .state_o ( state_raw_q )
-  );
+  // SEC_CM: CONTROLLER.FSM.SPARSE
+  `PRIM_FLOP_SPARSE_FSM(u_state_regs, state_d, state_q, otbn_state_e, OtbnStateHalt)
 
   assign insn_cnt_clear = state_reset_i | (state_q == OtbnStateLocked) | insn_cnt_clear_i;
 
@@ -1057,9 +1017,6 @@ module otbn_controller
   assign wsr_wdata = insn_dec_shared_i.ispr_rs_insn ? ispr_rdata_i | rf_bignum_rd_data_a_no_intg :
                                                       rf_bignum_rd_data_a_no_intg;
 
-  // Invalid key only becomes an error if we're trying to read it
-  assign key_invalid_err = ispr_rd_bignum_insn & insn_valid_i & key_invalid;
-
   assign ispr_illegal_addr = insn_dec_shared_i.subset == InsnSubsetBase ? csr_illegal_addr :
                                                                           wsr_illegal_addr;
 
@@ -1112,8 +1069,9 @@ module otbn_controller
                                                                dmem_addr_unaligned_bignum |
                                                                dmem_addr_unaligned_base);
 
-  assign rnd_req_o = insn_valid_i & ispr_rd_insn & (ispr_addr_o == IsprRnd);
+  assign rnd_req_raw = insn_valid_i & ispr_rd_insn & (ispr_addr_o == IsprRnd);
+  assign rnd_req_o = rnd_req_raw & insn_executing;
 
-  assign rnd_prefetch_req_o = insn_valid_i & ispr_wr_insn &
+  assign rnd_prefetch_req_o = insn_executing & ispr_wr_insn &
       (insn_dec_shared_i.subset == InsnSubsetBase) & (csr_addr == CsrRndPrefetch);
 endmodule

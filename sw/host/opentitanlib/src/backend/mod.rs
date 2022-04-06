@@ -14,14 +14,15 @@ use crate::transport::hyperdebug::StandardFlavor;
 use crate::transport::{EmptyTransport, Transport};
 use crate::util::parse_int::ParseInt;
 
-pub mod cw310;
-pub mod hyperdebug;
-pub mod ultradebug;
-pub mod verilator;
+mod cw310;
+mod hyperdebug;
+mod proxy;
+mod ultradebug;
+mod verilator;
 
 #[derive(Debug, StructOpt)]
 pub struct BackendOpts {
-    #[structopt(long, default_value, help = "Name of the debug interface")]
+    #[structopt(long, default_value = "", help = "Name of the debug interface")]
     interface: String,
 
     #[structopt(long, parse(try_from_str = u16::from_str),
@@ -36,26 +37,35 @@ pub struct BackendOpts {
     #[structopt(flatten)]
     verilator_opts: verilator::VerilatorOpts,
 
+    #[structopt(flatten)]
+    proxy_opts: proxy::ProxyOpts,
+
     #[structopt(long, help = "Configuration files")]
     conf: Option<PathBuf>,
 }
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("unknown interface {0}")]
+    #[error("Unknown interface {0}")]
     UnknownInterface(String),
+    #[error("Loading configuration file `{0}`: {1}")]
+    ConfReadError(PathBuf, anyhow::Error),
+    #[error("Parsing configuration file `{0}`: {1}")]
+    ConfParseError(PathBuf, anyhow::Error),
 }
 
 /// Creates the requested backend interface according to [`BackendOpts`].
 pub fn create(args: &BackendOpts) -> Result<TransportWrapper> {
-    let mut env = TransportWrapper::new(match args.interface.as_str() {
+    let interface = args.interface.as_str();
+    let mut env = TransportWrapper::new(match interface {
         "" => create_empty_transport(),
+        "proxy" => proxy::create(&args.proxy_opts),
         "verilator" => verilator::create(&args.verilator_opts),
         "ultradebug" => ultradebug::create(args),
         "hyperdebug" => hyperdebug::create::<StandardFlavor>(args),
         "c2d2" => hyperdebug::create::<C2d2Flavor>(args),
         "cw310" => cw310::create(args),
-        _ => Err(Error::UnknownInterface(args.interface.clone()).into()),
+        _ => Err(Error::UnknownInterface(interface.to_string()).into()),
     }?);
     for conf_file in &args.conf {
         process_config_file(&mut env, conf_file)?
@@ -69,9 +79,10 @@ pub fn create_empty_transport() -> Result<Box<dyn Transport>> {
 
 fn process_config_file(env: &mut TransportWrapper, conf_file: &Path) -> Result<()> {
     log::debug!("Reading config file {:?}", conf_file);
-    let conf_data = std::fs::read_to_string(conf_file).expect("Unable to read configuration file");
-    let res: ConfigurationFile =
-        serde_json::from_str(&conf_data).expect("Unable to parse configuration file");
+    let conf_data = std::fs::read_to_string(conf_file)
+        .map_err(|e| Error::ConfReadError(conf_file.to_path_buf(), e.into()))?;
+    let res: ConfigurationFile = serde_json::from_str(&conf_data)
+        .map_err(|e| Error::ConfParseError(conf_file.to_path_buf(), e.into()))?;
 
     let subdir = conf_file.parent().unwrap_or_else(|| Path::new(""));
     for included_conf_file in &res.includes {
